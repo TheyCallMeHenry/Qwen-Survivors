@@ -7,6 +7,7 @@
 import { buildSky } from '../art/sky.js';
 import { buildTerrain, mountainSprite, lakeSprite } from '../art/terrain.js';
 import { generateWorld } from './generate.js';
+import { getLevel } from './levels.js';
 import { CFG } from '../config.js';
 import { mulberry32, hash2 } from '../utils/math.js';
 import { HashGrid } from '../utils/grid.js';
@@ -27,15 +28,20 @@ const CELL = 256;
 export class World {
   constructor() {
     this.data = null;
+    this.level = null;
     this.W = 0;
     this.H = 0;
     this.playerStart = { x: 0, y: 0 };
   }
 
-  generate(seed) {
+  generate(seed, levelKey = 'm01') {
+    const level = getLevel(levelKey);
+    // Per-level bounds: single seam — hot paths (player/enemies/camera/combat) read CFG.world.
+    CFG.world.w = level.w; CFG.world.h = level.h; CFG.world.margin = level.margin;
     const terrain = getTerrain();
-    const d = generateWorld(seed);
+    const d = generateWorld(seed, levelKey);
     this.data = d;
+    this.level = level;
     this.W = d.W;
     this.H = d.H;
     this.playerStart = d.playerStart;

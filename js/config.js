@@ -32,7 +32,7 @@ export const CFG = {
   camera: { follow: 9, lead: 0.14, shakeDecay: 3.4 },
 
   menu: {
-    worldSeed: 20260820, // fixed seed for the menu backdrop world
+    // (menu backdrop seed moved to the level def: levels.js menuSeed, Phase 13)
     amp: 0.2,            // camera drift amplitude (× world size)
     speed: 0.1,          // camera drift angular speed (rad/s)
   },
@@ -227,15 +227,7 @@ export const CFG = {
     interval: (t) => Math.max(0.35, 1.7 - t * 0.0047),
     // enemies per spawn event (batch 2 at t0 — a camped player must meet the swarm early)
     batch: (t) => Math.min(6, 2 + Math.floor(t / 55)),
-    // type weights by time (s)
-    weights: (t) => ({
-      rat: 5,
-      bat: t > 30 ? 3 : 0.5,
-      goblin: t > 60 ? 4 : 0,
-      wolf: t > 120 ? 3 : 0,
-      brute: t > 150 ? 2 : 0,
-      cultist: t > 90 ? 2.5 : 0,
-    }),
+    // type weights by time moved to the per-level defs (levels.js, Phase 13)
   },
 
   audio: {

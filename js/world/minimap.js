@@ -13,7 +13,7 @@ export function buildMinimapBase(world) {
   c._sx = sx; // scale carried on the base for drawMinimapLive
   c._sy = sy;
 
-  g.fillStyle = '#0b111e';
+  g.fillStyle = (world.level && world.level.palette) ? world.level.palette.mm : '#0b111e';
   g.fillRect(0, 0, MM_W, MM_H);
 
   // lakes

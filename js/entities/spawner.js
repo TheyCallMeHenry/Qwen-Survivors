@@ -1,15 +1,19 @@
 // Pure spawn curves + spawn placement. t = run seconds (t ≥ 0).
-// Wraps CFG.spawner so game code never reads spawn tuning from config directly.
+// Wraps CFG.spawner + the per-level def (Phase 13) so game code never reads
+// spawn tuning from config directly. level = level def (default m01).
 import { CFG } from '../config.js';
 import { clamp } from '../utils/math.js';
+import { getLevel } from '../world/levels.js';
 
-export const aliveCap = (t) => CFG.spawner.aliveCap(t);
-export const spawnInterval = (t) => CFG.spawner.interval(t);
-export const batchSize = (t) => CFG.spawner.batch(t);
+const L0 = getLevel('m01');
+
+export const aliveCap = (t, level = L0) => CFG.spawner.aliveCap(t) * level.diff;
+export const spawnInterval = (t, level = L0) => CFG.spawner.interval(t) / level.diff;
+export const batchSize = (t, level = L0) => Math.round(CFG.spawner.batch(t) * level.diff);
 
 // Weighted enemy-type pick for time t. rng = mulberry32 fn. Null if nothing has weight.
-export function pickType(t, rng) {
-  const w = CFG.spawner.weights(t);
+export function pickType(t, rng, level = L0) {
+  const w = level.weights(t);
   let total = 0;
   for (const k in w) total += w[k];
   if (total <= 0) return null;

@@ -3,6 +3,7 @@
 import { mulberry32, hash2, approach, clamp } from '../js/utils/math.js';
 import { CFG } from '../js/config.js';
 import { generateWorld } from '../js/world/generate.js';
+import { LEVELS, LEVEL_ORDER, getLevel } from '../js/world/levels.js';
 import { HashGrid } from '../js/utils/grid.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../js/entities/spawner.js';
 import { cardOffers, applyCard, recomputeStats, cardEffectText } from '../js/entities/player.js';
@@ -231,8 +232,8 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(CFG.player.startWeapons.every((k) => CFG.weapons[k]), 'startWeapons: keys exist in weapons');
   const bosses = Object.keys(CFG.enemies).filter((k) => CFG.enemies[k].boss);
   ok(bosses.length === 1 && bosses[0] === 'wraith', 'enemies: exactly one boss (wraith)');
-  const wk = Object.keys(CFG.spawner.weights(300));
-  ok(wk.length > 0 && wk.every((k) => CFG.enemies[k]), 'spawner.weights keys ⊆ enemies');
+  const wk = Object.keys(getLevel('m01').weights(300));
+  ok(wk.length > 0 && wk.every((k) => CFG.enemies[k]), 'm01 weights keys ⊆ enemies');
   ok(Object.values(CFG.enemies).every((e) => Number.isInteger(e.xp) && e.xp > 0), 'enemies.xp: positive integers');
 }
 
@@ -450,6 +451,23 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(drones.length === 294, `MUSIC pump: ${drones.length} drone oscs (want 294 — 6 x 49 bar starts)`);
   const lfos = started.filter((o) => o.type === 'sine' && near(o.f0, CFG.audio.droneLfoHz) && near(o.t1 - o.t0, BAR + 0.4, 1e-6));
   ok(lfos.length === 49, `MUSIC pump: ${lfos.length} drone LFOs (want 49)`);
+}
+
+// --- Phase 13 — level framework (13.1) ---
+{
+  ok(LEVEL_ORDER.join(',') === 'm01,m02,m03', 'levels: order m01,m02,m03');
+  const m1 = getLevel('m01'), m2 = getLevel('m02'), m3 = getLevel('m03');
+  ok(m1.w === 4200 && m1.h === 3200 && m1.margin === 70 && m1.diff === 1.0, 'm01: 4200x3200, margin 70, diff 1.0');
+  ok(m2.w === 4200 && m2.h === 3200 && m2.diff === 1.25, 'm02: same scale, diff 1.25');
+  ok(m3.w === 5145 && m3.h === 3920 && m3.diff === 1.56, 'm03: 1.5x area (5145x3920), diff 1.56');
+  ok(m1.unlock.level === null && m1.unlock.wins === 0, 'm01: always open');
+  ok(m2.unlock.level === 'm01' && m2.unlock.wins === 3, 'm02 unlock: 3x m01 victories');
+  ok(m3.unlock.level === 'm02' && m3.unlock.wins === 3, 'm03 unlock: 3x m02 victories');
+  ok(m1.foreground === 'snow' && m2.foreground === 'petal' && m3.foreground === 'bubble', 'levels: foreground snow/petal/bubble');
+  ok(typeof m1.layout === 'function' && m1.weights(1000).rat === 5 && m1.boss.key === 'wraith' && m1.boss.at === 240, 'm01: layout/weights/boss wired');
+  ok(m2.layout === null && m3.layout === null && m2.weights === null && m3.weights === null, 'm02/m03: layout/weights land with 13.2–13.5');
+  ok(generateWorld(20260820, 'm01').trees.length === 276 && generateWorld(20260820, 'm01').decor.length === 335 && generateWorld(20260820, 'm01').colliders.length === 328, 'm01 layout: golden counts (seed 20260820) — identical to pre-13.1');
+  ok(aliveCap(120, m1) === 70 && aliveCap(120, m2) === 87.5 && batchSize(300, m2) === 8 && near(spawnInterval(100, m2), spawnInterval(100) / 1.25), 'spawner: per-level diff scales cap/batch/interval');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

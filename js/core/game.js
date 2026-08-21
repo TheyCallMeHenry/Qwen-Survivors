@@ -16,6 +16,7 @@ import { Combat } from '../entities/combat.js';
 import { Player, cardOffers, applyCard, recomputeStats } from '../entities/player.js';
 import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta } from './meta.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../entities/spawner.js';
+import { getLevel } from '../world/levels.js';
 import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
 import { buildMinimapBase, drawMinimapLive } from '../world/minimap.js';
@@ -92,10 +93,13 @@ export class Game {
 
   // --- public surface (wired to UI buttons by Phase 4/6) ---
 
-  startRun() {
+  startRun(levelKey) {
+    // levelKey omitted → keep the last level (retry / game-over Again)
+    this.level = getLevel(levelKey || this.levelKey || 'm01');
+    this.levelKey = this.level.key;
     const seed = (Math.random() * 4294967296) | 0;
     this.rng = mulberry32(seed ^ 0x9e3779b9);
-    this.world.generate(seed);
+    this.world.generate(seed, this.levelKey);
     this.minimapBase = buildMinimapBase(this.world);
     const s = this.world.playerStart;
     this.player.reset(s.x, s.y);
@@ -129,7 +133,8 @@ export class Game {
   toMenu() {
     if (this.state === 'MENU') return;
     if (!this.world.data) {
-      this.world.generate(CFG.menu.worldSeed);
+      const lvl = this.level || getLevel('m01'); // A5: backdrop previews the selected/last level
+      this.world.generate(lvl.menuSeed, lvl.key);
       this.minimapBase = buildMinimapBase(this.world);
     }
     this.camera.snap(this.world.W / 2, this.world.H / 2);
@@ -286,24 +291,26 @@ export class Game {
 
   _spawns(dt) {
     const R = CFG.run;
-    if (!this.bossSpawned && this.t >= R.bossAt) {
+    const L = this.level || getLevel('m01');
+    const B = L.boss || { key: 'wraith', at: R.bossAt };
+    if (!this.bossSpawned && this.t >= B.at) {
       const pt = this._spawnPt();
-      this.enemies.spawn('wraith', pt.x, pt.y);
+      this.enemies.spawn(B.key, pt.x, pt.y);
       this.bossSpawned = true;
       this.bus.emit('banner', { text: 'THE WRAITH AWAKENS' });
     }
     if (this.t < CFG.spawner.firstSpawn) return;
-    if (this.enemies.list.length >= aliveCap(this.t)) {
-      this.spawnT = Math.min(this.spawnT, spawnInterval(this.t));
+    if (this.enemies.list.length >= aliveCap(this.t, L)) {
+      this.spawnT = Math.min(this.spawnT, spawnInterval(this.t, L));
       return;
     }
     this.spawnT += dt;
     let n = 0;
-    while (this.spawnT >= spawnInterval(this.t) && n < 4) {
-      this.spawnT -= spawnInterval(this.t);
-      const type = pickType(this.t, this.rng);
+    while (this.spawnT >= spawnInterval(this.t, L) && n < 4) {
+      this.spawnT -= spawnInterval(this.t, L);
+      const type = pickType(this.t, this.rng, L);
       if (type) {
-        const n2 = batchSize(this.t);
+        const n2 = batchSize(this.t, L);
         for (let i = 0; i < n2; i++) {
           const pt = this._spawnPt();
           this.enemies.spawn(type, pt.x, pt.y);
