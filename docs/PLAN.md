@@ -9,7 +9,7 @@
 
 ## 1. Vision & Pillars
 
-A 5-minute survival run in a procedurally generated "Evernight Wood": dusk sky, snow-capped mountains, dense pine forests, a ruined village, a frozen lake, monoliths and campfires. The player auto-attacks swarming enemies, collects XP, levels up from card choices, dashes with i-frames, and tries to survive until dawn.
+A 5-minute survival run in a procedurally generated "Evernight Wood": dusk sky, snow-capped mountains, dense pine forests, a ruined village, a frozen lake, monoliths and campfires. The player auto-attacks swarming enemies, collects XP, levels up from card choices, dashes with i-frames, and tries to survive until dawn. Phase 11 extends this to real-time co-op (up to 4 players, LAN, synced game state) — see §3.8.
 
 Pillars:
 1. **Feel** — snappy, responsive movement (high accel, low drift), dash with real i-frames, hit-stop, screen shake, particles.
@@ -20,7 +20,7 @@ Pillars:
 
 ## 2. Non-Goals
 
-No build tooling, no npm deps, no network calls, no save files beyond `localStorage` (high scores, mute, seed history), no multi-locale i18n, no multiplayer.
+No build tooling, no npm deps, no external services or CDNs — the only network is the LAN co-op WebSocket room served by `tools/serve.mjs` on port 47893 (Phase 11), no save files beyond `localStorage` (high scores, mute, seed history), no multi-locale i18n.
 
 ## 3. Architecture
 
@@ -38,10 +38,11 @@ js/core/loop.js       — fixed-step update (60 Hz) + variable render, timescale
 js/core/input.js      — keyboard + pointer/touch → unified axes, dash, pause, floating joystick
 js/core/meta.js       — persistent Soulshards + between-run upgrades (pure/Node-safe, localStorage `qsurv.meta.v1`)
 js/core/game.js       — state machine (MENU/PLAYING/LEVELUP/PAUSED/DYING/GAMEOVER), scoring, run setup
+js/net/coop.js        — co-op sync protocol + room state (pure/Node-safe; WebSocket plumbing in serve.mjs) — Phase 11
 js/art/base.js        — offscreen canvas helpers, gradient/shade/shadow/glow primitives
 js/art/sky.js         — sky gradient, stars, moon, cloud sprites, distant ridge silhouettes
 js/art/terrain.js     — grass tiles, ground decals, pines, boulders, stumps, huts, lake, monoliths, campfires
-js/art/characters.js  — player + 7 enemy type sprites (multi-frame, flash variants, shadows)
+js/art/characters.js  — player (4 selectable characters — Phase 11) + 7 enemy type sprites (multi-frame, flash variants, shadows)
 js/art/items.js       — gems, hearts, projectiles, weapon/passive card icons
 js/world/generate.js  — seeded world layout: landmarks, forests, village, lake, decor, colliders, decals
 js/world/world.js     — world state + draw: sky/parallax, ground, decals, lighting pass, vignette
@@ -58,7 +59,7 @@ js/ui/hud.js          — HP/XP bars, timer, score, minimap frame, mute/pause bu
 js/ui/screens.js      — menu, high scores, pause, level-up cards, game over, banners
 js/audio/sfx.js       — Web Audio synthesized SFX (lazy AudioContext, panning, distance)
 js/audio/music.js     — procedural eldritch music loop (seamless, indefinite) + wind ambience + ambient wolf howls
-tools/serve.mjs       — zero-dependency Node static server (obscure port, 0.0.0.0)
+tools/serve.mjs       — zero-dependency Node static server (obscure port, 0.0.0.0) + co-op WebSocket upgrade (Phase 11)
 tools/check.mjs       — imports every js module in Node (syntax + top-level validation)
 tools/test-logic.mjs  — Node assertions for pure logic (RNG, spawner curves, XP curve, grid)
 tools/test-boot.mjs   — Node boot + full-run simulation (stubbed DOM w/ browser-strict canvas checks — `arc`/`ellipse` arg counts + non-negative radii, gradients throw; all other canvas methods no-op — real Loop; death + victory runs)
@@ -81,9 +82,9 @@ tools/test-boot.mjs   — Node boot + full-run simulation (stubbed DOM w/ browse
 
 ### 3.4 Combat model
 
-- **Weapons (pick/upgrade via level-up cards, 5 levels each):** Moonbolt Wand (auto-fire bolts at nearest enemy), Wraith Garlic (aura tick), Spectral Axe (boomerang arc), Aegis Blades (orbiters), Twin Fangs (twin pistols — each shot fires 2 rounds at the 2 nearest enemies), Sunder Bombs (cartoon bombs — lob arc, fuse pause, AOE; fuse shortens per level), Pyre Lance (flamethrower — flow-y flame-sprite trail, tick + burn DoT, limited fuel + lengthy recharge). Explicit stat tables in `config.js`.
+- **Weapons (pick/upgrade via level-up cards, 5 levels each):** Moonbolt Wand (auto-fire bolts at nearest enemy), Wraith Garlic (aura tick), Spectral Axe (boomerang arc), Aegis Blades (orbiters), Twin Fangs (twin pistols — each shot fires 2 rounds at the 2 nearest enemies), Sunder Bombs (cartoon bombs — lob arc, fuse pause, AOE; fuse shortens per level), Pyre Lance (flamethrower — flow-y flame-sprite trail, tick + burn DoT, limited fuel + lengthy recharge; **Phase 12 tune: faster max-velocity/distance ramp, emission origin raised feet → ~chest/abdomen, total stream length +25%**), **Bow & Arrow** (fast single-target arrows), **Snowball Launcher** (lobbed snowball, small impact AoE, accumulating slow stacks — **5 s per-stack expiry**; 3 stacks → brief freeze), **Ring of Chain Lightning** (accumulating shock stacks — **5 s per-stack expiry**; 3 stacks → brief stun + branching electricity burst, moderate AoE; weapon levels increase chain/jump count). Explicit stat tables in `config.js`.
 - **Passives:** speed, max-HP, damage %, pickup magnet, regen (max levels in config).
-- **Synergies (fused cards):** single-level cards offered only when every `requires` entry (weapon or passive) is at max level — Blight Hex (wand+garlic), Tempest Blades (axe+blades), Inferno Rounds (pistols+flame), Napalm Detonation (bombs+flame), Phoenix Heart (hp+regen passives). Stored in `player.synergies` — does NOT count toward `maxWeapons`.
+- **Synergies (fused cards):** **5-level cards (same stage count as standard weapons)**, offered once every `requires` entry (weapon or passive) is at max level — **pair-specific gating: a synergy enters the offer pool the moment ITS OWN 2 sources max; never gated on all of the player's weapons being maxed** — Blight Hex (wand+garlic), Tempest Blades (axe+blades), Inferno Rounds (pistols+flame), Napalm Detonation (bombs+flame), Phoenix Heart (hp+regen passives), **Flaming Arrows** (bow+flame — arrows apply burn), **Heart-Piercer** (bow+max-HP passive — greater damage + pierce through enemies; pierce count scales with the synergy's own level), **Blue Flame** (snowball+flame — freezes enemies in place AND applies fire DoT), **Storm Volley** (working name; pistols+lightning ring — significant added-damage lightning strike on **every 4th shot**, strike scales with level; proposed: strike chains per the ring's jump count, chained enemies gain shock stacks). Stored in `player.synergies` — does NOT count toward `maxWeapons` (unchanged with 5-level synergies).
 - **Meta progression (between runs):** persistent Soulshards (`floor(score/400)` + victory bonus) spent in the Upgrades screen on 5 upgrade tracks (max HP / damage / speed / XP / dash cooldown × 5 levels), localStorage `qsurv.meta.v1` (module `js/core/meta.js`).
 - **Enemies:** Rat, Bat (flying, sine weave), Goblin, Wolf, Brute, Cultist (ranged orb), Wraith Boss (4:00). Time-scaled spawn interval/count/cap/type weights (pure functions in `spawner.js`). Spawn placement: just outside the current view edge (small pad — Phase 10 tuning).
 - **Economy:** kill → XP gems (+heart chance); gem magnet radius; level curve linear; level-up pauses game and offers 3 cards (keyboard 1-3 / tap); **every card's text states the EXACT effect of selecting it** (per-level deltas, audited against the stat tables — Phase 10); **auto-skips when the card pool is empty** (no softlock — Phase 10).
@@ -100,6 +101,30 @@ Lazy `AudioContext` (created/resumed on first user gesture — required for mobi
 ### 3.7 High scores & persistence
 
 `localStorage` key `qsurv.hiscores.v1` — top 10 `{score, time, kills, level, date}`. Mute in `qsurv.mute`. Meta progression in `qsurv.meta.v1` — `{shards, upgrades}` (Soulshards + between-run upgrade levels).
+
+### 3.8 Multiplayer & co-op (Phase 11 — spec 2026-08-21; design notes, NOT yet implemented)
+
+**Transport:** zero-dep WebSocket upgrade in `tools/serve.mjs` — port **47893 only**, bind 0.0.0.0, LAN-reachable (existing rules); no new ports, no npm deps, no external services/CDNs. One room = one run; 1–4 clients; join/leave semantics defined in the protocol.
+
+**Sync model (host-authoritative):** the host client runs the existing 60 Hz fixed-step sim as today; non-host clients send inputs; the host broadcasts a state snapshot per step — per player: position, HP, XP/level, owned weapons/cards + levels, dash state — plus shared run state (time, score/kills, alive enemies, pickups). World seed is shared, so every client generates the identical procedural world. Clients render interpolated snapshots.
+
+**Co-op rules (user spec, 2026-08-21):**
+- **Difficulty scaling (req 2; A1):** × (1 + 33% × added players) per run player count (max 3 added, 4 total — ×1.33 at 2P, ×1.66 at 3P, ~×2.0 at 4P) on: enemy **HP**, **damage to players**, **spawn count/on-screen** (batch size, spawn interval, alive cap). Config scalars + pure helper. Other common per-player dials available as future tuning (NOT enabled by A1): enemy speed, attack/fire rate, boss stat ramp, XP gem yield (economy).
+- **Leash (req 3; A2):** all players held within the shared **expanded co-op vision radius** of each other — every player sees every other (keeps swarming consistent, no solo aggro). Radius = new config value, expanded from the solo 510 (exact px TBD).
+- **Weapon exclusivity (req 4; A3):** the first player to pick a weapon owns it for the rest of the run; every other player's level-up offers exclude that weapon and its upgrades.
+- **Player-scoped level-ups (A3 — critical):** every card pick (weapon/passive/synergy) affects **only the picking player** — an upgrade is never shared; each player must pick their own. Passives are NOT locked (any player may pick them); synergy availability follows each player's own weapon max levels.
+- **Co-op equip cap (item 3 + follow-up):** each player's max equipable **standard** weapons = base `maxWeapons` (**5**, raised from 4) − (N−1): 1P=5, 2P=4, 3P=3, **4P=2 — each player can still own 1 weapon pair → paired synergy still achievable at 4P**. **Synergy weapons do NOT count toward the cap** (existing rule), so a player can hold their full 5-level synergy alongside their standard weapon slots.
+- **Characters (req 5; A6):** 4 selectable characters; each uniquely color-coded (quick visual tracking), with a unique theme/visual style/silhouette (procedural, `art/characters.js`) and a unique default starting weapon — **Moonbolt Wand, Wraith Garlic, Aegis Blades, Pyre Lance** (one per character; config table).
+- **Boss clones (Q7 resolved 2026-08-21):** **N players = N Wraiths** (1P=1, 2P=2, 3P=3, 4P=4); Wraith stats (HP/damage) get the same +33%/player ramp as other enemies.
+
+**Co-op-only UI (req 6; solo run unchanged):**
+- Minimap → bottom-center of the window at ~66% of its single-player size; pause + mute buttons repositioned near the minimap.
+- HP bar fill + dash icon/button/cooldown indicator colored per the player's selected character palette.
+- Player panels (health bar, character level, dash cooldown, all other character-specific UI) placed in the screen corners by player count: 1P = TL; 2P = TL + TR; 3P = TL + TR + BL; 4P = all four corners (corner → player assignment = **join order** — A5).
+
+**Open items (Phase 11):**
+- **Q7 (boss clones) — resolved 2026-08-21:** N players = N Wraiths (1P=1 … 4P=4); Wraith stats get the same +33%/player ramp. **No open spec questions remain.**
+- **11.13 web play (A4; Q4-followup):** LAN play confirmed. Internet play **cannot** go through the GitHub Pages page — Pages is static hosting (no Node/WebSocket room possible there). **Binding research protocol (2026-08-21, non-negotiable):** (1) BEFORE any web search/research: verify **today's real-world actual date** — standalone step, CANNOT be batched with the research steps; (2) then research the most current, evidence-based, data/outcomes-driven, **sources-cited** best practices for **self-hosted, fully game-state synchronized** web-game multiplayer / multiplayer servers; (3) **100% cost-free solutions only** (no paid SaaS/hosts/CDN); (4) cite sources (title + URL) in the docs update. Candidate directions: self-hosted relay (VPS/tunnel running the same zero-dep room — keeps all rules) vs WebRTC P2P (needs external signaling → conflicts with no-external-services unless free signaling is found). Decide after LAN co-op is green.
 
 ## 4. Phases & Tasks
 
@@ -167,6 +192,11 @@ Lazy `AudioContext` (created/resumed on first user gesture — required for mobi
 | Scope creep / drift | Phases above; PROGRESS.md enforced; config centralizes tuning |
 | Multi-hit framerate drop (upgraded weapons striking swarms simultaneously — user-reported) | 10.4 profile-first root-cause pass + 10.9 game-wide optimization pass (worst-case load, culling/pooling/allocation audit) |
 | Unverified visuals (no browser in sandbox) | Node import checks + logic tests + curl MIME checks; user playtest pass listed in PROGRESS.md |
+| Co-op sync with zero deps + one port (47893) | Zero-dep WebSocket upgrade in `serve.mjs`; host-authoritative sim on the existing 60 Hz loop; per-step state snapshots; shared world seed → identical procedural world on all clients |
+| Co-op regressing the solo experience (HUD/minimap layout, perf) | 11.10 solo-invariance gate: 1-player run must match the Phase 10 build; boot sim keeps the solo flow + adds a multi-client co-op flow |
+| 4 corner panels + touch co-op on small screens (mobile parity) | Corner count = player count (1P = TL only); co-op pause/mute ≥72 px beside the repositioned minimap; pause-on-blur in co-op (leave/closed-room semantics) |
+| Internet 'web play' (A4) | GitHub Pages = static, cannot host WS rooms → 11.13 research under the binding protocol (date verification BEFORE research; sources-cited, self-hosted fully-synced best practices; **100% cost-free only**) |
+| 3 new weapons + 4 synergies + new status types (slow/freeze/shock/blue-flame) expanding combat | Follow existing patterns: Decision 21 tick (no white flicker), single-level `requires`-all-max synergies (19), exact-effect descriptions (10.2), `buildIcons()` icon audit; boot-sim exercises ALL 10 weapons + new-synergy E2Es (12.8) |
 
 ## 6. Definition of Done
 

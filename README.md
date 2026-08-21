@@ -19,7 +19,7 @@ Mobile / touch:
 
 Survive the Evernight Wood for **5:00**. Auto-attack, grab XP gems, level up, dodge, and face the Wraith at 4:00.
 
-**Between runs:** every run awards Soulshards (score ÷ 400, +25 for a win) — spend them on the **Upgrades** screen for max HP, damage, speed, XP gain, and dash cooldown. **Level-ups:** 7 weapons (Moonbolt Wand, Wraith Garlic, Spectral Axe, Aegis Blades, Twin Fangs, Sunder Bombs, Pyre Lance) + 5 passives + 5 **synergy** cards — two weapons at max level unlock a fused card (e.g. Wand + Garlic → Blight Hex burn DoT, Pistols + Flame → Inferno Rounds).
+**Between runs:** every run awards Soulshards (score ÷ 400, +25 for a win) — spend them on the **Upgrades** screen for max HP, damage, speed, XP gain, and dash cooldown. **Level-ups:** 10 weapons (Moonbolt Wand, Wraith Garlic, Spectral Axe, Aegis Blades, Twin Fangs, Sunder Bombs, Pyre Lance, **Bow & Arrow, Snowball Launcher, Ring of Chain Lightning** — Phase 12) + 5 passives + 9 **synergy** cards — two maxed sources (weapons/passives) unlock a 5-level fused card (levels like a standard weapon) (e.g. Wand + Garlic → Blight Hex burn DoT, Pistols + Flame → Inferno Rounds; Phase 12 adds Flaming Arrows, Heart-Piercer, Blue Flame, Storm Volley).
 
 ## Run
 
@@ -35,6 +35,11 @@ Open in any modern browser. Audio starts after your first tap/click/keypress (br
 - `docs/PLAN.md` — full phased plan/roadmap
 - `docs/PROGRESS.md` — **living** progress tracker (updated every task)
 - `AGENTS.md` — session rules for AI agents working in this repo
+
+## Roadmap
+
+- **Phase 11 — multiplayer (spec'd 2026-08-21, not started):** real-time co-op for up to 4 players with synced game state, per-run weapon exclusivity (first picker owns a weapon for the run), 4 selectable characters (unique colors, themes, default weapons: Wand/Garlic/Aegis Blades/Pyre Lance), enemy difficulty scaling (+33% per added player), final boss clones per player, and a co-op-only HUD layout (corner player panels, repositioned bottom-center minimap). Spec + open questions: `docs/PLAN.md` §3.8 · tasks: `docs/PROGRESS.md` (Phase 11).
+- **Phase 12 — weapon expansion (spec'd 2026-08-21, not started):** Pyre Lance tune (faster/farther flame stream, emission origin raised to chest height) + 3 new weapons — **Bow & Arrow**, **Snowball Launcher** (stacking slow → freeze), **Ring of Chain Lightning** (stacking shock → stun + chain burst) — and 4 new synergies (Flaming Arrows, Heart-Piercer, Blue Flame, Storm Volley). Tasks: `docs/PROGRESS.md` (Phase 12).
 
 ## Dev checks
 
