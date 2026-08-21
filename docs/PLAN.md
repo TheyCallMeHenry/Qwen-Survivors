@@ -9,7 +9,7 @@
 
 ## 1. Vision & Pillars
 
-A 5-minute survival run in a procedurally generated "Evernight Wood": dusk sky, snow-capped mountains, dense pine forests, a ruined village, a frozen lake, monoliths and campfires. The player auto-attacks swarming enemies, collects XP, levels up from card choices, dashes with i-frames, and tries to survive until dawn. Phase 11 extends this to real-time co-op (up to 4 players, LAN, synced game state) — see §3.8.
+A 5-minute survival run in a procedurally generated "Evernight Wood": dusk sky, snow-capped mountains, dense pine forests, a ruined village, a frozen lake, monoliths and campfires. The player auto-attacks swarming enemies, collects XP, levels up from card choices, dashes with i-frames, and tries to survive until dawn. Phase 11 extends this to real-time co-op (up to 4 players, LAN, synced game state) — see §3.8. Phase 13 widens the world to **three unlockable arenas** — Map 01 Evernight Wood (existing), Map 02 **Higan** (traditional Japanese spring), Map 03 **The Drowned City** (1.5×-area underwater Atlantis) — each with its own palette, landmarks, themed enemy roster and boss, chosen from a level select on the main menu — see §3.9.
 
 Pillars:
 1. **Feel** — snappy, responsive movement (high accel, low drift), dash with real i-frames, hit-stop, screen shake, particles.
@@ -44,7 +44,8 @@ js/art/sky.js         — sky gradient, stars, moon, cloud sprites, distant ridg
 js/art/terrain.js     — grass tiles, ground decals, pines, boulders, stumps, huts, lake, monoliths, campfires
 js/art/characters.js  — player (4 selectable characters — Phase 11) + 7 enemy type sprites (multi-frame, flash variants, shadows)
 js/art/items.js       — gems, hearts, projectiles, weapon/passive card icons
-js/world/generate.js  — seeded world layout: landmarks, forests, village, lake, decor, colliders, decals
+js/world/generate.js  — seeded world layout: landmarks, forests, village, lake, decor, colliders, decals (level-aware layout hook per level — Phase 13)
+js/world/levels.js    — per-level defs, pure data (Phase 13): world size, seed, palette tokens, landmark layout hook, per-slot enemy skin+stats, spawner weights, boss, foreground particle kind, audio variation token, unlock rules
 js/world/world.js     — world state + draw: sky/parallax, ground, decals, lighting pass, vignette
 js/world/minimap.js   — pre-rendered map base + live dots/camera rect
 js/systems/camera.js  — smoothed follow, look-ahead, trauma shake
@@ -86,7 +87,7 @@ tools/test-boot.mjs   — Node boot + full-run simulation (stubbed DOM w/ browse
 - **Passives:** speed, max-HP, damage %, pickup magnet, regen (max levels in config).
 - **Synergies (fused cards):** **5-level cards (same stage count as standard weapons)**, offered once every `requires` entry (weapon or passive) is at max level — **pair-specific gating: a synergy enters the offer pool the moment ITS OWN 2 sources max; never gated on all of the player's weapons being maxed** — Blight Hex (wand+garlic), Tempest Blades (axe+blades), Inferno Rounds (pistols+flame), Napalm Detonation (bombs+flame), Phoenix Heart (hp+regen passives), **Flaming Arrows** (bow+flame — arrows apply burn), **Heart-Piercer** (bow+max-HP passive — greater damage + pierce through enemies; pierce count scales with the synergy's own level), **Blue Flame** (snowball+flame — freezes enemies in place AND applies fire DoT), **Storm Volley** (working name; pistols+lightning ring — significant added-damage lightning strike on **every 4th shot**, strike scales with level; proposed: strike chains per the ring's jump count, chained enemies gain shock stacks). Stored in `player.synergies` — does NOT count toward `maxWeapons` (unchanged with 5-level synergies).
 - **Meta progression (between runs):** persistent Soulshards (`floor(score/400)` + victory bonus) spent in the Upgrades screen on 5 upgrade tracks (max HP / damage / speed / XP / dash cooldown × 5 levels), localStorage `qsurv.meta.v1` (module `js/core/meta.js`).
-- **Enemies:** Rat, Bat (flying, sine weave), Goblin, Wolf, Brute, Cultist (ranged orb), Wraith Boss (4:00). Time-scaled spawn interval/count/cap/type weights (pure functions in `spawner.js`). Spawn placement: just outside the current view edge (small pad — Phase 10 tuning).
+- **Enemies (Map 01 roster — per-level rosters: §3.9):** Rat, Bat (flying, sine weave), Goblin, Wolf, Brute, Cultist (ranged orb), Wraith Boss (4:00). Time-scaled spawn interval/count/cap/type weights (pure functions in `spawner.js`). Spawn placement: just outside the current view edge (small pad — Phase 10 tuning).
 - **Economy:** kill → XP gems (+heart chance); gem magnet radius; level curve linear; level-up pauses game and offers 3 cards (keyboard 1-3 / tap); **every card's text states the EXACT effect of selecting it** (per-level deltas, audited against the stat tables — Phase 10); **auto-skips when the card pool is empty** (no softlock — Phase 10).
 - **Victory:** survive 5:00 → "DAWN BREAKS" bonus. **Defeat:** HP 0 → slow-mo death → game over + high scores.
 
@@ -100,7 +101,7 @@ Lazy `AudioContext` (created/resumed on first user gesture — required for mobi
 
 ### 3.7 High scores & persistence
 
-`localStorage` key `qsurv.hiscores.v1` — top 10 `{score, time, kills, level, date}`. Mute in `qsurv.mute`. Meta progression in `qsurv.meta.v1` — `{shards, upgrades}` (Soulshards + between-run upgrade levels).
+`localStorage` key `qsurv.hiscores.v1` — top 10 `{score, time, kills, level, date}` (Phase 13: one list per level — `v1` = Map 01). Mute in `qsurv.mute`. Meta progression in `qsurv.meta.v1` — `{shards, upgrades}` (Soulshards + between-run upgrade levels).
 
 ### 3.8 Multiplayer & co-op (Phase 11 — spec 2026-08-21; design notes, NOT yet implemented)
 
@@ -115,7 +116,8 @@ Lazy `AudioContext` (created/resumed on first user gesture — required for mobi
 - **Player-scoped level-ups (A3 — critical):** every card pick (weapon/passive/synergy) affects **only the picking player** — an upgrade is never shared; each player must pick their own. Passives are NOT locked (any player may pick them); synergy availability follows each player's own weapon max levels.
 - **Co-op equip cap (item 3 + follow-up):** each player's max equipable **standard** weapons = base `maxWeapons` (**5**, raised from 4) − (N−1): 1P=5, 2P=4, 3P=3, **4P=2 — each player can still own 1 weapon pair → paired synergy still achievable at 4P**. **Synergy weapons do NOT count toward the cap** (existing rule), so a player can hold their full 5-level synergy alongside their standard weapon slots.
 - **Characters (req 5; A6):** 4 selectable characters; each uniquely color-coded (quick visual tracking), with a unique theme/visual style/silhouette (procedural, `art/characters.js`) and a unique default starting weapon — **Moonbolt Wand, Wraith Garlic, Aegis Blades, Pyre Lance** (one per character; config table).
-- **Boss clones (Q7 resolved 2026-08-21):** **N players = N Wraiths** (1P=1, 2P=2, 3P=3, 4P=4); Wraith stats (HP/damage) get the same +33%/player ramp as other enemies.
+- **Boss clones (Q7 resolved 2026-08-21; per-level boss per Phase 13):** **N players = N bosses of the current level** (M01 Wraith / M02 Oni / M03 Great White Shark; 1P=1 … 4P=4); boss stats (HP/damage) get the same +33%/player ramp as other enemies.
+- **Meta progression is PLAYER-SPECIFIC (2026-08-21):** Soulshards + between-run Upgrades (`qsurv.meta.v1`) are each player's own (their own device/localStorage) — **never carried over to, shared with, or applied to other players during co-op sessions**; each client applies its own local meta to its own character at run start, and run shard earnings accrue only to that player's own LS. Sync implication (host-authoritative): the host simulates every player, so each client uploads its meta-derived **stat profile** in the join handshake — sim input for THAT player only, never a shared resource; no meta state appears in per-step snapshots or is broadcast.
 
 **Co-op-only UI (req 6; solo run unchanged):**
 - Minimap → bottom-center of the window at ~66% of its single-player size; pause + mute buttons repositioned near the minimap.
@@ -123,8 +125,40 @@ Lazy `AudioContext` (created/resumed on first user gesture — required for mobi
 - Player panels (health bar, character level, dash cooldown, all other character-specific UI) placed in the screen corners by player count: 1P = TL; 2P = TL + TR; 3P = TL + TR + BL; 4P = all four corners (corner → player assignment = **join order** — A5).
 
 **Open items (Phase 11):**
-- **Q7 (boss clones) — resolved 2026-08-21:** N players = N Wraiths (1P=1 … 4P=4); Wraith stats get the same +33%/player ramp. **No open spec questions remain.**
+- **Q7 (boss clones) — resolved 2026-08-21:** N players = N bosses of the current level (1P=1 … 4P=4; per-level boss per Phase 13); boss stats get the same +33%/player ramp. **No open spec questions remain.**
 - **11.13 web play (A4; Q4-followup):** LAN play confirmed. Internet play **cannot** go through the GitHub Pages page — Pages is static hosting (no Node/WebSocket room possible there). **Binding research protocol (2026-08-21, non-negotiable):** (1) BEFORE any web search/research: verify **today's real-world actual date** — standalone step, CANNOT be batched with the research steps; (2) then research the most current, evidence-based, data/outcomes-driven, **sources-cited** best practices for **self-hosted, fully game-state synchronized** web-game multiplayer / multiplayer servers; (3) **100% cost-free solutions only** (no paid SaaS/hosts/CDN); (4) cite sources (title + URL) in the docs update. Candidate directions: self-hosted relay (VPS/tunnel running the same zero-dep room — keeps all rules) vs WebRTC P2P (needs external signaling → conflicts with no-external-services unless free signaling is found). Decide after LAN co-op is green.
+
+### 3.9 Multi-level expansion + level select + mobile view zoom (Phase 13 — spec 2026-08-21; **A1–A8 answered 2026-08-21**; design notes, NOT yet implemented)
+
+**Level model (binding structure):** new pure-data module `js/world/levels.js` — one def per level: key/name, world W/H, menu backdrop seed, palette tokens (sky/ground/lighting/foreground), `generateWorld(seed, levelKey)` layout hook (the existing layout becomes the Map 01 hook — identical output), per-slot enemy roster (skin + stat table), spawner weights, boss slot def + boss time (stays 240 s), foreground particle kind, audio variation token. **Slot-based roster:** the 6 roles (small chaser / fast flyer / medium chaser / fast chaser / large brute / ranged) + boss keep their mechanics (fly/weave/ranged/boss flags) across all levels; each level re-skins + re-stats per slot — AI/spawner/combat/test surface unchanged. All tuning in `config.js` + `levels.js` (no scattered magic numbers).
+
+**Per-level difficulty (A4, binding):** chained ~×1.25 per level step on enemy HP, damage to players, spawn batch/interval/alive cap (same levers as Phase 11 A1): M01 = 1.0 · M02 ≈ 1.25× M01 · M03 ≈ 1.56× M01 (per-level scalar in the level def).
+
+**Map 01 — Evernight Wood** (existing): 4200×3200, dusk + snow, current roster.
+
+**Map 02 — Higan** (traditional Japan; **same scale 4200×3200**, user spec):
+- Visuals: cherry-blossom trees replace pines; **falling sakura petals replace snow for this map only** (per-level foreground particle); traditional architecture — torii gates, pagoda, wooden shrine buildings, stone lanterns (warm lights), bamboo grove, koi pond, stone paths; a single Mt.-Fuji-esque snow-capped horizon silhouette (+ stratus cloud band); torii-ring + shrine landmark (monolith-ring equivalent); dusk-pink sky + full moon.
+- Roster (user spec, binding): brute slot → **Oni** (replaces the golem); boss → **Ryū, a traditional Japanese dragon** (serpentine; same chase/windup/charge skeleton; segmented tail — A5). Other slots (**approved A1, 2026-08-21**): small chaser → **tanuki** · fast flyer → **hō-ōi will-o'-the-wisp** · medium chaser → **shikome** (oni attendant) · fast chaser → **kitsune** (fox) · ranged → **miko** (cursed shrine maiden; ofuda talisman orb).
+
+**Map 03 — The Drowned City** (underwater; **1.5× area of Maps 01/02 ≈ 5145×3920** — √1.5 ≈ 1.225 linear, aspect preserved; user spec, revised A3):
+- Visuals: deep-water gradient (no sky) + subtle god-ray light shafts (parallax); **foreground particles = small RISING bubbles** (replaces Map 01's falling snow / Map 02's falling petals — drift upward, not down); kelp/seaweed forests (tall, gentle sway), coral + glowing anemones (bioluminescent light holes), Atlantis city — circular colonnade of broken columns around a central dome/spire, trident statue, sunken shipwreck; bubble columns from vents.
+- Roster (user spec, binding): bat slot → **goldfish** · goblin slot → **mer-people (merman + mermaid skins)** · wolf slot → **stingray** · ranged slot → **electric eel** · brute slot → **orca** · boss → **large Great White Shark** (same charge skeleton; belly-flash on windup). Small-chaser slot: **crab** (approved A2).
+
+**Unlocks (user spec, binding):** both new maps locked by default; Map 02 unlocks after **3 cumulative Map 01 victories**, Map 03 after **3 cumulative Map 02 victories** (cumulative — NOT consecutive; victory = survive the full run, death does not count). Persist in localStorage (meta.js pattern; pure helper, Node-testable); no reset condition.
+
+**Level select (user spec, binding):** inline on the main menu — 3 level cards (radio behavior) + Start begins the selected level; **locked levels remain visible but non-selectable**, each clearly showing the remaining unlock condition + progress (e.g. "2/3 victories"); touch targets ≥72 px + safe areas (mobile parity rule).
+
+**Mobile view zoom + Pause-menu Settings (user spec, binding; A6):** mobile (touch) browsers zoom out the game view during runs to show more screen area — implemented as a larger camera view rect, **default factor 0.80** → 1/0.80² ≈ 1.56 area (+56%); config scalar; menu backdrop gets the same factor for consistency; HUD DOM + minimap stay 1×; gated by the existing touch detection (Decision 13). **New Settings section inside the Pause menu** with two toggles — **view zoom** (0.80 ↔ 1.0, all devices; default 0.80 touch / 1.0 desktop; persisted in LS) and **mute/unmute** — the mute entry **REPLACES the existing HUD `#btn-mute` button (NOT in addition to it)**; the `M` key shortcut + `qsurv.mute` persistence are unchanged (Decision 8); Settings rows ≥72 px (mobile parity).
+
+**Per-level audio (approved A5):** keep the 10.6 track skeleton; per-level variation tokens (Map 02: taiko pulse in boss phase, distant temple bell, wind-chime color; Map 03: muffled deep drone, bubble blips, rare long whale song) + per-level seam test (10.6 method).
+
+**Per-level high scores (approved A5):** top-10 score lists are per-level — one LS key per level, the existing `qsurv.hiscores.v1` = Map 01 (no data loss); the High Scores screen shows the selected level's list; game over ranks within the run's level.
+
+**Phase 11 interplay (A7 order: Phase 13 builds before Phase 11):** co-op room handshake carries the level key from the start (11.1/11.2); boss-clone rule is per-level (11.10: N players = N bosses of the current level).
+
+**A5-approved embellishments (2026-08-21):** per-level high scores (see above) · per-level audio/music (see above) · per-level gem/heart tints (Map 02 gold-pink, Map 03 cyan) · per-level menu backdrop preview (menu backdrop live-renders the selected level — `generateWorld` is pure, cheap) · segmented dragon tail (4–6 pre-rendered segments along a position history) · koi in the pond (Map 02) + slow-sinuous decorative fish schools (Map 03) · unlock banner at the threshold moment ("NEW MAP UNLOCKED: HIGAN") + unlock-progress line on game-over/victory screens · soft "denied" blip + card shake on tapping a locked level · eel zap = jagged lightning sprite (vs orb) + shark belly-flash on windup (art details of approved skins).
+
+**Deferred (NOT approved — do not implement without asking):** first-clear Soulshard bonus per map · per-level shard multipliers (×1 / ×1.25 / ×1.5) · per-level victory lines · pufferfish alt skin (inflate-on-hit) · keyboard 1/2/3 level selection (menu state only) · per-level boss intro moment (banner + petal gust / taiko boom).
 
 ## 4. Phases & Tasks
 
@@ -197,6 +231,10 @@ Lazy `AudioContext` (created/resumed on first user gesture — required for mobi
 | 4 corner panels + touch co-op on small screens (mobile parity) | Corner count = player count (1P = TL only); co-op pause/mute ≥72 px beside the repositioned minimap; pause-on-blur in co-op (leave/closed-room semantics) |
 | Internet 'web play' (A4) | GitHub Pages = static, cannot host WS rooms → 11.13 research under the binding protocol (date verification BEFORE research; sources-cited, self-hosted fully-synced best practices; **100% cost-free only**) |
 | 3 new weapons + 4 synergies + new status types (slow/freeze/shock/blue-flame) expanding combat | Follow existing patterns: Decision 21 tick (no white flicker), single-level `requires`-all-max synergies (19), exact-effect descriptions (10.2), `buildIcons()` icon audit; boot-sim exercises ALL 10 weapons + new-synergy E2Es (12.8) |
+| Phase 13 art volume (13 new enemy skins + 2 landmark sets + 3 palettes, all procedural) | Pre-rendered per-level sprite packs (existing "no per-frame path art" invariant); new art stays pure/Node-safe (check.mjs); per-level decor budgets in level defs |
+| Map 03 1.5×-area world (≈5145×3920) — decor counts + culling cost on mobile | Viewport culling + cullPad already exist; per-level decor budgets; boot-sim worst-case at 1.5× area (13.12) |
+| Per-level audio variation (scheduler complexity) | Keep the 0.12 s lookahead scheduler; per-level variation = per-level recipes/transpose, seam-tested in Node (10.6 method) |
+| Level select × co-op (Phase 11) | Level key in the room handshake (fold into 11.1); solo level select unaffected by co-op |
 
 ## 6. Definition of Done
 
