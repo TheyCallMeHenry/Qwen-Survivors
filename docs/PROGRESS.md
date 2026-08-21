@@ -9,7 +9,7 @@
 - **Gates (all three green before any tick):** `node tools/check.mjs` **29/29** · `node tools/test-logic.mjs` **219/219** · `node tools/test-boot.mjs` **`PASS boot-sim`**.
 - **Overall:** Phases 0–9 done (published); after **10.7/10.8** → **Phase 13 multi-level** → **Phase 11 multiplayer** → **Phase 12 weapons** → **10.9 optimization (LAST, D25)** → **2.9 user browser sign-off** (re-verify post-co-op) → project DONE. Blocking: none.
 - **Published:** public repo `TheyCallMeHenry/Qwen-Survivors` (initial commit `03eeac2` + `667364f` Phase 8 docs) · Pages **https://theycallmehenry.github.io/Qwen-Survivors/** (the share link; repo must stay public — flip back: `gh repo edit --visibility private`).
-- **Git:** tree clean — Phase 9 + 10.1–10.6 committed + pushed 2026-08-21 (since `667364f`; 10.5 = `af6cd5d`, 10.6 = `c326004`). Pages auto-deploys from main within a few minutes. Commit only if the user asks (AGENTS rule 7).
+- **Git:** tree clean — Phase 9 + 10.1–10.6 + Phase 13 spec committed + pushed 2026-08-21 (10.5 = `af6cd5d`, 10.6 = `c326004`, Phase 13 spec = `1f7d8d6`). Pages auto-deploys from main within a few minutes. Commit only if the user asks (AGENTS rule 7).
 - **Server:** detached node on **47893** (log `server.log`; dies on reboot). Check before starting another: `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:47893/` → 200 = already up.
 
 ## Master Checklist
