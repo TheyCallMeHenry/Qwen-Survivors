@@ -10,6 +10,10 @@ export class Combat {
   constructor() {
     this.bolts = [];
     this.axes = [];
+    this.bullets = [];
+    this.bombs = [];
+    this.flames = [];
+    this.explosions = [];
     this.orbitT = 0;
     this.garlicT = 0;
     this.t = 0;
@@ -18,21 +22,35 @@ export class Combat {
     this.boltImg = null;
     this.axeImg = null;
     this.bladeImg = null;
+    this.bulletImg = null;
+    this.bombImg = null;
+    this.flameImg = null;
+    this.explosionImg = null;
     this.onKill = null;   // (enemy) — set by game: score/gems/particles/hit-stop
     this.onHurt = null;   // () — set by game: shake/flash
     this.onDeath = null;  // () — set by game: state machine
+    this.onBomb = null;   // (x, y) — set by game: bomb shake
+    this.pulse = null;    // ('pistol'|'boom'|'fire') — set by game: bus → sfx
     this._orbCd = new Map(); // enemy -> last orbiter hit time
     this._axeCd = new Map(); // enemy -> last axe hit time
+    this._flameCd = new Map(); // enemy -> last flame tick time
+    this._tempestT = 0; // tempest synergy fire timer
   }
 
   reset() {
     this.bolts.length = 0;
     this.axes.length = 0;
+    this.bullets.length = 0;
+    this.bombs.length = 0;
+    this.flames.length = 0;
+    this.explosions.length = 0;
     this.orbitT = 0;
     this.garlicT = 0;
     this.t = 0;
     this._orbCd.clear();
     this._axeCd.clear();
+    this._flameCd.clear();
+    this._tempestT = 0;
   }
 
   fireBolt(x, y, ang, dmg, pierce) {
@@ -62,14 +80,62 @@ export class Combat {
     }
   }
 
+  fireBullet(x, y, ang, dmg) {
+    const C = CFG.combat;
+    this.bullets.push({
+      x, y,
+      vx: Math.cos(ang) * C.bulletSpeed,
+      vy: Math.sin(ang) * C.bulletSpeed,
+      rot: ang, dmg,
+      hit: new Set(),
+      life: C.bulletLife,
+    });
+  }
+
+  fireBomb(x, y, ang, dist, dmg, radius, fuse) {
+    const C = CFG.combat;
+    const tx = x + Math.cos(ang) * dist;
+    const ty = y + Math.sin(ang) * dist;
+    this.bombs.push({
+      x0: x, y0: y, tx, ty, x, y, h: 0,
+      t: 0, fly: C.bombFly, fuse,
+      dmg, radius,
+    });
+  }
+
+  emitFlame(x, y, ang, tick, dot, dotDur) {
+    const C = CFG.combat;
+    const sp = C.flameSpeed + rand(-C.flameSpeedVar, C.flameSpeedVar);
+    const a = ang + rand(-0.22, 0.22);
+    this.flames.push({
+      x, y,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      tick, dot, dotDur,
+      age: 0,
+      life: C.flameLife + rand(-C.flameLifeVar, C.flameLifeVar),
+      seed: rand(0, 1),
+      wob: 0,
+    });
+  }
+
   update(dt, player, enemies) {
     this.player = player;
     this.enemies = enemies;
     this.t += dt;
     this._bolts(dt, enemies);
+    this._bullets(dt, enemies);
     this._axes(dt, player, enemies);
+    this._bombs(dt, enemies);
+    this._flames(dt, enemies);
+    this._dot(dt);
     if (player.weapons.garlic) this._garlic(dt, player, enemies);
     if (player.weapons.blades) this._orbiters(dt, player, enemies);
+    for (let i = this.explosions.length - 1; i >= 0; i--) {
+      const x = this.explosions[i];
+      x.t += dt;
+      if (x.t >= x.dur) this.explosions.splice(i, 1);
+    }
   }
 
   _bolts(dt, enemies) {
@@ -88,6 +154,11 @@ export class Combat {
           if (dx * dx + dy * dy >= rr * rr) continue;
           b.hit.add(e);
           this.damageEnemy(e, b.dmg, b.vx / C.boltSpeed, b.vy / C.boltSpeed, C.boltKb);
+          if (this._syn('blight')) {
+            const S = CFG.synergies.blight.levels[0];
+            e.blightT = Math.max(e.blightT || 0, S.dur);
+            e.blightDps = Math.max(e.blightDps || 0, S.dps);
+          }
           if (b.hit.size > b.pierce) { gone = true; break; }
         }
       }
@@ -147,6 +218,12 @@ export class Combat {
     const C = CFG.combat;
     this.orbitT += dt * C.orbitSpeed;
     const S = CFG.weapons.blades.levels[player.weapons.blades - 1];
+    let tempestS = null, fireT = false;
+    if (this._syn('tempest')) {
+      tempestS = CFG.synergies.tempest.levels[0];
+      this._tempestT += dt;
+      if (this._tempestT >= tempestS.rate) { this._tempestT = 0; fireT = true; }
+    }
     for (let i = 0; i < S.n; i++) {
       const a = this.orbitT + (TAU / S.n) * i;
       const bx = player.x + Math.cos(a) * S.rad;
@@ -162,9 +239,136 @@ export class Combat {
         const kd = Math.hypot(kx, ky) || 1;
         this.damageEnemy(e, S.dmg * player.dmgMul, kx / kd, ky / kd, C.orbitKb);
       }
+      if (fireT) this.fireBolt(bx, by, a + TAU / 4, tempestS.dmg * player.dmgMul, 0);
     }
     if (this._orbCd.size > 512) this._orbCd.clear();
     if (this._axeCd.size > 512) this._axeCd.clear();
+  }
+
+  _bullets(dt, enemies) {
+    const C = CFG.combat;
+    for (let i = this.bullets.length - 1; i >= 0; i--) {
+      const b = this.bullets[i];
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.life -= dt;
+      let gone = b.life <= 0 || b.x < 0 || b.x > CFG.world.w || b.y < 0 || b.y > CFG.world.h;
+      if (!gone) {
+        for (const e of enemies.grid.near(b.x, b.y)) {
+          if (e.dead || b.hit.has(e)) continue;
+          const rr = e.r + C.bulletR;
+          const dx = e.x - b.x, dy = e.y - b.y;
+          if (dx * dx + dy * dy >= rr * rr) continue;
+          b.hit.add(e);
+          this.damageEnemy(e, b.dmg, b.vx / C.bulletSpeed, b.vy / C.bulletSpeed, C.bulletKb);
+          if (this._syn('inferno')) {
+            const S = CFG.synergies.inferno.levels[0];
+            e.burnT = Math.max(e.burnT || 0, S.dur);
+            e.burnDps = Math.max(e.burnDps || 0, S.dps);
+          }
+          gone = true; // rounds do not pierce
+          break;
+        }
+      }
+      if (gone) this.bullets.splice(i, 1);
+    }
+  }
+
+  _bombs(dt, enemies) {
+    const C = CFG.combat;
+    for (let i = this.bombs.length - 1; i >= 0; i--) {
+      const b = this.bombs[i];
+      b.t += dt;
+      if (b.t < b.fly) {
+        const k = b.t / b.fly;
+        b.x = b.x0 + (b.tx - b.x0) * k;
+        b.y = b.y0 + (b.ty - b.y0) * k;
+        b.h = 4 * C.bombH * k * (1 - k); // parabolic arc
+      } else {
+        b.x = b.tx; b.y = b.ty; b.h = 0;
+        if (b.t >= b.fly + b.fuse) {
+          this._explode(b, enemies);
+          this.bombs.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  _explode(b, enemies) {
+    const C = CFG.combat;
+    this.explosions.push({ x: b.x, y: b.y, t: 0, dur: C.bombFlash, r: b.radius });
+    for (const e of enemies.grid.range(b.x, b.y, b.radius)) {
+      if (e.dead) continue;
+      const dx = e.x - b.x, dy = e.y - b.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d > b.radius + e.r) continue;
+      this.damageEnemy(e, b.dmg, dx / d, dy / d, C.bombKb);
+      if (this._syn('napalm')) {
+        const S = CFG.synergies.napalm.levels[0];
+        e.burnT = Math.max(e.burnT || 0, S.dur);
+        e.burnDps = Math.max(e.burnDps || 0, S.dps);
+      }
+    }
+    if (this.pulse) this.pulse('boom');
+    if (this.onBomb) this.onBomb(b.x, b.y);
+  }
+
+  _flames(dt, enemies) {
+    const C = CFG.combat;
+    for (let i = this.flames.length - 1; i >= 0; i--) {
+      const f = this.flames[i];
+      f.age += dt;
+      if (f.age >= f.life) { this.flames.splice(i, 1); continue; }
+      // flow: drag bleeds velocity, flame rises, wobble grows with age
+      const dr = Math.exp(-C.flameDrag * dt);
+      f.vx *= dr;
+      f.vy = f.vy * dr - C.flameRise * dt;
+      f.x += f.vx * dt;
+      f.y += f.vy * dt;
+      f.wob = Math.sin(f.age * C.flameWobFreq + f.seed * TAU) * C.flameWobAmp * (f.age / f.life);
+      for (const e of enemies.grid.near(f.x, f.y)) {
+        if (e.dead) continue;
+        if (this.t - (this._flameCd.get(e) || -10) < C.flameHit) continue;
+        const rr = e.r + C.flameR;
+        const dx = e.x - f.x, dy = e.y - f.y;
+        if (dx * dx + dy * dy >= rr * rr) continue;
+        this._flameCd.set(e, this.t);
+        this.damageEnemy(e, f.tick, 0, 0, 0);
+        e.burnT = Math.max(e.burnT || 0, f.dotDur);
+        e.burnDps = Math.max(e.burnDps || 0, f.dot);
+      }
+    }
+    if (this._flameCd.size > 512) this._flameCd.clear();
+  }
+
+  // burn / blight DoT — ticked from status fields set by weapons + synergies.
+  _dot(dt) {
+    for (const e of this.enemies.list) {
+      if (e.dead) continue;
+      if (e.burnT > 0) {
+        e.burnT -= dt;
+        this.dpsTick(e, e.burnDps * dt);
+      }
+      if (e.blightT > 0) {
+        e.blightT -= dt;
+        this.dpsTick(e, e.blightDps * dt);
+      }
+    }
+  }
+
+  // DoT damage: no hit-flash, no knockback (a per-frame white flicker is wrong).
+  dpsTick(e, dmg) {
+    if (e.dead) return;
+    e.hp -= dmg;
+    if (e.hp <= 0) {
+      e.dead = true;
+      if (this.onKill) this.onKill(e);
+    }
+  }
+
+  _syn(key) {
+    const p = this.player;
+    return !!(p && p.synergies && (p.synergies[key] || 0) > 0);
   }
 
   // Damage pipeline. kx/ky = unit knockback direction, kb = strength.
@@ -226,6 +430,44 @@ export class Combat {
         ctx.drawImage(this.bladeImg, -C.orbitSize / 2, -C.orbitSize / 2, C.orbitSize, C.orbitSize);
         ctx.restore();
       }
+    }
+    if (this.bulletImg) for (const b of this.bullets) {
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.rot);
+      ctx.drawImage(this.bulletImg, -this.bulletImg.width / 2, -this.bulletImg.height / 2);
+      ctx.restore();
+    }
+    if (this.bombImg) for (const b of this.bombs) {
+      // ground shadow stays at the landing point; the ball rides the arc
+      ctx.fillStyle = 'rgba(4,6,12,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(b.x, b.y, 8 + b.h * 0.03, 4 + b.h * 0.015, 0, 0, TAU);
+      ctx.fill();
+      const s = this.bombImg.width;
+      ctx.drawImage(this.bombImg, b.x - s / 2, b.y - b.h - s / 2, s, s);
+    }
+    if (this.flameImg && this.flames.length) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const f of this.flames) {
+        const k = f.age / f.life;
+        const s = C.flameSize * (0.55 + 0.75 * k); // grow…
+        ctx.globalAlpha = Math.max(0, 1 - k);      // …then fade
+        ctx.drawImage(this.flameImg, f.x + f.wob - s / 2, f.y - s / 2, s, s);
+      }
+      ctx.restore();
+    }
+    if (this.explosionImg && this.explosions.length) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const x of this.explosions) {
+        const k = x.t / x.dur;
+        const s = x.r * 2 * (0.6 + 0.6 * k);
+        ctx.globalAlpha = 0.85 * (1 - k);
+        ctx.drawImage(this.explosionImg, x.x - s / 2, x.y - s / 2, s, s);
+      }
+      ctx.restore();
     }
     if (this.player && this.player.weapons.garlic) {
       // pulsing aura ring

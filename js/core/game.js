@@ -13,7 +13,8 @@ import { Particles, Snow } from '../entities/particles.js';
 import { Pickups } from '../entities/pickups.js';
 import { Enemies } from '../entities/enemies.js';
 import { Combat } from '../entities/combat.js';
-import { Player, cardOffers, applyCard } from '../entities/player.js';
+import { Player, cardOffers, applyCard, recomputeStats } from '../entities/player.js';
+import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta } from './meta.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../entities/spawner.js';
 import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
@@ -47,6 +48,17 @@ export class Game {
     this.combat.onKill = (e) => this._onKill(e);
     this.combat.onHurt = () => this._onHurt();
     this.combat.onDeath = () => this._onDeath();
+    this.combat.bulletImg = items.bullet;
+    this.combat.bombImg = items.bomb;
+    this.combat.flameImg = items.flame;
+    this.combat.explosionImg = items.explosion;
+    this.enemies.burnImg = items.burn;
+    this.enemies.blightImg = items.blight;
+    this.combat.pulse = (n) => this.bus.emit(n);
+    this.combat.onBomb = () => this.camera.addShake(0.6);
+
+    this.meta = loadMeta(CFG.meta.storageKey);
+    this._phoenixKills = 0;
 
     this.minimapBase = null;
     this.vignette = null;
@@ -87,6 +99,9 @@ export class Game {
     this.minimapBase = buildMinimapBase(this.world);
     const s = this.world.playerStart;
     this.player.reset(s.x, s.y);
+    applyMeta(this.player, this.meta);
+    recomputeStats(this.player);
+    this.player.hp = this.player.maxHp;
     this.enemies.reset();
     this.combat.reset();
     this.pickups.reset();
@@ -103,6 +118,7 @@ export class Game {
     this.deathT = 0;
     this.bossSpawned = false;
     this._ghostT = 0;
+    this._phoenixKills = 0;
     this.loop.timescale = 1;
     this.state = 'PLAYING';
     this.input.gesture = true; // menu Start is a DOM tap: count it as the audio-unlock gesture
@@ -144,7 +160,7 @@ export class Game {
     this.levelupQueue--;
     this.bus.emit('card', card, i);
     if (this.levelupQueue > 0) {
-      this.cards = cardOffers(this.player.weapons, this.player.passives, this.rng);
+      this.cards = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng);
       this.bus.emit('cards', this.cards);
     } else {
       this.cards = null;
@@ -299,8 +315,21 @@ export class Game {
 
   _startLevelUp() {
     this.state = 'LEVELUP';
-    this.cards = cardOffers(this.player.weapons, this.player.passives, this.rng);
+    this.cards = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng);
     this.bus.emit('cards', this.cards);
+  }
+
+  // Meta upgrades (Soulshards) — buy one level of `key`; no-op when maxed/unaffordable.
+  buyMeta(key) {
+    const upg = CFG.meta.upgrades[key];
+    if (!upg) return;
+    const level = this.meta.upgrades[key] || 0;
+    const cost = upgradeCost(key, level);
+    if (cost === null || this.meta.shards < cost) return;
+    this.meta.shards -= cost;
+    this.meta.upgrades[key] = level + 1;
+    saveMeta(CFG.meta.storageKey, this.meta);
+    this.bus.emit('meta', this.meta);
   }
 
   // --- combat callbacks (wired in constructor) ---
@@ -310,6 +339,11 @@ export class Game {
     this.score += e.score;
     const p = this.player;
     this.pickups.gem(e.x, e.y, e.xp);
+    if (p.synergies && p.synergies.phoenix) {
+      this._phoenixKills++;
+      const S = CFG.synergies.phoenix.levels[0];
+      if (this._phoenixKills % S.every === 0) p.heal(S.heal);
+    }
     const lowHp = p.hp / p.maxHp < CFG.gems.lowHpFrac;
     if (Math.random() < (lowHp ? CFG.gems.heartChanceLowHp : CFG.gems.heartChance)) this.pickups.heart(e.x, e.y);
     this.particles.soul(e.x, e.y, e.boss ? 14 : 5);
@@ -343,7 +377,12 @@ export class Game {
     this.loop.timescale = 1;
     this.input.clearTransient();
     if (victory) this.bus.emit('banner', { text: 'DAWN BREAKS' });
-    this.bus.emit('gameover', this.stats());
+    const st = this.stats();
+    const gain = shardsFor(st);
+    this.meta.shards += gain;
+    saveMeta(CFG.meta.storageKey, this.meta);
+    this.bus.emit('meta', this.meta);
+    this.bus.emit('gameover', { ...st, shards: gain });
   }
 
   // --- render (every rAF; raw dt, camera shake offsets included in view) ---
@@ -381,20 +420,23 @@ export class Game {
     // world space: pickups → shadows → Y-sorted (culled decor + enemies + player)
     ctx.save();
     ctx.translate(vw / 2 - view.x, vh / 2 - view.y);
-    this.pickups.draw(ctx, t);
-    const p = this.player;
-    const sr = p.def.shadowR;
-    ctx.drawImage(this.playerShadow, p.x - sr, p.y - sr * 0.5, sr * 2, sr);
-    this.enemies.drawShadows(ctx);
     const pad = CFG.world.cullPad;
     const x0 = view.x - vw / 2 - pad, x1 = view.x + vw / 2 + pad;
     const y0 = view.y - vh / 2 - pad, y1 = view.y + vh / 2 + pad;
+    this.pickups.draw(ctx, t, x0, y0, x1, y1);
+    const p = this.player;
+    const sr = p.def.shadowR;
+    ctx.drawImage(this.playerShadow, p.x - sr, p.y - sr * 0.5, sr * 2, sr);
+    this.enemies.drawShadows(ctx, x0, y0, x1, y1);
     const items = [];
     for (const d of this.world.decor) {
       if (d.x < x0 || d.x > x1 || d.y < y0 || d.y > y1) continue;
       items.push(d);
     }
-    for (const e of this.enemies.list) if (!e.dead) items.push(e);
+    for (const e of this.enemies.list) {
+      if (e.dead || e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
+      items.push(e);
+    }
     items.push(p);
     items.sort((a, b) => a.y - b.y);
     for (const it of items) {
@@ -409,7 +451,7 @@ export class Game {
     ctx.translate(vw / 2 - view.x, vh / 2 - view.y);
     this.combat.draw(ctx, t);
     this.enemies.drawOrbs(ctx);
-    this.particles.draw(ctx);
+    this.particles.draw(ctx, x0, y0, x1, y1);
     ctx.restore();
 
     // screen space: lighting → snow → vignette → minimap

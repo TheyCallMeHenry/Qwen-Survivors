@@ -5,13 +5,19 @@
 // (audio excluded — verified safe by review: every path no-ops pre-ctx), then
 // pumps the real Loop via a stubbed requestAnimationFrame and simulates the
 // user's path: btn-start click → run 1 (stand still → level-up cards → heart
-// pickup → forced death → btn-retry) → run 2 (kept alive → all 4 weapons via
-// forced card picks → wand-off kill window → touch stick + dash button →
-// wraith boss at 4:00 → victory at 5:00) → btn-go-menu → scores overlay
-// (render/clear/back) → quit flow (window.close stub + fallback screen).
+// pickup → forced death) → meta flow (gameover saves Soulshards → menu →
+// Upgrades screen: assert rows/shards, buy Vitality, back) → run 2 via
+// btn-start (meta maxHp 120 applied → kept alive → all 7 weapons via forced
+// card picks → wand-off kill window → bullets/bombs/flames observed → burn
+// DoT kill → dash i-frame E2E → touch stick + dash button → synergy E2E:
+// all-max → blight card drawn + picked → wraith boss at 4:00 → victory at
+// 5:00) → btn-go-menu → scores overlay (render/clear/back) → quit flow
+// (window.close stub + fallback screen).
 // Catches first-frame/wired-up runtime crashes the pure-logic tests cannot
 // see, and drives paths the happy-path sim never hit: keyboard card picks,
-// non-start weapons, heart heal, mobile stick/dash, score persistence, quit.
+// non-start weapons, heart heal, meta buy + apply, new-weapon projectiles,
+// burn DoT, dash i-frames, synergy cards, mobile stick/dash, score
+// persistence, quit.
 //
 // Usage: node tools/test-boot.mjs — exit 0 = PASS.
 
@@ -25,20 +31,29 @@ class IndexSizeError extends Error {
 }
 const okR = (v) => Number.isFinite(v) && v >= 0;
 
+// 10.4 bench: draw-op counts (Node ms under-states browser cost — draw call
+// volume is the proxy for it). Counted inside the ctx proxy only; the harness
+// set() no-ops, so nothing else can instrument this way.
+const drawOps = { drawImage: 0, arc: 0, fill: 0, fillRect: 0, stroke: 0, fillText: 0, radial: 0 };
+
 function makeCtx() {
   return new Proxy({}, {
     get(_, p) {
       if (p === 'canvas') return { width: 1, height: 1 };
       if (p === 'createRadialGradient') return (x0, y0, r0, x1, y1, r1) => {
+        drawOps.radial++;
         if (!okR(r0) || !okR(r1)) throw new IndexSizeError();
         return grad;
       };
       if (p === 'createLinearGradient') return () => grad;
-      if (p === 'arc') return (...a) => { if (a.length < 3 || a.length > 6) throw new TypeError('arc: ' + a.length + ' args'); if (!okR(a[2])) throw new IndexSizeError(); };
+      if (p === 'arc') return (...a) => { drawOps.arc++; if (a.length < 3 || a.length > 6) throw new TypeError('arc: ' + a.length + ' args'); if (!okR(a[2])) throw new IndexSizeError(); };
       if (p === 'ellipse') return (...a) => { if (a.length !== 7) throw new TypeError('ellipse: ' + a.length + ' args, 7 required'); if (!okR(a[2]) || !okR(a[3])) throw new IndexSizeError(); };
       if (p === 'measureText') return () => ({ width: 8 });
       if (p === 'getImageData') return (x, y, w, h) => ({ data: new Uint8ClampedArray(Math.max(1, w * h) * 4), width: w, height: h });
-      if (typeof p === 'string') return () => undefined;
+      if (typeof p === 'string') {
+        if (p in drawOps) { const o = drawOps; return () => { o[p]++; }; }
+        return () => undefined;
+      }
       return undefined;
     },
     set() { return true; },
@@ -49,7 +64,7 @@ const ctx2d = makeCtx();
 function makeEl(tag = 'div') {
   const el = {
     tag,
-    style: { setProperty() {} },
+    style: { _props: {}, setProperty(k, v) { this._props[k] = v; } },
     className: '', textContent: '', hidden: false,
     tabIndex: 0, disabled: false,
     offsetWidth: 0, offsetHeight: 0,
@@ -132,10 +147,14 @@ const { CFG } = await import('../js/config.js');
 const { Loop } = await import('../js/core/loop.js');
 const { Input } = await import('../js/core/input.js');
 const { Game } = await import('../js/core/game.js');
+const { saveMeta } = await import('../js/core/meta.js');
 const { buildCharacters } = await import('../js/art/characters.js');
 const { buildItems, buildIcons } = await import('../js/art/items.js');
 const { initHud } = await import('../js/ui/hud.js');
 const { initScreens } = await import('../js/ui/screens.js');
+const { aliveCap } = await import('../js/entities/spawner.js');
+const { clamp } = await import('../js/utils/math.js');
+const { recomputeStats } = await import('../js/entities/player.js');
 
 const canvas = byId['game'];
 const cvsEvt = (type, e) => (canvas._ls && canvas._ls[type] || []).slice().forEach((f) => f(e));
@@ -151,7 +170,7 @@ const icons = buildIcons();
 for (const k of Object.keys(CFG.enemies))
   assert(characters[k] && characters[k].frames.length > 0, `characters missing enemy "${k}"`);
 assert(characters.player.idle.length > 0 && characters.player.run.length > 0, 'characters missing player frames');
-for (const k of ['gem', 'heart', 'orb', 'bolt', 'boomerang', 'blade'])
+for (const k of ['gem', 'heart', 'orb', 'bolt', 'boomerang', 'blade', 'bullet', 'bomb', 'flame', 'explosion', 'burn', 'blight'])
   assert(items[k], `items missing "${k}"`);
 
 let game;
@@ -195,6 +214,12 @@ let heartDone = false, heartAsserted = false, heartHp = 0, heartAt = 0;
 let wandOffDone = false, wandOffAsserted = false, wandOffAt = 0, wandOffKills = 0, wandLv = 1;
 let stickDone = false, stickUp = false, stickT = 0, stickX0 = 0;
 let dashBtnDone = false, dashBtnAsserted = false;
+let sawBullets = false, sawBombs = false, sawFlames = false;
+let burnDone = false, burnAsserted = false, burnEnemy = null, burnKills = 0, burnAt = 0;
+let dashIFrameStep = 0, dashIFrameHp0 = 0; // 0 = not started, 1 = in flight, 2 = done
+let synActive = false, synDone = false, synRetries = 0;
+let benchPhase = 0, benchStartT = 0; // 10.4 one-shot worst-case bench: 0=off · 1=measuring · 2=done
+let bench = null;
 
 function steer() {
   const st = game.state;
@@ -203,7 +228,33 @@ function steer() {
     const cards = byId['cards'].children;
     assert(cards.length > 0, 'LEVELUP but no card elements built');
     levelUps++;
-    const missing = ['axe', 'garlic', 'blades'].filter((k) => !game.player.weapons[k]);
+    if (synActive) {
+      // 9.3a synergy E2E drives this draw (the generic auto-pick would steal it):
+      // find blight in the draw; otherwise take any card and re-draw (bounded).
+      const i = game.player.synergies.blight
+        ? -1
+        : game.cards.findIndex((c) => c.kind === 'synergy' && c.key === 'blight');
+      if (i >= 0) {
+        cards[i].click();
+        assert(game.player.synergies.blight === 1, 'blight pick did not land in player.synergies');
+      } else if (!game.player.synergies.blight) {
+        assert(synRetries < 2, 'blight never appeared in the synergy draws');
+        synRetries++;
+        cards[0].click();
+        game.levelupQueue = 1; // re-draw: the owned synergy leaves the pool
+      } else {
+        cards[0].click(); // blight owned; drain leftover queue card(s)
+      }
+      if (game.player.synergies.blight && game.state === 'PLAYING') {
+        synDone = true;
+        synActive = false;
+        // E2E done — stop leveling: further level-ups would auto-pick the other
+        // synergies until the pool is empty (softlock guard is Phase 10.7).
+        game.player.gainXp = () => 0;
+      }
+      return;
+    }
+    const missing = ['axe', 'garlic', 'blades', 'pistols', 'bombs', 'flame'].filter((k) => !game.player.weapons[k]);
     if (missing.length) {
       // startWeapons is ['wand'] — force the other weapons through the real
       // pickCard/applyCard pipeline (the click still goes through the card DOM).
@@ -241,34 +292,174 @@ function steer() {
   }
   if (run === 2) {
     const p = game.player;
-    p.iframes = 1;
-    if (p.hp < 50) p.hp = 50;
+    // 9.5 dash i-frame E2E: needs a real, unmasked i-frame window, so the
+    // keep-alive guard below is off while the 2-frame test is in flight.
+    if (dashIFrameStep === 0 && st === 'PLAYING' && p.dashCd <= 0 && game.t >= 30) {
+      p.dashT = 0; p.dashCd = 0; p.iframes = 0;
+      assert(p.tryDash(1, 0), 'tryDash refused at t>=30 with dashCd<=0');
+      dashIFrameStep = 1;
+      dashIFrameHp0 = p.hp;
+      assert(game.combat.damagePlayer(p, 5, p.x, p.y) === false, 'dash i-frame: damage landed at dash start');
+      assert(p.hp === dashIFrameHp0, 'dash i-frame: hp changed at dash start');
+    } else if (dashIFrameStep === 1) {
+      assert(p.dashT > 0, 'dash ended before the mid-dash i-frame check');
+      assert(p.iframes > 0, 'mid-dash: iframes not re-asserted by player.update');
+      assert(game.combat.damagePlayer(p, 5, p.x, p.y) === false, 'dash i-frame: damage landed mid-dash');
+      assert(p.hp === dashIFrameHp0, 'dash i-frame: hp changed mid-dash');
+      dashIFrameStep = 2;
+    }
+    if (dashIFrameStep !== 1) {
+      p.iframes = 1;
+      if (p.hp < 50) p.hp = 50;
+    }
+    // 9.6c burn DoT: a fresh rat must die through the dpsTick pipeline (no flash/kb)
+    if (!burnDone && st === 'PLAYING' && game.t >= 20) {
+      burnDone = true; burnAt = game.t; burnKills = game.kills;
+      burnEnemy = game.enemies.spawn('rat', p.x + 60, p.y);
+      burnEnemy.burnT = 2; burnEnemy.burnDps = 50;
+    }
+    if (burnDone && !burnAsserted && game.t >= burnAt + 1) {
+      burnAsserted = true;
+      assert(burnEnemy.dead, 'burn DoT did not kill the rat');
+      assert(game.kills > burnKills, 'burn DoT kill did not route through onKill');
+    }
     const w = p.weapons;
     if (!wandOffDone && w.axe && w.garlic && w.blades && w.wand) {
-      // all four weapons owned — kill the wand for 15s: kills must still happen
+      // all base weapons owned — kill the wand for 15s: the rest must still land kills
       wandOffDone = true; wandOffAt = game.t; wandOffKills = game.kills;
       wandLv = w.wand; w.wand = 0;
     }
     if (wandOffDone && !wandOffAsserted && game.t >= wandOffAt + 15) {
       wandOffAsserted = true;
-      if (w.wand === 0) assert(game.kills > wandOffKills, 'non-start weapons (axe/garlic/blades) never landed a kill');
+      if (w.wand === 0) assert(game.kills > wandOffKills, 'other weapons never landed a kill while the wand was off');
       w.wand = Math.max(w.wand, wandLv);
+    }
+    // 9.6a/b/c — the three new weapons must actually produce their projectiles
+    if (st === 'PLAYING') {
+      if (!sawBullets && game.combat.bullets.length > 0) sawBullets = true;
+      if (!sawBombs && game.combat.bombs.length > 0) sawBombs = true;
+      if (!sawFlames && game.combat.flames.length > 0) sawFlames = true;
     }
     if (!stickDone && st === 'PLAYING' && game.t >= 60) {
       stickDone = true; stickT = game.t; stickX0 = p.x;
+      // The world is seed-random and the t>=30 dash test leaves the player right
+      // of the village — a seed can pin it against a hut so the right-steer window
+      // makes 0 px of progress. No-op static colliders for the 1 s window so the
+      // lane is deterministic; `delete` below restores the prototype method.
+      game.world.collidersNear = () => [];
       cvsEvt('pointerdown', { pointerId: 7, clientX: 640, clientY: 400, pointerType: 'touch' });
       winEvt('pointermove', { pointerId: 7, clientX: 692, clientY: 400, pointerType: 'touch' });
     }
     if (stickDone && !stickUp && game.t >= stickT + 1) {
       winEvt('pointerup', { pointerId: 7, clientX: 692, clientY: 400, pointerType: 'touch' });
       stickUp = true;
+      delete game.world.collidersNear;
       assert(p.x > stickX0 + 100, `touch stick did not steer right (dx=${(p.x - stickX0).toFixed(0)}px)`);
     }
     if (!dashBtnDone && st === 'PLAYING' && p.dashCd <= 0 && game.t >= 90) {
       dashBtnDone = true;
       (byId['btn-dash']._ls && byId['btn-dash']._ls.pointerdown || []).forEach((f) => f({ preventDefault() {} }));
     }
-    if (dashBtnDone && !dashBtnAsserted && p.dashT > 0) dashBtnAsserted = true;
+    if (dashBtnDone && !dashBtnAsserted && p.dashT > 0) {
+      dashBtnAsserted = true;
+      // 10.1 — the HUD dash indicator must carry the SAME live --cd fraction as the touch ring
+      const cdHud = byId['btn-dash-hud'].style._props['--cd'];
+      const cdTouch = byId['btn-dash'].style._props['--cd'];
+      assert(cdHud === cdTouch && parseFloat(cdHud) > 0,
+        `HUD dash --cd not driven (hud=${cdHud} touch=${cdTouch}, mid-dash expects equal + > 0)`);
+    }
+    // 9.3a synergy E2E setup: force every requirement to max so the offer pool
+    // is exactly the 5 fused cards; the LEVELUP branch above then drives the
+    // real draw/pick pipeline to hand out blight.
+    if (!synActive && !synDone && st === 'PLAYING' && game.t >= 200) {
+      for (const k of Object.keys(CFG.weapons)) p.weapons[k] = 5;
+      for (const k of Object.keys(CFG.passives)) p.passives[k] = CFG.passives[k].max;
+      p.synergies = {};
+      synActive = true;
+      game.levelupQueue = 1;
+    }
+    // 10.4 — one-shot worst-case multi-hit bench (5 s in-game window, run 2):
+    // all 7 weapons L5 + all passives max + 5/5 synergies + aliveCap dummies
+    // kept in a 150-450 px ring around the player (maxed weapons keep the
+    // ring turning over → sustained mass-damage + mass-kill bursts). Logs
+    // update vs render vs hud+screens ms — the 10.4 before/after contract.
+    if (benchPhase === 0 && synDone && st === 'PLAYING' && game.t >= 205) {
+      benchPhase = 1;
+      for (const k of Object.keys(CFG.weapons)) p.weapons[k] = 5;
+      for (const k of Object.keys(CFG.passives)) p.passives[k] = CFG.passives[k].max;
+      p.synergies = {};
+      for (const k of Object.keys(CFG.synergies)) p.synergies[k] = 1;
+      recomputeStats(p);
+      bench = {
+        upd: 0, nUpd: 0, ren: 0, nRen: 0, dom: 0, sec: null, ops0: { ...drawOps },
+        ou: game.update.bind(game), or: game.render.bind(game),
+        oh: hud.update.bind(hud), os: screens.update.bind(screens),
+      };
+      game.update = (dt) => { const t0 = performance.now(); bench.ou(dt); bench.upd += performance.now() - t0; bench.nUpd++; };
+      game.render = (dt) => { const t0 = performance.now(); bench.or(dt); bench.ren += performance.now() - t0; bench.nRen++; };
+      hud.update = () => { const t0 = performance.now(); bench.oh(); bench.dom += performance.now() - t0; };
+      screens.update = () => { const t0 = performance.now(); bench.os(); bench.dom += performance.now() - t0; };
+      if (process.env.DEBUG_BOOT) {
+        // opt-in section breakdown (DEBUG_BOOT=1): wrap the subsystem
+        // sections inside update/render for the window only.
+        bench.sec = {};
+        const wrap = (key, obj, m) => {
+          const fn = obj[m];
+          const s = (bench.sec[key] = { t: 0, n: 0, obj, m, fn });
+          obj[m] = function (...a) {
+            const t0 = performance.now();
+            const r = fn.apply(this, a);
+            s.t += performance.now() - t0;
+            s.n++;
+            return r;
+          };
+        };
+        wrap('u:player', game.player, 'update');
+        wrap('u:spawns', game, '_spawns');
+        wrap('u:enemies', game.enemies, 'update');
+        wrap('u:combat', game.combat, 'update');
+        wrap('u:pickups', game.pickups, 'update');
+        wrap('u:particles', game.particles, 'update');
+        wrap('u:snow', game.snow, 'update');
+        wrap('u:camera', game.camera, 'update');
+        wrap('r:world', game.world, 'drawBackground');
+        wrap('r:pickups', game.pickups, 'draw');
+        wrap('r:shadows', game.enemies, 'drawShadows');
+        wrap('r:drawOne', game.enemies, 'drawOne');
+        wrap('r:orbs', game.enemies, 'drawOrbs');
+        wrap('r:combat', game.combat, 'draw');
+        wrap('r:particles', game.particles, 'draw');
+        wrap('r:lighting', game.lighting, 'draw');
+        wrap('r:snow', game.snow, 'draw');
+      }
+      benchStartT = game.t;
+      while (game.enemies.list.length < aliveCap(game.t)) benchSpawn();
+    }
+    if (benchPhase === 1) {
+      while (game.enemies.list.length < aliveCap(game.t)) benchSpawn();
+      if (game.t >= benchStartT + 5) {
+        benchPhase = 2;
+        game.update = bench.ou; game.render = bench.or;
+        hud.update = bench.oh; screens.update = bench.os;
+        if (bench.sec) {
+          for (const s of Object.values(bench.sec)) s.obj[s.m] = s.fn;
+          console.log(
+            `[10.4-sec] ms/frame over the 5 s window (nRen=${bench.nRen}, nUpd=${bench.nUpd}): ` +
+            Object.entries(bench.sec).map(([k, s]) => `${k}=${(s.t / bench.nRen).toFixed(3)}(x${s.n})`).join(' '),
+          );
+        }
+        const ops = Object.keys(bench.ops0)
+          .map((k) => `${k}=${((drawOps[k] - bench.ops0[k]) / bench.nRen).toFixed(1)}`)
+          .join(' ');
+        console.log(
+          `[10.4-bench] 5 s worst-case (7 weapons L5 + passives max + 5/5 synergies, ${maxEnemies} enemies peak): ` +
+          `update=${(bench.upd / bench.nUpd).toFixed(3)} ms/step (n=${bench.nUpd}) · ` +
+          `render=${(bench.ren / bench.nRen).toFixed(3)} ms/frame (n=${bench.nRen}) · ` +
+          `hud+screens=${(bench.dom / bench.nRen).toFixed(3)} ms/frame · ` +
+          `ops/frame: ${ops}`,
+        );
+      }
+    }
   }
   if (process.env.DEBUG_BOOT) {
     const p = game.player;
@@ -285,6 +476,18 @@ function steer() {
       console.log(`[dbg] ${game.state} t=${game.t.toFixed(1)} hp=${p.hp.toFixed(0)}/${p.maxHp} dead=${p.dead} enemies=${game.enemies.list.length} hits=${dbgHits} minDist=${md === 1e9 ? '-' : md.toFixed(0)} maxSpd=${msp.toFixed(0)} p=(${p.x.toFixed(0)},${p.y.toFixed(0)})`);
     }
   }
+}
+
+// 10.4 bench: ring dummy around the player (mostly rats — cheap HP = constant
+// mass-kill + onKill turnover; some wolves for speed variance).
+function benchSpawn() {
+  const p = game.player;
+  const r = game.rng;
+  const a = r() * 6.283185307;
+  const d = 150 + r() * 300;
+  const x = clamp(p.x + Math.cos(a) * d, CFG.world.margin, CFG.world.w - CFG.world.margin);
+  const y = clamp(p.y + Math.sin(a) * d, CFG.world.margin, CFG.world.h - CFG.world.margin);
+  game.enemies.spawn(r() < 0.7 ? 'rat' : 'wolf', x, y);
 }
 
 function pump(n) {
@@ -324,10 +527,42 @@ assert(game.state === 'DYING', `run 1: forced death did not enter DYING (state=$
 assert(pumpUntil(() => game.state === 'GAMEOVER', 8 * 60), `run 1: expected death, got state=${game.state} t=${game.t.toFixed(1)}s`);
 assert(!game.victory, 'run 1: death must not be a victory');
 
-// run 2: retry via the real button, survive → boss at 4:00 → victory at 5:00
+// meta flow: run 1's gameover must have persisted the Soulshards profile
+assert(typeof JSON.parse(localStorage.getItem(CFG.meta.storageKey)).shards === 'number',
+  'run 1 gameover did not save the meta profile');
+// force a known wallet, then drive the real Upgrades screen
+game.meta.shards = 50;
+saveMeta(CFG.meta.storageKey, game.meta);
+byId['btn-go-menu'].click();
+pump(30);
+assert(game.state === 'MENU', `btn-go-menu did not return to menu (state=${game.state})`);
+byId['btn-upgrades'].click();
+pump(30);
+assert(byId['meta-list'].children.length === 5, 'Upgrades screen: expected 5 upgrade rows');
+assert(byId['meta-shards'].textContent === '50', 'Upgrades screen: shard count not rendered');
+const buyBtn = byId['meta-list'].children[0].children[2];
+assert(buyBtn._upgKey === 'maxHp', 'first upgrade row is not maxHp');
+buyBtn.click();
+assert(game.meta.upgrades.maxHp === 1, 'buyMeta did not level up maxHp');
+assert(game.meta.shards === 30, 'buyMeta did not deduct the 20-shard cost');
+assert(JSON.parse(localStorage.getItem(CFG.meta.storageKey)).upgrades.maxHp === 1, 'meta purchase not persisted');
+byId['btn-upgrades-back'].click();
+pump(30);
+
+// run 2: start from the menu (the flow no longer uses btn-retry), survive →
+// boss at 4:00 → victory at 5:00
 run = 2;
-byId['btn-retry'].click();
-assert(game.state === 'PLAYING', 'btn-retry click did not start the run');
+// re-arm run 2 one-shots (the menu gap ran steer() against run 1's dead player)
+wandOffDone = wandOffAsserted = false; wandOffAt = 0; wandOffKills = 0; wandLv = 1;
+stickDone = stickUp = false; stickT = 0; stickX0 = 0;
+dashBtnDone = dashBtnAsserted = false;
+sawBullets = sawBombs = sawFlames = false;
+burnDone = burnAsserted = false; burnEnemy = null; burnKills = 0; burnAt = 0;
+dashIFrameStep = 0; dashIFrameHp0 = 0;
+synActive = synDone = false; synRetries = 0;
+byId['btn-start'].click();
+assert(game.state === 'PLAYING', 'btn-start click did not start run 2');
+assert(game.player.maxHp === 120, 'meta maxHp upgrade not applied at run start (100 + 20 expected)');
 pump(6 * 60 * 60);
 assert(game.state === 'GAMEOVER' && game.victory, `run 2: expected victory, got state=${game.state} t=${game.t.toFixed(1)}s`);
 assert(game.bossSpawned, 'wraith boss never spawned');
@@ -367,10 +602,17 @@ assert(closeCount >= 2, 'btn-quit-ack did not re-attempt close');
 assert(keyPickDone, 'keyboard card pick never exercised');
 assert(heartDone && heartAsserted, 'heart pickup path never exercised');
 assert(wandOffDone && wandOffAsserted, 'wand-off kill window never exercised');
+assert(sawBullets && sawBombs && sawFlames, 'new-weapon projectiles (bullets/bombs/flames) never observed');
+assert(burnDone && burnAsserted, 'burn DoT kill path never exercised');
+assert(dashIFrameStep === 2, 'dash i-frame E2E never completed');
+assert(synDone, 'synergy E2E (blight) never completed');
+assert(benchPhase === 2, '10.4 worst-case bench never completed');
 assert(stickDone && stickUp, 'touch stick path never exercised');
 
 console.log(
   `PASS boot-sim — runs=2 (death + victory) · level-ups=${levelUps} · max enemies alive=${maxEnemies} · ` +
-  `boss spawned · pause/resume + mute · card pick via click + key 1 · all 4 weapons (wand-off kill window) · ` +
-  `heart heal · touch stick + dash button · scores save/render/clear · quit flow · loop alive throughout`,
+  `meta: gameover shards saved → Upgrades buy → maxHp 120 at run start · ` +
+  `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
+  `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · heart heal · ` +
+  `touch stick + dash button · HUD dash --cd driven (10.1) · scores save/render/clear · quit flow · loop alive throughout`,
 );

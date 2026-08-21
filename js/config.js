@@ -23,7 +23,7 @@ export const CFG = {
     dashCd: 1.75,
     dashIframeExtra: 0.06,
     hurtIframes: 0.7,
-    knockback: 230,
+    knockback: 76,
     startWeapons: ['wand'],
     animFps: 8,
     ghostEvery: 0.035,  // dash ghost trail spacing (s)
@@ -39,7 +39,7 @@ export const CFG = {
 
   lighting: {
     base: '8,10,24', baseAlpha: 0.86, glowAlpha: 0.30,
-    playerR: 170, playerRgb: '205,220,255', playerFlicker: 0.15,
+    playerR: 510, playerRgb: '205,220,255', playerFlicker: 0.15,
     bossR: 240, bossRgb: '168,96,255', bossFlicker: 0.5,
   },
 
@@ -84,6 +84,78 @@ export const CFG = {
         { n: 1, dmg: 10, rad: 64 }, { n: 2, dmg: 14, rad: 70 }, { n: 3, dmg: 18, rad: 76 },
         { n: 3, dmg: 24, rad: 82 }, { n: 4, dmg: 32, rad: 88 },
       ],
+    },
+    pistols: {
+      name: 'Twin Fangs',
+      desc: 'Twin pistols — each shot sends two rounds at the nearest foes.',
+      icon: 'pistols',
+      levels: [
+        { rate: 0.55, dmg: 9, spread: 0.10 },
+        { rate: 0.48, dmg: 11, spread: 0.10 },
+        { rate: 0.42, dmg: 13, spread: 0.08 },
+        { rate: 0.36, dmg: 15, spread: 0.08 },
+        { rate: 0.30, dmg: 18, spread: 0.06 },
+      ],
+    },
+    bombs: {
+      name: 'Sunder Bombs',
+      desc: 'Lob cartoon bombs that land, pause, then boom in an AOE.',
+      icon: 'bombs',
+      levels: [
+        { cd: 2.2, dmg: 40, r: 95, fuse: 1.1 },
+        { cd: 2.0, dmg: 52, r: 105, fuse: 0.95 },
+        { cd: 1.8, dmg: 66, r: 115, fuse: 0.8 },
+        { cd: 1.6, dmg: 82, r: 128, fuse: 0.65 },
+        { cd: 1.4, dmg: 100, r: 140, fuse: 0.5 },
+      ],
+    },
+    flame: {
+      name: 'Pyre Lance',
+      desc: 'A streaming geyser of flame that ignites foes. Limited fuel, slow refill.',
+      icon: 'flame',
+      levels: [
+        { tick: 6, dot: 4, dotDur: 2.5, range: 300, fuel: 4.0, recharge: 7.0 },
+        { tick: 8, dot: 5, dotDur: 2.8, range: 320, fuel: 5.0, recharge: 6.5 },
+        { tick: 10, dot: 6, dotDur: 3.0, range: 340, fuel: 6.0, recharge: 6.0 },
+        { tick: 13, dot: 8, dotDur: 3.3, range: 360, fuel: 7.0, recharge: 5.5 },
+        { tick: 16, dot: 10, dotDur: 3.6, range: 380, fuel: 8.0, recharge: 5.0 },
+      ],
+    },
+  },
+
+  // Weapon/passive synergies: a single-level card offered only when every
+  // `requires` entry is at max (weapon: levels.length, passive: max).
+  // Stored in player.synergies (does NOT count toward maxWeapons).
+  synergies: {
+    blight: {
+      name: 'Blight Hex',
+      desc: 'Moonbolts seep into foes, dealing blight damage over time.',
+      icon: 'blight', requires: ['wand', 'garlic'],
+      levels: [{ dps: 14, dur: 3.0 }],
+    },
+    tempest: {
+      name: 'Tempest Blades',
+      desc: 'Orbiting blades now hurl tangential bolts at the swarm.',
+      icon: 'tempest', requires: ['axe', 'blades'],
+      levels: [{ rate: 0.8, dmg: 12 }],
+    },
+    inferno: {
+      name: 'Inferno Rounds',
+      desc: 'Twin rounds now ignite foes, dealing burn damage over time.',
+      icon: 'inferno', requires: ['pistols', 'flame'],
+      levels: [{ dps: 12, dur: 2.5 }],
+    },
+    napalm: {
+      name: 'Napalm Detonation',
+      desc: 'Bomb blasts now ignite every foe caught in the radius.',
+      icon: 'napalm', requires: ['bombs', 'flame'],
+      levels: [{ dps: 18, dur: 3.0 }],
+    },
+    phoenix: {
+      name: 'Phoenix Heart',
+      desc: 'Reclaim your vitality — heal 10 HP every 8 kills.',
+      icon: 'phoenix', requires: ['hp', 'regen'],
+      levels: [{ heal: 10, every: 8 }],
     },
   },
 
@@ -134,6 +206,14 @@ export const CFG = {
     garlicTick: 0.45,
     orbLife: 4.5, orbR: 7,
     hitStopKill: 0.05, hitStopBoss: 0.18, hitStopHurt: 0.07,
+    // Twin Fangs rounds (small, fast, short-lived — distinct from the cyan bolt)
+    bulletSpeed: 720, bulletLife: 0.8, bulletR: 4, bulletKb: 120, pistolRange: 520,
+    // Sunder Bombs (lob arc + fuse pause before AOE)
+    bombDist: 240, bombMin: 120, bombFly: 0.55, bombH: 70, bombKb: 260, bombFlash: 0.4,
+    // Pyre Lance flame sprites (flow-y drag/rise + wobble, grow-then-fade)
+    flameSpeed: 260, flameSpeedVar: 80, flameLife: 0.65, flameLifeVar: 0.15,
+    flameSize: 18, flameR: 12, flameDrag: 2.0, flameRise: 140,
+    flameWobAmp: 14, flameWobFreq: 9, flameHit: 0.22,
   },
 
   spawner: {
@@ -172,6 +252,20 @@ export const CFG = {
     max: 10,
     storageKey: 'qsurv.hiscores.v1',
     muteKey: 'qsurv.mute',
+  },
+
+  // Persistent meta progression (Soulshards + between-run upgrades). localStorage.
+  meta: {
+    storageKey: 'qsurv.meta.v1',
+    shardPerScore: 400,   // shards per score point
+    victoryBonus: 25,     // flat bonus shards on victory
+    upgrades: {
+      maxHp: { name: 'Vitality',        desc: '+20 max HP',           icon: 'heart', max: 5, val: 20,     cost: [20, 40, 70, 110, 160] },
+      dmg:   { name: 'Ferocity',        desc: '+8% weapon damage',    icon: 'sword', max: 5, val: 0.08,  cost: [25, 50, 85, 130, 190] },
+      speed: { name: 'Swiftness',       desc: '+6% movement speed',   icon: 'boots', max: 5, val: 0.06,  cost: [20, 45, 80, 125, 180] },
+      xp:    { name: 'Soul Attunement', desc: '+12% XP gain',         icon: 'gem',   max: 5, val: 0.12,  cost: [30, 55, 95, 145, 210] },
+      dash:  { name: 'Phantom Step',    desc: '−8% dash cooldown',    icon: 'dash',  max: 5, val: -0.08, cost: [20, 40, 75, 120, 175] },
+    },
   },
 
   perf: {

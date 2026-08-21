@@ -100,9 +100,9 @@ export class Particles {
   }
 
   // World transform must be active (game translates the ctx).
-  draw(ctx) {
+  draw(ctx, x0, y0, x1, y1) {
     for (const p of this.pool) {
-      if (!p.on) continue;
+      if (!p.on || p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue;
       const k = p.life / p.max;
       if (p.kind === GHOST) {
         ctx.globalAlpha = 0.35 * k;

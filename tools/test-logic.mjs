@@ -5,7 +5,8 @@ import { CFG } from '../js/config.js';
 import { generateWorld } from '../js/world/generate.js';
 import { HashGrid } from '../js/utils/grid.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../js/entities/spawner.js';
-import { cardOffers, applyCard } from '../js/entities/player.js';
+import { cardOffers, applyCard, recomputeStats, cardEffectText } from '../js/entities/player.js';
+import { loadMeta, shardsFor, upgradeCost, applyMeta } from '../js/core/meta.js';
 import { rankScore } from '../js/ui/screens.js';
 import { MUSIC } from '../js/audio/music.js';
 
@@ -148,6 +149,8 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   }
   ok(CFG.run.bossAt < CFG.run.time, 'run: boss spawns before end');
   ok(CFG.perf.particleCap > 0 && CFG.perf.snowCount > 0, 'perf: caps positive');
+  ok(CFG.lighting.playerR === 510, 'lighting.playerR = 510 (triple vision)');
+  ok(CFG.player.knockback === 76, 'player.knockback = 76 (≈33% of the old 230)');
 }
 
 // --- HashGrid.range (cell-aligned candidate superset) ---
@@ -195,6 +198,24 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     if (b.n < a.n || b.dmg < a.dmg || b.rad < a.rad) blaOk = false;
   }
   ok(blaOk, 'weapons.blades: n/dmg/rad non-decreasing');
+  let pisOk = true;
+  for (let i = 1; i < 5; i++) {
+    const a = L('pistols')[i - 1], b = L('pistols')[i];
+    if (b.dmg < a.dmg || b.rate > a.rate || b.spread > a.spread) pisOk = false;
+  }
+  ok(pisOk, 'weapons.pistols: dmg↑ rate↓ spread↓');
+  let bomOk = true;
+  for (let i = 1; i < 5; i++) {
+    const a = L('bombs')[i - 1], b = L('bombs')[i];
+    if (b.dmg < a.dmg || b.r < a.r || b.cd > a.cd || b.fuse > a.fuse) bomOk = false;
+  }
+  ok(bomOk, 'weapons.bombs: dmg↑ r↑ cd↓ fuse↓');
+  let flaOk = true;
+  for (let i = 1; i < 5; i++) {
+    const a = L('flame')[i - 1], b = L('flame')[i];
+    if (b.tick < a.tick || b.dot < a.dot || b.range < a.range || b.fuel < a.fuel || b.recharge > a.recharge) flaOk = false;
+  }
+  ok(flaOk, 'weapons.flame: tick↑ dot↑ range↑ fuel↑ recharge↓');
 }
 
 // --- Passives / startWeapons / boss / spawner weights ---
@@ -212,19 +233,96 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 
 // --- Level-up card logic (pure) ---
 {
-  const cards = cardOffers({ wand: 1 }, {}, mulberry32(1));
+  const cards = cardOffers({ wand: 1 }, {}, {}, mulberry32(1));
   ok(cards.length === 3, 'cardOffers: 3 cards');
   ok(new Set(cards.map((c) => c.kind + ':' + c.key)).size === 3, 'cardOffers: distinct kind:key');
   ok(cards.every((c) => {
     const base = c.kind === 'weapon' ? (c.key === 'wand' ? 1 : 0) : 0;
     return c.level === base + 1;
   }), 'cardOffers: each card is a legal level+1 candidate');
-  const full = cardOffers({ wand: 1, garlic: 1, axe: 1, blades: 1 }, {}, mulberry32(3));
+  const full = cardOffers({ wand: 1, garlic: 1, axe: 1, blades: 1 }, {}, {}, mulberry32(3));
   ok(full.length === 3 && full.every((c) => !(c.kind === 'weapon' && c.level === 1)), 'cardOffers: maxWeapons → no new-weapon cards');
-  const maxed = cardOffers({ wand: 5, garlic: 5, axe: 5, blades: 5 }, { speed: 3, magnet: 3 }, mulberry32(2));
-  ok(maxed.length === 3 && maxed.map((c) => c.key).sort().join(',') === 'dmg,hp,regen', 'cardOffers: exhausted pool → remaining passives');
-  const single = cardOffers({ wand: 2, garlic: 5, axe: 5, blades: 5 }, { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3 }, mulberry32(4));
-  ok(single.length === 1 && single[0].kind === 'weapon' && single[0].key === 'wand' && single[0].level === 3, 'cardOffers: single-candidate pool');
+  // Phase 9: pool is exactly {hp, dmg, regen, blight, tempest} — 4 maxed weapons + 2 passives max.
+  // No weapon cards at all (ownedW=4=max) yet blight/tempest are offered → synergies do NOT
+  // count against maxWeapons.
+  const maxed = cardOffers({ wand: 5, garlic: 5, axe: 5, blades: 5 }, { speed: 3, magnet: 3 }, {}, mulberry32(2));
+  const legalKeys = new Set(['hp', 'dmg', 'regen', 'blight', 'tempest']);
+  ok(maxed.length === 3 && maxed.every((c) => c.kind === 'passive' || c.kind === 'synergy')
+    && maxed.every((c) => legalKeys.has(c.key)), 'cardOffers: exhausted pool → remaining passives + gated synergies only');
+  // Phase 9: deterministic 2-candidate pool. wand:5/axe:5 are the maxed dummies that push
+  // ownedW to maxWeapons without gating a third synergy (blight needs garlic, tempest needs
+  // blades); all passives maxed → the pool is exactly {inferno, phoenix} and the draw takes both.
+  const duo = cardOffers({ pistols: 5, flame: 5, wand: 5, axe: 5 }, { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3 }, {}, mulberry32(4));
+  ok(duo.length === 2 && duo.every((c) => c.kind === 'synergy')
+    && new Set(duo.map((c) => c.key)).size === 2
+    && duo.every((c) => c.key === 'inferno' || c.key === 'phoenix'), 'cardOffers: 2-candidate pool {inferno, phoenix}');
+}
+
+// --- Phase 9: synergy table shape + gating ---
+{
+  for (const [k, S] of Object.entries(CFG.synergies)) {
+    ok(S.levels.length === 1 && S.requires.length >= 2
+      && S.requires.every((r) => CFG.weapons[r] || CFG.passives[r]), `synergies.${k}: single level, valid requires`);
+  }
+  ok(!cardOffers({ wand: 4, garlic: 5 }, {}, {}, mulberry32(7)).some((c) => c.key === 'blight'),
+    'synergy gating: absent below max (wand 4/5)');
+  const allW = {};
+  for (const k of Object.keys(CFG.weapons)) allW[k] = 5;
+  const allP = {};
+  for (const k of Object.keys(CFG.passives)) allP[k] = CFG.passives[k].max;
+  const syn = cardOffers(allW, allP, {}, mulberry32(9));
+  ok(syn.length === 3 && syn.every((c) => c.kind === 'synergy') && new Set(syn.map((c) => c.key)).size === 3,
+    'synergy gating: all-max pool → only the 5 synergies remain (3 drawn)');
+  const allOwned = {};
+  for (const k of Object.keys(CFG.synergies)) allOwned[k] = 1;
+  ok(cardOffers(allW, allP, allOwned, mulberry32(9)).length === 0,
+    'cardOffers: all owned → empty pool (first-class case)');
+}
+
+// --- Phase 10.2: exact-effect card text (pure, player.js) ---
+{
+  ok(cardEffectText('weapon', 'wand', 1) === '1 bolt · every 0.60 s · 12 dmg · no pierce',
+    'cardEffectText: wand L1 = full stat line');
+  ok(cardEffectText('weapon', 'wand', 2) === 'rate 0.60→0.50 s · dmg 12→16 · pierce 0→1',
+    'cardEffectText: wand L2 = changed-field deltas only (count 1→1 skipped)');
+  ok(cardEffectText('passive', 'hp', 1) === '+25 max HP + heal 25 now → total +25 max HP',
+    'cardEffectText: hp passive L1 increment + total');
+  ok(cardEffectText('passive', 'speed', 2) === '+10% movement speed → total +20%',
+    'cardEffectText: speed passive L2 float-safe pct (0.1×2 → 20%)');
+  ok(cardEffectText('synergy', 'blight', 1) === 'Moonbolts apply Blight — 14 dmg/s for 3.0 s',
+    'cardEffectText: blight synergy states numbers');
+  ok(cardEffectText('meta', 'maxHp', 1) === '+20 max HP → total +20 max HP',
+    'cardEffectText: maxHp meta L1');
+  ok(cardEffectText('meta', 'dash', 1) === '−8% dash cooldown → total −8%',
+    'cardEffectText: dash meta uses U+2212 minus');
+  ok(cardEffectText('nope', 'x', 1) === '', 'cardEffectText: unknown kind → empty');
+  // Coverage: every (kind, key, level) a pick/buy can grant must produce non-empty text
+  // (crash classes = missing key/template). `level` = the level the pick/buy grants.
+  for (const key of Object.keys(CFG.weapons))
+    for (let L = 1; L <= CFG.weapons[key].levels.length; L++)
+      ok(cardEffectText('weapon', key, L).length > 0, `cardEffectText coverage: weapon ${key} L${L}`);
+  for (const key of Object.keys(CFG.passives))
+    for (let L = 1; L <= CFG.passives[key].max; L++)
+      ok(cardEffectText('passive', key, L).length > 0, `cardEffectText coverage: passive ${key} L${L}`);
+  for (const key of Object.keys(CFG.synergies))
+    ok(cardEffectText('synergy', key, 1).length > 0, `cardEffectText coverage: synergy ${key}`);
+  for (const key of Object.keys(CFG.meta.upgrades))
+    for (let L = 1; L <= CFG.meta.upgrades[key].max; L++)
+      ok(cardEffectText('meta', key, L).length > 0, `cardEffectText coverage: meta ${key} L${L}`);
+}
+
+// --- Phase 9: meta progression (pure) ---
+{
+  const m0 = loadMeta('no-such-key');
+  ok(m0.shards === 0 && Object.values(m0.upgrades).every((v) => v === 0), 'loadMeta: defaults without storage');
+  ok(shardsFor({ score: 800, victory: true }) === 27, 'shardsFor: 800 score + victory → 27');
+  ok(shardsFor({ score: 399, victory: false }) === 0, 'shardsFor: 399 score, no victory → 0');
+  ok(upgradeCost('maxHp', 0) === 20, 'upgradeCost: maxHp L0 → 20');
+  ok(upgradeCost('maxHp', 5) === null, 'upgradeCost: maxed → null');
+  const p = { passives: {} };
+  applyMeta(p, { shards: 0, upgrades: { maxHp: 1, dmg: 0, speed: 0, xp: 0, dash: 0 } });
+  recomputeStats(p);
+  ok(p.maxHp === 120, 'applyMeta + recomputeStats: maxHp L1 → maxHp 120');
 }
 
 // --- applyCard (pure) ---

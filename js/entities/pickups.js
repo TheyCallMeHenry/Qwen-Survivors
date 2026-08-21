@@ -86,14 +86,14 @@ export class Pickups {
   }
 
   // World transform must be active. Bobbing pickup float.
-  draw(ctx, t) {
+  draw(ctx, t, x0, y0, x1, y1) {
     for (const g of this.gems) {
-      if (!g.on) continue;
+      if (!g.on || g.x < x0 || g.x > x1 || g.y < y0 || g.y > y1) continue;
       const bob = Math.sin(t * 3 + g.ph) * 3;
       if (this.gemImg) ctx.drawImage(this.gemImg, g.x - 12, g.y - 13 + bob);
     }
     for (const h of this.hearts) {
-      if (!h.on) continue;
+      if (!h.on || h.x < x0 || h.x > x1 || h.y < y0 || h.y > y1) continue;
       const bob = Math.sin(t * 2.6 + h.ph) * 3;
       if (this.heartImg) ctx.drawImage(this.heartImg, h.x - 11, h.y - 10 + bob);
     }

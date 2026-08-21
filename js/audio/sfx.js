@@ -14,6 +14,7 @@ const A = CFG.audio;
 const GAPS = {
   dash: 0.25, kill: 0.04, hurt: 0.2, death: 0, chime: 0.4,
   card: 0.15, banner: 0.6, runstart: 0.5, gameover: 0.5,
+  pistol: 0.07, boom: 0.12, fire: 0.09,
 };
 
 export function initSfx(game) {
@@ -139,6 +140,17 @@ export function initSfx(game) {
         burst(graph.sfx, t, 0.02, 0.4, 0.8, 'lowpass', 200, 0, 0.7);
       }
     },
+    pistol(t) {
+      burst(graph.sfx, t, 0.003, 0.3, 0.05, 'highpass', 3000, 0, 1);
+      tone(graph.sfx, 'square', 880, t, 0.002, 0.08, 0.05);
+    },
+    boom(t) {
+      burst(graph.sfx, t, 0.01, 0.5, 0.35, 'lowpass', 500, 90, 0.8);
+      tone(graph.sfx, 'sine', 90, t, 0.008, 0.4, 0.4, 40);
+    },
+    fire(t) { // flame whoosh — fires ~60×/s while the geyser is up; GAPS throttles
+      burst(graph.sfx, t, 0.03, 0.14, 0.08, 'bandpass', 900, 400, 1.4);
+    },
   };
 
   const last = Object.create(null);
@@ -161,6 +173,9 @@ export function initSfx(game) {
     bus.on('banner', () => play('banner')),
     bus.on('runstart', () => play('runstart')),
     bus.on('gameover', (s) => play('gameover', s)),
+    bus.on('pistol', () => play('pistol')),
+    bus.on('boom', () => play('boom')),
+    bus.on('fire', () => play('fire')),
     bus.on('mute', () => setMuted(readMuted())),
   );
 

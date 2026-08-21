@@ -31,8 +31,9 @@
     <div id="hud-right">
       <div id="minimap-frame"><canvas id="minimap" width="264" height="202"></canvas></div>
       <div id="hud-buttons">
+        <button id="btn-dash-hud" class="hud-btn" aria-label="Dash"><svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg></button>
         <button id="btn-pause" class="hud-btn" aria-label="Pause">II</button>
-        <button id="btn-mute" class="hud-btn" aria-label="Mute">SND</button>
+        <button id="btn-mute" class="hud-btn" aria-label="Mute"><svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3z"/><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path class="wave" d="M15 9a4.24 4.24 0 0 1 0 6"/><path class="wave" d="M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="wave" d="M20.5 4.5a10.5 10.5 0 0 1 0 15"/></g><path class="slash" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M4.5 3.5l16 16"/></svg></button>
       </div>
     </div>
   </div>
@@ -52,6 +53,7 @@
       <p class="subtitle">Survive the Evernight Wood</p>
       <div class="menu-buttons">
         <button id="btn-start" class="btn btn-primary">Start Game</button>
+        <button id="btn-upgrades" class="btn">Upgrades</button>
         <button id="btn-scores" class="btn">High Scores</button>
         <button id="btn-quit" class="btn">Quit</button>
       </div>
@@ -70,6 +72,18 @@
       <div class="menu-buttons menu-row">
         <button id="btn-clear-scores" class="btn btn-small">Clear</button>
         <button id="btn-scores-back" class="btn btn-primary">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- UPGRADES (persistent meta progression) -->
+  <div id="screen-upgrades" class="screen hidden">
+    <div class="panel-box">
+      <h2 class="screen-title">Soulshards</h2>
+      <div id="meta-shards">0</div>
+      <div id="meta-list"></div>
+      <div class="menu-buttons menu-row">
+        <button id="btn-upgrades-back" class="btn btn-primary">Back</button>
       </div>
     </div>
   </div>

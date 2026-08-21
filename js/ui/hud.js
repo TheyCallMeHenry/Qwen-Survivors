@@ -18,6 +18,7 @@ export function initHud(game) {
   const btnPause = $('btn-pause');
   const btnMute = $('btn-mute');
   const btnDash = $('btn-dash');
+  const btnDashHud = $('btn-dash-hud');
   const input = game.input;
 
   const setTxt = (el, s) => { if (el.textContent !== s) el.textContent = s; };
@@ -26,9 +27,14 @@ export function initHud(game) {
   btnPause.addEventListener('click', () => game.pause());
   btnMute.addEventListener('click', () => input.queueMute());
   btnDash.addEventListener('pointerdown', (e) => { e.preventDefault(); input.queueDash(); });
+  btnDashHud.addEventListener('pointerdown', (e) => { e.preventDefault(); input.queueDash(); });
 
   const muted = () => { try { return localStorage.getItem(CFG.scores.muteKey) === '1'; } catch { return false; } };
-  const syncMute = () => btnMute.classList.toggle('muted', muted());
+  const syncMute = () => {
+    const m = muted();
+    btnMute.classList.toggle('muted', m);
+    btnMute.setAttribute('aria-label', m ? 'Unmute' : 'Mute');
+  };
   syncMute();
   game.bus.on('mute', () => {
     try { localStorage.setItem(CFG.scores.muteKey, muted() ? '0' : '1'); } catch { /* private mode */ }
@@ -53,7 +59,7 @@ export function initHud(game) {
     setTxt(timer, fmtTime(CFG.run.time - game.t));
     setTxt(score, String(game.liveScore()));
     const cd = String(clamp(p.dashCd / CFG.player.dashCd, 0, 1));
-    if (cd !== cdStr) { cdStr = cd; btnDash.style.setProperty('--cd', cd); }
+    if (cd !== cdStr) { cdStr = cd; btnDash.style.setProperty('--cd', cd); btnDashHud.style.setProperty('--cd', cd); }
   };
   update();
   return { update };

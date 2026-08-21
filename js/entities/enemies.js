@@ -14,6 +14,8 @@ export class Enemies {
     this.grid = new HashGrid(CFG.ai.gridCell);
     this.defs = null;      // buildCharacters() output (browser)
     this.orbImg = null;
+    this.burnImg = null;
+    this.blightImg = null;
     this.shadows = new Map(); // shadowR -> shadow canvas (lazy, browser)
   }
 
@@ -43,6 +45,7 @@ export class Enemies {
       flash: 0, animT: rand(0, 3), phase: rand(0, TAU),
       state: 'chase', stateT: 0, cd: rand(1, 2.5),
       flip: false, frame: 0, dead: false,
+      burnT: 0, burnDps: 0, blightT: 0, blightDps: 0,
     };
     if (e.boss) e.cd = CFG.ai.wraithWindup * 2; // first charge comes sooner
     this.list.push(e);
@@ -58,12 +61,17 @@ export class Enemies {
   update(dt, player, world, combat) {
     this.grid.clear();
     for (const e of this.list) if (!e.dead) this.grid.add(e.x, e.y, e);
-    for (const e of this.list) this._ai(e, dt, player, world, combat);
+    for (const e of this.list) if (!e.dead) this._ai(e, dt, player, world, combat);
     this._orbs(dt, player, combat);
     if (this.list.some((e) => e.dead)) {
-      this.list = this.list.filter((e) => !e.dead);
-      this.grid.clear();
-      for (const e of this.list) this.grid.add(e.x, e.y, e);
+      // In-place compaction: the grid above already holds exactly the alive
+      // (dead were skipped on add), so no grid rebuild is needed here.
+      let w = 0;
+      for (let i = 0; i < this.list.length; i++) {
+        const e = this.list[i];
+        if (!e.dead) this.list[w++] = e;
+      }
+      this.list.length = w;
     }
   }
 
@@ -193,10 +201,10 @@ export class Enemies {
     }
   }
 
-  drawShadows(ctx) {
+  drawShadows(ctx, x0, y0, x1, y1) {
     if (!this.defs) return;
     for (const e of this.list) {
-      if (e.dead) continue;
+      if (e.dead || e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) continue;
       const r = this.defs[e.type].shadowR;
       const s = this.shadow(r);
       ctx.drawImage(s, e.x - r, e.y - r * 0.5, r * 2, r);
@@ -211,6 +219,21 @@ export class Enemies {
     if (e.flip) ctx.scale(-1, 1);
     ctx.drawImage(img, -def.w / 2, -def.h);
     ctx.restore();
+    // status effects: flickering flame (burn) / green wisp (blight) over the foe
+    if (e.burnT > 0 && this.burnImg) {
+      const s = 16 * (1 + 0.12 * Math.sin(t * 26 + e.phase * 4));
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(this.burnImg, e.x - s / 2, e.y - def.h - 6 - s / 2, s, s);
+      ctx.restore();
+    }
+    if (e.blightT > 0 && this.blightImg) {
+      const s = 12 * (1 + 0.12 * Math.sin(t * 18 + e.phase * 3));
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.drawImage(this.blightImg, e.x + 7 - s / 2, e.y - def.h - 6 - s / 2, s, s);
+      ctx.restore();
+    }
     if (e.hp < e.maxHp) {
       const w = e.boss ? 46 : 22, h = e.boss ? 5 : 3;
       const f = Math.max(0, e.hp / e.maxHp);

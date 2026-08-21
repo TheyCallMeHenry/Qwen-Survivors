@@ -36,6 +36,7 @@ js/utils/bus.js       — tiny event emitter (UI ↔ game decoupling)
 js/utils/grid.js      — uniform spatial hash (pure/Node-safe; World collider grid + enemy queries)
 js/core/loop.js       — fixed-step update (60 Hz) + variable render, timescale, hit-stop
 js/core/input.js      — keyboard + pointer/touch → unified axes, dash, pause, floating joystick
+js/core/meta.js       — persistent Soulshards + between-run upgrades (pure/Node-safe, localStorage `qsurv.meta.v1`)
 js/core/game.js       — state machine (MENU/PLAYING/LEVELUP/PAUSED/DYING/GAMEOVER), scoring, run setup
 js/art/base.js        — offscreen canvas helpers, gradient/shade/shadow/glow primitives
 js/art/sky.js         — sky gradient, stars, moon, cloud sprites, distant ridge silhouettes
@@ -49,14 +50,14 @@ js/systems/camera.js  — smoothed follow, look-ahead, trauma shake
 js/systems/lighting.js— darkness canvas w/ punched light holes + additive glow pass
 js/entities/player.js — movement physics, dash/i-frames, weapon logic, damage
 js/entities/enemies.js— enemy types, AI (chase/separate/steer), cultist shots, boss
-js/entities/spawner.js— time-based wave scaling (pure functions, unit-tested)
+js/entities/spawner.js— time-based wave scaling + spawn placement just outside the view edge (pure functions, unit-tested)
 js/entities/combat.js — projectiles, garlic aura, orbiters, damage/knockback/kill pipeline
 js/entities/pickups.js— gem/heart pools, magnet, collection
 js/entities/particles.js — pooled particles (sparks, souls, snow, embers, trails, texts)
-js/ui/hud.js          — HP/XP bars, timer, score, minimap frame, mute/pause buttons
+js/ui/hud.js          — HP/XP bars, timer, score, minimap frame, mute/pause buttons, dash ready/cooldown indicator (all environments)
 js/ui/screens.js      — menu, high scores, pause, level-up cards, game over, banners
 js/audio/sfx.js       — Web Audio synthesized SFX (lazy AudioContext, panning, distance)
-js/audio/music.js     — procedural music loop + wind ambience + ambient wolf howls
+js/audio/music.js     — procedural eldritch music loop (seamless, indefinite) + wind ambience + ambient wolf howls
 tools/serve.mjs       — zero-dependency Node static server (obscure port, 0.0.0.0)
 tools/check.mjs       — imports every js module in Node (syntax + top-level validation)
 tools/test-logic.mjs  — Node assertions for pure logic (RNG, spawner curves, XP curve, grid)
@@ -80,10 +81,12 @@ tools/test-boot.mjs   — Node boot + full-run simulation (stubbed DOM w/ browse
 
 ### 3.4 Combat model
 
-- **Weapons (pick/upgrade via level-up cards):** Moonbolt Wand (auto-fire bolts at nearest enemy), Wraith Garlic (aura tick), Spectral Axe (boomerang arc), Aegis Blades (orbiters). Each 5 levels with explicit stat tables in `config.js`.
+- **Weapons (pick/upgrade via level-up cards, 5 levels each):** Moonbolt Wand (auto-fire bolts at nearest enemy), Wraith Garlic (aura tick), Spectral Axe (boomerang arc), Aegis Blades (orbiters), Twin Fangs (twin pistols — each shot fires 2 rounds at the 2 nearest enemies), Sunder Bombs (cartoon bombs — lob arc, fuse pause, AOE; fuse shortens per level), Pyre Lance (flamethrower — flow-y flame-sprite trail, tick + burn DoT, limited fuel + lengthy recharge). Explicit stat tables in `config.js`.
 - **Passives:** speed, max-HP, damage %, pickup magnet, regen (max levels in config).
-- **Enemies:** Rat, Bat (flying, sine weave), Goblin, Wolf, Brute, Cultist (ranged orb), Wraith Boss (4:00). Time-scaled spawn interval/count/cap/type weights (pure functions in `spawner.js`).
-- **Economy:** kill → XP gems (+heart chance); gem magnet radius; level curve linear; level-up pauses game and offers 3 cards (keyboard 1-3 / tap).
+- **Synergies (fused cards):** single-level cards offered only when every `requires` entry (weapon or passive) is at max level — Blight Hex (wand+garlic), Tempest Blades (axe+blades), Inferno Rounds (pistols+flame), Napalm Detonation (bombs+flame), Phoenix Heart (hp+regen passives). Stored in `player.synergies` — does NOT count toward `maxWeapons`.
+- **Meta progression (between runs):** persistent Soulshards (`floor(score/400)` + victory bonus) spent in the Upgrades screen on 5 upgrade tracks (max HP / damage / speed / XP / dash cooldown × 5 levels), localStorage `qsurv.meta.v1` (module `js/core/meta.js`).
+- **Enemies:** Rat, Bat (flying, sine weave), Goblin, Wolf, Brute, Cultist (ranged orb), Wraith Boss (4:00). Time-scaled spawn interval/count/cap/type weights (pure functions in `spawner.js`). Spawn placement: just outside the current view edge (small pad — Phase 10 tuning).
+- **Economy:** kill → XP gems (+heart chance); gem magnet radius; level curve linear; level-up pauses game and offers 3 cards (keyboard 1-3 / tap); **every card's text states the EXACT effect of selecting it** (per-level deltas, audited against the stat tables — Phase 10); **auto-skips when the card pool is empty** (no softlock — Phase 10).
 - **Victory:** survive 5:00 → "DAWN BREAKS" bonus. **Defeat:** HP 0 → slow-mo death → game over + high scores.
 
 ### 3.5 Collision
@@ -92,11 +95,11 @@ Uniform-grid spatial hash (`js/utils/grid.js` HashGrid; cell 96 px) over enemies
 
 ### 3.6 Audio (all synthesized)
 
-Lazy `AudioContext` (created/resumed on first user gesture — required for mobile). Buses: SFX / music / ambience → compressor → master. SFX = osc + filtered noise + envelope recipes per event, distance-attenuated, stereo-panned by world X. Music = 92 BPM D-minor: sub-bass pattern, detuned-saw pads through slow LFO lowpass, sparse delay-fed plucks; scheduler with 0.12 s lookahead. Ambience = looped wind (filtered noise + LFO) + scheduled ambient wolf howls (vibrato saw + breath noise, panned).
+Lazy `AudioContext` (created/resumed on first user gesture — required for mobile). Buses: SFX / music / ambience → compressor → master. SFX = osc + filtered noise + envelope recipes per event (incl. EXP-gem pickup — Phase 10), distance-attenuated, stereo-panned by world X. Music = **spooky/eldritch procedural loop** (Phase 10 remake of the original 92 BPM D-minor loop): slow drone foundation, dissonant color, sparse pulse; seamless infinite loop via 0.12 s lookahead scheduler. Ambience = looped wind (filtered noise + LFO) + scheduled ambient wolf howls (vibrato saw + breath noise, panned).
 
-### 3.7 High scores
+### 3.7 High scores & persistence
 
-`localStorage` key `qsurv.hiscores.v1` — top 10 `{score, time, kills, level, date}`. Mute in `qsurv.mute`.
+`localStorage` key `qsurv.hiscores.v1` — top 10 `{score, time, kills, level, date}`. Mute in `qsurv.mute`. Meta progression in `qsurv.meta.v1` — `{shards, upgrades}` (Soulshards + between-run upgrade levels).
 
 ## 4. Phases & Tasks
 
@@ -162,6 +165,7 @@ Lazy `AudioContext` (created/resumed on first user gesture — required for mobi
 | Module MIME on serve | Custom server with explicit MIME map (`text/javascript` for .js) |
 | Sandbox → user browser reachability | Bind 0.0.0.0, expose LAN IP URL; obscure port 47893 |
 | Scope creep / drift | Phases above; PROGRESS.md enforced; config centralizes tuning |
+| Multi-hit framerate drop (upgraded weapons striking swarms simultaneously — user-reported) | 10.4 profile-first root-cause pass + 10.9 game-wide optimization pass (worst-case load, culling/pooling/allocation audit) |
 | Unverified visuals (no browser in sandbox) | Node import checks + logic tests + curl MIME checks; user playtest pass listed in PROGRESS.md |
 
 ## 6. Definition of Done

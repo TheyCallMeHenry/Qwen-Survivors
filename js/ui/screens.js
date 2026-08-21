@@ -7,6 +7,8 @@
 
 import { CFG } from '../config.js';
 import { fmtTime } from '../utils/math.js';
+import { upgradeCost } from '../core/meta.js';
+import { cardEffectText } from '../entities/player.js';
 
 // --- pure (Node-tested) ---
 
@@ -43,6 +45,7 @@ export function initScreens(game, { icons }) {
     levelup: $('screen-levelup'),
     gameover: $('screen-gameover'),
     quit: $('screen-quit'),
+    upgrades: $('screen-upgrades'),
   };
   const banner = $('banner');
   const hurtFlash = $('hurt-flash');
@@ -51,10 +54,12 @@ export function initScreens(game, { icons }) {
   const goTitle = $('go-title');
   const goNewRecord = $('go-newrecord');
   const goStats = $('go-stats');
+  const metaShards = $('meta-shards');
+  const metaList = $('meta-list');
   const { storageKey, max } = CFG.scores;
 
   let cur = '';
-  let overlay = null; // 'scores' | 'quit' | null — local overlays above the menu
+  let overlay = null; // 'scores' | 'quit' | 'upgrades' | null — local overlays above the menu
   let hurtTimer = null;
 
   const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
@@ -88,26 +93,35 @@ export function initScreens(game, { icons }) {
   game.bus.on('cards', (cards) => {
     cardsEl.innerHTML = '';
     cards.forEach((c, i) => {
-      const def = c.kind === 'weapon' ? CFG.weapons[c.key] : CFG.passives[c.key];
-      const isNew = c.kind === 'weapon' && !game.player.weapons[c.key];
+      const def = c.kind === 'weapon' ? CFG.weapons[c.key]
+        : c.kind === 'synergy' ? CFG.synergies[c.key]
+        : CFG.passives[c.key];
+      const isNew = c.kind === 'synergy' || (c.kind === 'weapon' && !game.player.weapons[c.key]);
       const card = document.createElement('div');
       card.className = isNew ? 'card new' : 'card';
       card.setAttribute('role', 'listitem');
       card.tabIndex = 0;
       const badge = document.createElement('span');
       badge.className = 'card-badge';
-      badge.textContent = 'NEW';
+      badge.textContent = c.kind === 'synergy' ? 'FUSED' : 'NEW';
       const cv = document.createElement('canvas');
       cv.width = 72; cv.height = 72;
       cv.getContext('2d').drawImage(icons[def.icon], 0, 0);
       const h = document.createElement('h3');
-      h.textContent = c.kind === 'weapon' ? `${def.name} · Lv ${c.level}` : `${def.name} · Lv ${c.level}/${def.max}`;
+      h.textContent = c.kind === 'synergy' ? def.name
+        : c.kind === 'weapon' ? `${def.name} · Lv ${c.level}`
+        : `${def.name} · Lv ${c.level}/${def.max}`;
+      // exact effect of selecting this card is MANDATORY (user rule); flavour desc stays only as secondary
+      const pe = document.createElement('p');
+      pe.className = 'card-effect';
+      pe.textContent = cardEffectText(c.kind, c.key, c.level);
       const p = document.createElement('p');
+      p.className = 'card-desc';
       p.textContent = def.desc;
       const k = document.createElement('span');
       k.className = 'card-key';
       k.textContent = String(i + 1);
-      card.append(badge, cv, h, p, k);
+      card.append(badge, cv, h, pe, p, k);
       const pick = () => game.pickCard(i);
       card.addEventListener('click', pick);
       card.addEventListener('keydown', (e) => {
@@ -137,7 +151,53 @@ export function initScreens(game, { icons }) {
     row('Time', fmtTime(stats.time));
     row('Kills', String(stats.kills));
     row('Level', String(stats.level));
+    row('Soulshards', '+' + (stats.shards || 0));
   });
+
+  // --- upgrades (meta progression) screen ---
+  function renderUpgrades() {
+    metaShards.textContent = String(game.meta.shards);
+    metaList.innerHTML = '';
+    for (const key of Object.keys(CFG.meta.upgrades)) {
+      const def = CFG.meta.upgrades[key];
+      const level = game.meta.upgrades[key] || 0;
+      const cost = upgradeCost(key, level);
+      const rowEl = document.createElement('div');
+      rowEl.className = 'meta-row';
+      const cv = document.createElement('canvas');
+      cv.width = 72; cv.height = 72;
+      cv.getContext('2d').drawImage(icons[def.icon], 0, 0);
+      const info = document.createElement('div');
+      info.className = 'meta-info';
+      const h = document.createElement('h3'); h.textContent = def.name;
+      const p = document.createElement('p'); p.className = 'meta-desc'; p.textContent = def.desc;
+      const pe = document.createElement('p'); pe.className = 'meta-effect';
+      pe.textContent = cardEffectText('meta', key, level >= def.max ? def.max : level + 1);
+      const line = document.createElement('div');
+      line.className = 'meta-line';
+      const pips = document.createElement('div');
+      pips.className = 'pips';
+      for (let i = 0; i < def.max; i++) {
+        const d = document.createElement('span');
+        d.className = i < level ? 'pip on' : 'pip';
+        pips.append(d);
+      }
+      const costEl = document.createElement('span');
+      costEl.className = 'meta-cost';
+      costEl.textContent = cost === null ? 'MAX' : cost + ' ◆';
+      line.append(pips, costEl);
+      info.append(h, p, pe, line);
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-small';
+      btn.textContent = 'Buy';
+      btn._upgKey = key;
+      btn.disabled = cost === null || game.meta.shards < cost;
+      btn.addEventListener('click', () => { game.buyMeta(key); renderUpgrades(); });
+      rowEl.append(cv, info, btn);
+      metaList.append(rowEl);
+    }
+  }
+  game.bus.on('meta', () => { if (overlay === 'upgrades') renderUpgrades(); });
 
   // --- high scores screen ---
   function renderScores() {
@@ -174,6 +234,8 @@ export function initScreens(game, { icons }) {
   }
   on('btn-start', () => game.startRun());
   on('btn-scores', () => { renderScores(); overlay = 'scores'; });
+  on('btn-upgrades', () => { renderUpgrades(); overlay = 'upgrades'; });
+  on('btn-upgrades-back', () => { overlay = null; });
   on('btn-quit', attemptClose);
   on('btn-clear-scores', () => { saveScores(storageKey, [], max); renderScores(); });
   on('btn-scores-back', () => { overlay = null; });
