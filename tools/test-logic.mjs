@@ -80,17 +80,21 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     for (let i = 0; i < 3000; i++) seen.add(pickType(250, rng));
     ok(seen.size === 6, 'pickType(t=250): all six types appear');
   }
+  ok(CFG.spawner.spawnPad > 0 && CFG.spawner.spawnPad <= 15, 'spawnPad: (0..15] px band just outside view');
+  ok(CFG.spawner.spawnFallback >= 20 && CFG.spawner.spawnFallback <= 40, 'spawnFallback: 20..40 px');
   {
     const rng = mulberry32(3);
     const W = CFG.world.w, H = CFG.world.h, m = CFG.world.margin;
+    const vw = 1280, vh = 720, pad = CFG.spawner.spawnPad;
     let bad = false;
     for (let i = 0; i < 500; i++) {
-      const p = spawnPoint(W, H, m, W / 2, H / 2, 1280, 720, rng);
+      const p = spawnPoint(W, H, m, W / 2, H / 2, vw, vh, rng);
       const inBounds = p.x >= m && p.x <= W - m && p.y >= m && p.y <= H - m;
-      const offCam = Math.abs(p.x - W / 2) > 1280 / 2 + 60 || Math.abs(p.y - H / 2) > 720 / 2 + 60;
-      if (!inBounds || !offCam) bad = true;
+      const offCam = Math.abs(p.x - W / 2) > vw / 2 || Math.abs(p.y - H / 2) > vh / 2;
+      const nearCam = Math.abs(p.x - W / 2) <= vw / 2 + pad && Math.abs(p.y - H / 2) <= vh / 2 + pad;
+      if (!inBounds || !offCam || !nearCam) bad = true;
     }
-    ok(!bad, 'spawnPoint: in-bounds and off-camera');
+    ok(!bad, 'spawnPoint: in-bounds, off-camera, within pad of view edge');
   }
 }
 

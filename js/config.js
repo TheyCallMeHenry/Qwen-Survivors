@@ -218,6 +218,9 @@ export const CFG = {
 
   spawner: {
     firstSpawn: 1.2,
+    // spawn placement: band just outside the view edge (px) + fallback offset when the band is out of world (px)
+    spawnPad: 15,
+    spawnFallback: 30,
     // alive enemy cap over time
     aliveCap: (t) => Math.min(200, 60 + Math.floor(t / 12)),
     // seconds between spawn events

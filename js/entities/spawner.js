@@ -21,15 +21,24 @@ export function pickType(t, rng) {
   return null;
 }
 
-// Spawn point: inside world margin m, outside the current view (center px,py, size vw×vh).
+// Spawn point: inside world margin m, in a thin band just outside the current view
+// (center px,py, size vw×vh) so the enemy walks in almost immediately. Falls back to
+// a clamped point beyond a view edge when the band sits outside the world.
 export function spawnPoint(W, H, m, px, py, vw, vh, rng) {
-  const pad = 60;
+  const pad = CFG.spawner.spawnPad;
+  const hw = vw / 2, hh = vh / 2;
   for (let i = 0; i < 8; i++) {
-    const x = m + rng() * (W - 2 * m);
-    const y = m + rng() * (H - 2 * m);
-    if (Math.abs(x - px) > vw / 2 + pad || Math.abs(y - py) > vh / 2 + pad) return { x, y };
+    const side = (rng() * 4) | 0;
+    const o = rng() * pad;
+    let x, y;
+    if (side === 0)      { x = px - hw - o; y = py + (rng() * 2 - 1) * hh; }
+    else if (side === 1) { x = px + hw + o; y = py + (rng() * 2 - 1) * hh; }
+    else if (side === 2) { x = px + (rng() * 2 - 1) * hw; y = py - hh - o; }
+    else                 { x = px + (rng() * 2 - 1) * hw; y = py + hh + o; }
+    if (x >= m && x <= W - m && y >= m && y <= H - m) return { x, y };
   }
-  const x = clamp(px + (rng() < 0.5 ? -1 : 1) * (vw / 2 + 140), m, W - m);
-  const y = clamp(py + (rng() < 0.5 ? -1 : 1) * (vh / 2 + 140), m, H - m);
+  const fb = CFG.spawner.spawnFallback;
+  const x = clamp(px + (rng() < 0.5 ? -1 : 1) * (hw + fb), m, W - m);
+  const y = clamp(py + (rng() < 0.5 ? -1 : 1) * (hh + fb), m, H - m);
   return { x, y };
 }

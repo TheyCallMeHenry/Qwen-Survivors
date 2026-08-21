@@ -47,6 +47,10 @@ export class Input {
   clearTransient() {
     this.keys = Object.create(null);
     this.sticks.clear();
+    this.dashEdge = false;
+    this.pauseEdge = false;
+    this.muteEdge = false;
+    this.cardEdges = [false, false, false];
     this.updateJoyUI();
   }
 

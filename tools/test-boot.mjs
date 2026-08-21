@@ -278,6 +278,10 @@ function steer() {
     assert(game.player.hp > heartHp, 'heart pickup did not heal');
   }
   if (run === 1) {
+    // keep-alive for the standing window (mirrors run 2's guard): tests the
+    // kill/level-up/heart/pause pipelines, not survival — death is forced
+    // below through the real damage pipeline with iframes explicitly cleared.
+    game.player.iframes = 1;
     if (!paused && game.t >= 8) {
       paused = true;
       byId['btn-pause'].click();
@@ -514,8 +518,11 @@ pump(90);
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start click did not start the run');
 
-// run 1: stand still → kills + level-up cards → force death through the real
-// damage pipeline (balance-independent) → DYING slow-mo → GAMEOVER
+// run 1: stand still (keep-alive iframes in steer) → kills + level-up cards +
+// heart/pause one-shots → force death through the real damage pipeline
+// (balance-independent) → DYING slow-mo → GAMEOVER. Keep-alive is what makes
+// this window seed- and balance-independent since the 10.5 spawn band: the
+// swarm reaches the player from ~t=2 s, so survival is no longer a given.
 run = 1;
 pump(20 * 60);
 assert(game.kills > 0, 'run 1: player never landed a kill (auto-weapons not firing?)');
@@ -563,8 +570,13 @@ synActive = synDone = false; synRetries = 0;
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start click did not start run 2');
 assert(game.player.maxHp === 120, 'meta maxHp upgrade not applied at run start (100 + 20 expected)');
-pump(6 * 60 * 60);
-assert(game.state === 'GAMEOVER' && game.victory, `run 2: expected victory, got state=${game.state} t=${game.t.toFixed(1)}s`);
+// Pump UNTIL victory (capped), not a fixed frame count: with the 10.5 spawn
+// band the keep-alive player farms XP near-continuously → back-to-back LEVELUP
+// states freeze the clock, and the victory check (after the level-up return in
+// _playingUpdate) only runs on no-XP frames — a fixed pump can stall just
+// short of t=300. The cap is a livelock guard, not an expectation.
+assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
+  `run 2: expected victory, got state=${game.state} t=${game.t.toFixed(1)}s`);
 assert(game.bossSpawned, 'wraith boss never spawned');
 assert(dashBtnDone && dashBtnAsserted, 'touch dash button never triggered a dash');
 
