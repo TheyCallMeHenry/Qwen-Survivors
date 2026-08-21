@@ -1,0 +1,4 @@
+# Detached dev-server logs (tools/serve.mjs) — runtime artifacts, not source
+# (see docs/PROGRESS.md "Environment & Known Caveats")
+server.log
+server-err.log

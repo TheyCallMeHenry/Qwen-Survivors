@@ -1,0 +1,12 @@
+{
+  "name": "qwen-survivors",
+  "version": "1.0.0",
+  "description": "Vampire-Survivors-style game, 100% procedural HTML/CSS/JS",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "check": "node tools/check.mjs",
+    "test": "node tools/test-logic.mjs",
+    "serve": "node tools/serve.mjs"
+  }
+}

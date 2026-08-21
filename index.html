@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1026">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="description" content="QWEN SURVIVORS — a 100% procedurally generated survival game.">
+  <title>QWEN SURVIVORS</title>
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+  <canvas id="game" aria-label="Qwen Survivors game area"></canvas>
+
+  <div id="hurt-flash" aria-hidden="true"></div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden" aria-hidden="true">
+    <div id="hud-left">
+      <div class="bar hp-bar"><div class="bar-fill" id="hp-fill"></div><span class="bar-label" id="hp-label"></span></div>
+      <div id="hud-row">
+        <div id="lvl-badge">LV 1</div>
+        <div class="bar xp-bar"><div class="bar-fill" id="xp-fill"></div></div>
+      </div>
+    </div>
+    <div id="hud-top">
+      <div id="timer">5:00</div>
+      <div id="score">0</div>
+    </div>
+    <div id="hud-right">
+      <div id="minimap-frame"><canvas id="minimap" width="264" height="202"></canvas></div>
+      <div id="hud-buttons">
+        <button id="btn-pause" class="hud-btn" aria-label="Pause">II</button>
+        <button id="btn-mute" class="hud-btn" aria-label="Mute">SND</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Touch UI -->
+  <div id="touch-ui" aria-hidden="true">
+    <div id="joy-base"><div id="joy-knob"></div></div>
+    <button id="btn-dash" aria-label="Dash">DASH</button>
+  </div>
+
+  <div id="banner" aria-live="polite"></div>
+
+  <!-- MENU -->
+  <div id="screen-menu" class="screen">
+    <div class="menu-box">
+      <h1 class="title">QWEN<br>SURVIVORS</h1>
+      <p class="subtitle">Survive the Evernight Wood</p>
+      <div class="menu-buttons">
+        <button id="btn-start" class="btn btn-primary">Start Game</button>
+        <button id="btn-scores" class="btn">High Scores</button>
+        <button id="btn-quit" class="btn">Quit</button>
+      </div>
+      <div class="controls-hint">
+        <div class="hint-row kbd-only"><b>Move</b> WASD / arrows / click-drag &nbsp;·&nbsp; <b>Dash</b> Shift / Space / right-click &nbsp;·&nbsp; <b>Pause</b> Esc &nbsp;·&nbsp; <b>Mute</b> M</div>
+        <div class="hint-row touch-only"><b>Move</b> touch &amp; drag &nbsp;·&nbsp; <b>Dash</b> bottom-right button &nbsp;·&nbsp; <b>Pause</b> top-right</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HIGH SCORES -->
+  <div id="screen-scores" class="screen hidden">
+    <div class="panel-box">
+      <h2 class="screen-title">High Scores</h2>
+      <ol id="scores-list"></ol>
+      <div class="menu-buttons menu-row">
+        <button id="btn-clear-scores" class="btn btn-small">Clear</button>
+        <button id="btn-scores-back" class="btn btn-primary">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAUSE -->
+  <div id="screen-pause" class="screen hidden">
+    <div class="panel-box">
+      <h2 class="screen-title">Paused</h2>
+      <div class="menu-buttons">
+        <button id="btn-resume" class="btn btn-primary">Resume</button>
+        <button id="btn-restart" class="btn">Restart</button>
+        <button id="btn-menu" class="btn">Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEVEL UP -->
+  <div id="screen-levelup" class="screen hidden">
+    <div class="levelup-title">LEVEL UP</div>
+    <div id="cards" class="cards" role="list" aria-label="Choose an upgrade"></div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="screen-gameover" class="screen hidden">
+    <div class="panel-box go-box">
+      <h2 class="screen-title" id="go-title">You Died</h2>
+      <div id="go-newrecord" class="new-record hidden">★ NEW HIGH SCORE ★</div>
+      <dl id="go-stats"></dl>
+      <div class="menu-buttons">
+        <button id="btn-retry" class="btn btn-primary">Play Again</button>
+        <button id="btn-go-menu" class="btn">Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUIT NOTICE (fallback if window.close() is blocked) -->
+  <div id="screen-quit" class="screen hidden">
+    <div class="panel-box">
+      <h2 class="screen-title">Quit</h2>
+      <p class="dim">This window can now be closed.</p>
+      <button id="btn-quit-ack" class="btn">OK</button>
+    </div>
+  </div>
+
+  <noscript><div style="color:#fff;text-align:center;padding-top:40vh">QWEN SURVIVORS requires JavaScript.</div></noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
