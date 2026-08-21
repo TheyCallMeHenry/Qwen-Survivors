@@ -8,7 +8,8 @@ import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../js/
 import { cardOffers, applyCard, recomputeStats, cardEffectText } from '../js/entities/player.js';
 import { loadMeta, shardsFor, upgradeCost, applyMeta } from '../js/core/meta.js';
 import { rankScore } from '../js/ui/screens.js';
-import { MUSIC } from '../js/audio/music.js';
+import { MUSIC, initMusic } from '../js/audio/music.js';
+import { makeBus } from '../js/utils/bus.js';
 
 let pass = 0;
 const fails = [];
@@ -375,21 +376,80 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(r4.rank === 1 && r4.list[0].score === 5 && !r4.isRecord, 'rankScore: low score ranks below existing');
 }
 
-// --- Music data (Phase 5) ---
+// --- Music data (10.6 eldritch track) ---
 {
   const M = MUSIC;
   ok(M.bars === 4 && M.stepsPerBar === 8, 'MUSIC: 4 bars x 8 eighth-steps');
-  let shapeOk = true, freqOk = true, padOk = true;
-  for (let b = 0; b < M.bars; b++) {
-    if (M.bass[b].length !== 8 || M.pluck[b].length !== 8) shapeOk = false;
-    if (M.pad[b].length !== 3) padOk = false;
-    for (const row of [M.bass[b], M.pluck[b]]) for (const f of row) if (f !== null && !(f > 30 && f < 1000)) freqOk = false;
-    for (const f of M.pad[b]) if (!(f > 60 && f < 500)) padOk = false;
+  ok(M.sub.length === 4 && M.sub.every((f) => f > 20 && f < 50), 'MUSIC: 4 sub roots in (20,50) Hz');
+  ok(M.drone.length === 4 && M.drone.every((row) => row.length === 3 && row.every((f) => f > 60 && f < 500)),
+    'MUSIC: drone rows are 3 tones in (60,500)');
+  ok(M.pulse.length === 4 && M.pulse.every((row) => row.length === 8), 'MUSIC: pulse rows are 8 slots');
+  ok(M.color.length === 4 && M.color.every((row) => row.length === 8), 'MUSIC: color rows are 8 slots');
+  // Every pitched note comes from the D-dim7 set {D, F, Ab, B} — the tritone / minor-2nd
+  // dissonance is structural, not decorative.
+  const DIM7 = new Set([36.71, 43.65, 87.31, 103.83, 123.47, 146.83, 233.08, 246.94, 293.66, 349.23]);
+  const dim7 = [...M.sub, ...M.drone.flat(), ...M.color.flat().filter((f) => f !== null)];
+  ok(dim7.every((f) => DIM7.has(f)), 'MUSIC: sub/drone/color notes all in the D-dim7 set');
+  ok(M.pulse.flat().filter((f) => f !== null).every((f) => f > 20 && f < 60), 'MUSIC: heartbeat thumps are low (20,60)');
+  const slots = (row) => row.filter((f) => f !== null).length;
+  ok([2, 0, 2, 1].every((n, b) => slots(M.pulse[b]) === n), 'MUSIC: heartbeat is sparse (per bar: 2, 0, 2, 1)');
+  ok(M.color.every((row) => slots(row) === 1), 'MUSIC: exactly one lone color tone per bar');
+}
+
+// Scheduler seam test: pump a fake AudioContext clock for 12 full loops across
+// the loop boundary — the lookahead must wrap cleanly (exact BAR lattice, no
+// gap/double/drift) and every voice count must land exactly. No-op params mean
+// oscs are classified by (type, assigned frequency, stop-start duration): howls,
+// wind LFOs (no stop) and the heartbeat's scheduled pitch are all excluded.
+{
+  const M = MUSIC;
+  const BAR = (60 / CFG.audio.bpm) * 4;
+  const param = () => {
+    const p = { value: 0 };
+    for (const m of ['setValueAtTime', 'linearRampToValueAtTime', 'exponentialRampToValueAtTime', 'cancelScheduledValues', 'setTargetAtTime']) p[m] = () => {};
+    return p;
+  };
+  const fake = {
+    currentTime: 0.5,
+    sampleRate: 44100,
+    oscs: [],
+    createGain: () => ({ gain: param(), connect() {} }),
+    createOscillator: () => {
+      const o = { type: 'sine', frequency: param(), detune: { value: 0 }, t0: null, t1: null, connect() {},
+        start(t) { o.t0 = t; }, stop(t) { o.t1 = t; } };
+      fake.oscs.push(o);
+      return o;
+    },
+    createDelay: () => ({ delayTime: param(), connect() {} }),
+    createBiquadFilter: () => ({ type: 'lowpass', frequency: param(), Q: { value: 0 }, connect() {} }),
+    createBuffer: (ch, len) => ({ length: len, getChannelData: () => new Float32Array(len) }),
+    createBufferSource: () => ({ buffer: null, loop: false, connect() {}, start() {}, stop() {} }),
+  };
+  const dummy = { connect() {} };
+  const bus = makeBus();
+  const music = initMusic({ bus }, { ctx: () => fake, gain: () => dummy });
+  bus.emit('runstart');
+  while (fake.currentTime < 0.5 + 48 * BAR + 0.2) { // 12 loops + margin past the seam
+    fake.currentTime += 0.01;
+    music.update();
   }
-  ok(shapeOk, 'MUSIC: bass/pluck rows are 8 slots');
-  ok(freqOk, 'MUSIC: bass/pluck freqs null or (30,1000)');
-  ok(padOk, 'MUSIC: pads are 3 tones in (60,500)');
-  ok(M.bass[3][0] < M.bass[0][0] && M.bass[3][4] < M.bass[0][4], 'MUSIC: bar 4 (V) sits below bar 1 (i) — tension before resolve');
+  const started = fake.oscs.filter((o) => o.t0 !== null && o.t1 !== null)
+    .map((o) => ({ type: o.type, f0: o.frequency.value, t0: o.t0, t1: o.t1 }));
+  const subs = started
+    .filter((o) => o.type === 'sine' && o.f0 > 25 && o.f0 < 50 && near(o.t1 - o.t0, BAR, 1e-6))
+    .sort((a, b) => a.t0 - b.t0);
+  ok(subs.length === 49, `MUSIC pump: ${subs.length} sub starts (want 49 — 48 bars + 1 past the seam)`);
+  let lattice = subs.length > 0;
+  for (let i = 1; i < subs.length; i++) if (!near(subs[i].t0 - subs[i - 1].t0, BAR, 1e-6)) lattice = false;
+  ok(lattice, 'MUSIC pump: exact BAR lattice across 12 loop seams — no gap, no double, no drift');
+  const pulses = started.filter((o) => o.type === 'sine' && o.f0 >= 25 && o.f0 < 60 && o.t1 - o.t0 < 1 && o.t0 < 0.5 + 48 * BAR);
+  ok(pulses.length === 60, `MUSIC pump: ${pulses.length} heartbeat thumps (want 60 — 5 x 12 loops)`);
+  const colors = started.filter((o) => o.type === 'sine' && o.f0 > 150);
+  ok(colors.length === 96, `MUSIC pump: ${colors.length} color oscs (want 96 — 2 tones x 48 bars)`);
+  const drones = started.filter((o) => o.type === 'sawtooth' && o.f0 > 60 && o.f0 < 500 && near(o.t1 - o.t0, BAR + 0.4, 1e-6));
+  ok(drones.length === 294, `MUSIC pump: ${drones.length} drone oscs (want 294 — 6 x 49 bar starts)`);
+  const lfos = started.filter((o) => o.type === 'sine' && near(o.f0, CFG.audio.droneLfoHz) && near(o.t1 - o.t0, BAR + 0.4, 1e-6));
+  ok(lfos.length === 49, `MUSIC pump: ${lfos.length} drone LFOs (want 49)`);
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

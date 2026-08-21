@@ -240,12 +240,16 @@ export const CFG = {
 
   audio: {
     musicVol: 0.20, sfxVol: 0.5, ambVol: 0.30,
-    // Phase 5 — synth tuning (music/ambience)
-    bpm: 92,
+    // 10.6 — eldritch track tuning (66 BPM, D-dim7 {D, F, Ab, B})
+    bpm: 66,
     schedAhead: 0.12, // scheduler lookahead (s)
     subGain: 0.5,
-    padTone: 0.09, padCutoff: 780, padLfoHz: 0.05, padLfoDepth: 260,
-    pluckGain: 0.22, pluckSend: 0.6, pluckDelay: 0.33, pluckFb: 0.35,
+    droneGain: 0.08, droneCutoff: 340, droneLfoHz: 0.05, droneLfoDepth: 120,
+    pulseGain: 0.6,
+    colorGain: 0.12, colorSend: 0.5,
+    delayTime: 0.34, delayFb: 0.38,
+    texGain: 0.05, texCutoff: 240, texLfoHz: 0.03, texLfoDepth: 120,
+    // ambience (unchanged since Phase 5)
     windGain: 0.45, windLfoHz: 0.045, windCutoff: 420,
     howlEvery: [18, 40], // s between ambient wolf howls
     howlGain: 0.5,

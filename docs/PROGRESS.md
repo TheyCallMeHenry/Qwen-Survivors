@@ -5,11 +5,11 @@
 
 ## Status — 2026-08-21
 
-- **Active: Phase 10** (post-playtest polish/optimization) — 10.1–10.5 DONE; next **10.6 music remake**; then 10.7→10.8 in order; **10.9 optimization pass LAST**. **Phase 11 — multiplayer/co-op** spec'd 2026-08-21 + Q1–Q7 answered, docs only, queued after Phase 10; open: **11.13 web-play research** (binding protocol + 100%-free, PLAN §3.8). **Phase 12 — flame tune + 3 new weapons / 4 new synergies** spec'd 2026-08-21, queued after Phase 11.
-- **Gates (all three green before any tick):** `node tools/check.mjs` **29/29** · `node tools/test-logic.mjs` **209/209** · `node tools/test-boot.mjs` **`PASS boot-sim`**.
+- **Active: Phase 10** (post-playtest polish/optimization) — 10.1–10.6 DONE; next **10.7 all-cards-owned softlock**; then 10.8; **10.9 optimization pass LAST**. **Phase 11 — multiplayer/co-op** spec'd 2026-08-21 + Q1–Q7 answered, docs only, queued after Phase 10; open: **11.13 web-play research** (binding protocol + 100%-free, PLAN §3.8). **Phase 12 — flame tune + 3 new weapons / 4 new synergies** spec'd 2026-08-21, queued after Phase 11.
+- **Gates (all three green before any tick):** `node tools/check.mjs` **29/29** · `node tools/test-logic.mjs` **219/219** · `node tools/test-boot.mjs` **`PASS boot-sim`**.
 - **Overall:** Phases 0–9 done (published); after Phase 10 → **Phase 11 multiplayer** → **Phase 12 weapons** → **2.9 user browser sign-off** (re-verify post-co-op) → project DONE. Blocking: none.
 - **Published:** public repo `TheyCallMeHenry/Qwen-Survivors` (initial commit `03eeac2` + `667364f` Phase 8 docs) · Pages **https://theycallmehenry.github.io/Qwen-Survivors/** (the share link; repo must stay public — flip back: `gh repo edit --visibility private`).
-- **Git:** tree clean — Phase 9 + 10.1–10.4 committed + pushed 2026-08-21 (since `667364f`); Pages auto-deploys from main within a few minutes. Commit only if the user asks (AGENTS rule 7).
+- **Git:** `af6cd5d` pushed (Phase 9 + 10.1–10.5, since `667364f`); **10.6 implemented + gates green, UNCOMMITTED** (rule 7 — commit only on user ask). Pages auto-deploys from main within a few minutes.
 - **Server:** detached node on **47893** (log `server.log`; dies on reboot). Check before starting another: `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:47893/` → 200 = already up.
 
 ## Master Checklist
@@ -104,7 +104,7 @@
 - [x] 10.3 `#btn-mute` speaker icon — 2026-08-21 inline SVG, slash off-state, aria-label
 - [x] 10.4 Multi-hit perf — 2026-08-21 viewport culling + in-place compaction (drawOne −29%); bench + section timers permanent in test-boot
 - [x] 10.5 Spawn points nearer view edge — 2026-08-21 band placement just outside the view edge (`spawnPad` 15 px / fallback 30 px, config) + input `clearTransient` now clears dash/pause/mute/card edges (stale edge auto-started a run from menu) + harness keep-alive iframes + pump-until-victory
-- [ ] 10.6 Music remake (eldritch, seamless indefinite loop)
+- [x] 10.6 Music remake (eldritch, seamless indefinite loop) — 2026-08-21 66 BPM D-dim7 loop: sub-root crawl + detuned-saw drone + sparse heartbeat + lone beat-pair color tones over dark delay + run-gated noise texture (tuning in `CFG.audio`); seam proven in Node (12-loop fake-clock pump: exact BAR lattice + exact voice counts)
 - [ ] 10.7 All-cards-owned softlock → auto-skip empty LEVELUP
 - [ ] 10.8 Gem pickup SFX
 - [ ] 10.9 Game-wide optimization pass (LAST)
@@ -140,9 +140,7 @@ Roster: 7 → **10 weapons**, 5 → **9 synergies**. All Phase 11 co-op rules (w
 
 ## Resume Notes — Phase 10 (start here)
 
-Order: 10.6 → 10.8 in listed order (each: implement → all three gates green → tick with date + one-liner); **10.9 runs LAST** so it measures the final state. Facts re-verified against code 2026-08-21 (gates green; 92 BPM D-minor track still in music.js; no `gem` sfx recipe; no empty-pool guard in game.js).
-
-**10.6 Music remake** — new spooky/eldritch procedural TRACK in `audio/music.js`. Keep: 0.12 s lookahead scheduler, exported Node-testable `MUSIC` data, music bus, `runstart`/`pause`/`gameover` gating, wind + howl ambience (user asked for the music, not the ambience). Design targets: ~60–75 BPM drone foundation (low sub + detuned lows), dissonant color (minor-2nd / tritone / dim-7), sparse heartbeat pulse, filtered-noise texture — NOT the old bright pluck lead. **Loop must be seamless and indefinite:** verify in Node by pumping fake `currentTime` for many bars across the loop boundary (lookahead must wrap cleanly) — not by ear. Update test-logic MUSIC checks; gains/timings → `CFG.audio`.
+Order: 10.7 → 10.8 in listed order (each: implement → all three gates green → tick with date + one-liner); **10.9 runs LAST** so it measures the final state. Facts re-verified against code 2026-08-21 (gates green; no `gem` sfx recipe; no empty-pool guard in game.js).
 
 **10.7 Empty-pool softlock** — guard BOTH sites in `core/game.js`: `_startLevelUp()` and the `pickCard` mid-queue re-draw — compute offers FIRST; if empty, do NOT enter LEVELUP (level still granted silently; stay PLAYING; optional one-time banner). test-logic: `cardOffers` CAN return `[]` (all owned) — now a first-class case. test-boot E2E: force all weapons max + passives max + synergies owned, feed XP, assert state returns to / stays PLAYING — **including multi-queued** (`levelupQueue > 1`, pool going empty mid-queue). Gate the boot-sim's generic LEVELUP auto-pick (the `synActive` flag pattern) or it steals the E2E click.
 
@@ -211,6 +209,7 @@ Order: 10.6 → 10.8 in listed order (each: implement → all three gates green 
 
 ## Session Log (one line per session, newest first)
 
+- **2026-08-21 — 10.6 music remake:** 66 BPM eldritch track in D-dim7 {D, F, Ab, B} (sub-root crawl + detuned-saw drone layer + sparse heartbeat + one lone beat-pair color tone per bar over a dark delay + run-gated filtered-noise texture; wind/howl ambience unchanged, all tuning in `CFG.audio`); seamless-seam proof in test-logic: fake-`AudioContext` clock pumped 12 loops + margin — exact BAR lattice (no gap/double/drift) + exact per-voice counts (213→219 checks; old MUSIC data checks replaced).
 - **2026-08-21 — 10.5 spawn distance:** `spawnPoint` → thin band just outside the view edge (4 sides, `spawnPad` 15 px / 8 retries / clamped fallback `spawnFallback` 30 px — all config); root-caused the boot-sim go-menu flake: input edge (dash/card) set on the last PLAYING frame survived `_gameOver`/`toMenu` (both call `clearTransient`, which only cleared keys+sticks) → `_menuUpdate` auto-started a run; fix: `clearTransient` now clears all four edge channels (also correct on blur/tab-switch); harness: run-1 keep-alive iframes (mirrors run-2) + run-2 `pumpUntil` victory (clock freezes in LEVELUP — fixed pumps break); boot-sim 17/17 consecutive PASS.
 - **2026-08-21 — Phase 11/12 spec refinement 4 (docs only, no code):** base `maxWeapons` **4→5** (solo runs now get 5 standard weapon slots) → co-op cap table **1P=5, 2P=4, 3P=3, 4P=2**, so a 4P player can still own 1 weapon pair → paired synergy achievable (synergies never count toward the cap); decision 42 revised; 11.5 updated incl. test-logic expectations 4→5.
 - **2026-08-21 — Phase 11/12 spec refinement 3 (docs only, no code):** synergies → **5 levels** like standard weapons (supersedes D19 single-level; stay in pool until own max; per-level effect scaling) + pair-specific gating confirmed (offer pool opens the moment the synergy's own 2 sources max — NOT all weapons) + co-op equip cap **4−(N−1)** per player with synergies excluded (base `maxWeapons=4` verified in code) + slow/shock stacks **5 s per-stack TTL** (playtest-tunable); decisions 40–43; PLAN §3.4/§3.8 + README updated.
@@ -250,6 +249,6 @@ Order: 10.6 → 10.8 in listed order (each: implement → all three gates green 
 ## How to Resume a Session
 
 1. Read `AGENTS.md`, then this file: Status → Resume Notes (active work). Architecture: `docs/PLAN.md` §3–§4. The code is the API record — read the module before changing it.
-2. **Active: Phase 10 → resume at 10.6** (in order; 10.9 last). After Phase 10 is green + ticked → **Phase 11 multiplayer** (spec complete; 11.13 web-play research follows the binding protocol in PLAN §3.8) → **Phase 12 weapons** (flame tune + 3 new weapons + 4 new synergies) → **2.9** user browser sign-off (re-verify post-co-op) → tick 2.9 → project DONE. New scope → add to the Master Checklist first.
-3. Validate with **all three gates** before any tick: `node tools/check.mjs` (baseline 29 modules) · `node tools/test-logic.mjs` (baseline 209 checks) · `node tools/test-boot.mjs` (baseline `PASS boot-sim`; flow: menu → run 1 death → meta/Upgrades buy → run 2 via `btn-start` (maxHp 120) → all 7 weapons + burn DoT + dash i-frames + synergy blight E2E → boss 4:00 → victory 5:00 → menu; `DEBUG_BOOT=1` → `[10.4-sec]` timers).
+2. **Active: Phase 10 → resume at 10.7** (in order; 10.9 last). After Phase 10 is green + ticked → **Phase 11 multiplayer** (spec complete; 11.13 web-play research follows the binding protocol in PLAN §3.8) → **Phase 12 weapons** (flame tune + 3 new weapons + 4 new synergies) → **2.9** user browser sign-off (re-verify post-co-op) → tick 2.9 → project DONE. New scope → add to the Master Checklist first.
+3. Validate with **all three gates** before any tick: `node tools/check.mjs` (baseline 29 modules) · `node tools/test-logic.mjs` (baseline 219 checks) · `node tools/test-boot.mjs` (baseline `PASS boot-sim`; flow: menu → run 1 death → meta/Upgrades buy → run 2 via `btn-start` (maxHp 120) → all 7 weapons + burn DoT + dash i-frames + synergy blight E2E → boss 4:00 → victory 5:00 → menu; `DEBUG_BOOT=1` → `[10.4-sec]` timers).
 4. On every completion: tick + date + one-liner in the Master Checklist, update Status + this Session Log line — *before* declaring done.
