@@ -183,6 +183,7 @@ const loop = new Loop({
   },
 });
 game = new Game({ input, loop, ctx, mctx, characters, items });
+game.bus.on('gem', () => gemEvents++); // 10.8 — gem pickup SFX event counter
 const hud = initHud(game);
 const screens = initScreens(game, { icons });
 
@@ -211,6 +212,7 @@ let paused = false;
 let muted = false;
 let keyPickDone = false;
 let heartDone = false, heartAsserted = false, heartHp = 0, heartAt = 0;
+let gemDone = false, gemAsserted = false, gemT0 = 0, gemEvents = 0; // 10.8 gem pickup SFX
 let wandOffDone = false, wandOffAsserted = false, wandOffAt = 0, wandOffKills = 0, wandLv = 1;
 let stickDone = false, stickUp = false, stickT = 0, stickX0 = 0;
 let dashBtnDone = false, dashBtnAsserted = false;
@@ -218,6 +220,7 @@ let sawBullets = false, sawBombs = false, sawFlames = false;
 let burnDone = false, burnAsserted = false, burnEnemy = null, burnKills = 0, burnAt = 0;
 let dashIFrameStep = 0, dashIFrameHp0 = 0; // 0 = not started, 1 = in flight, 2 = done
 let synActive = false, synDone = false, synRetries = 0;
+let e107A = false, e107ADone = false, e107B = false, e107BDone = false; // 10.7 empty-pool guard E2E
 let benchPhase = 0, benchStartT = 0; // 10.4 one-shot worst-case bench: 0=off · 1=measuring · 2=done
 let bench = null;
 
@@ -248,10 +251,16 @@ function steer() {
       if (game.player.synergies.blight && game.state === 'PLAYING') {
         synDone = true;
         synActive = false;
-        // E2E done — stop leveling: further level-ups would auto-pick the other
-        // synergies until the pool is empty (softlock guard is Phase 10.7).
+        // E2E done — stop leveling (keeps the pump from cycling through the
+        // leftover synergy draws).
         game.player.gainXp = () => 0;
       }
+      return;
+    }
+    if (e107B) {
+      // 10.7 (B) drives this pick: take the lone offer; the re-draw then hits
+      // the empty pool (pickCard guard) → silently back to PLAYING.
+      cards[0].click();
       return;
     }
     const missing = ['axe', 'garlic', 'blades', 'pistols', 'bombs', 'flame'].filter((k) => !game.player.weapons[k]);
@@ -272,6 +281,16 @@ function steer() {
     heartHp = game.player.hp = Math.min(game.player.hp, 20);
     heartAt = game.t;
     game.pickups.heart(game.player.x, game.player.y);
+  }
+  // 10.8 — a forced gem collect must fire the pickup SFX bus event
+  if (run === 1 && !gemDone && st === 'PLAYING' && game.t >= 2) {
+    gemDone = true;
+    gemT0 = game.t;
+    game.pickups.gem(game.player.x, game.player.y, 10);
+  }
+  if (gemDone && !gemAsserted && game.t >= gemT0 + 0.08) {
+    gemAsserted = true;
+    assert(gemEvents > 0, 'gem pickup did not emit the gem bus event');
   }
   if (run === 1 && heartDone && !heartAsserted && st === 'PLAYING' && game.t >= heartAt + 0.08) {
     heartAsserted = true;
@@ -464,6 +483,25 @@ function steer() {
         );
       }
     }
+    // 10.7 — empty-pool softlock guard E2E (the bench left the roster all-max):
+    // (A) queue=2 with an empty pool must never enter LEVELUP — the levels are
+    // granted silently; (B) queue=2 with a one-card pool ({phoenix}) — the
+    // pick's re-draw hits the empty pool and is silently absorbed.
+    if (benchPhase === 2 && st === 'PLAYING' && game.t >= 215 && !e107ADone && !e107B) {
+      if (!e107A) {
+        e107A = true;
+        game.levelupQueue = 2;
+      } else if (game.levelupQueue === 0) {
+        e107ADone = true;
+        delete p.synergies.phoenix; // pool = exactly {phoenix}
+        e107B = true;
+        game.levelupQueue = 2;
+      }
+    }
+    if (benchPhase === 2 && st === 'PLAYING' && e107B && game.levelupQueue === 0 && p.synergies.phoenix === 1) {
+      e107B = false;
+      e107BDone = true;
+    }
   }
   if (process.env.DEBUG_BOOT) {
     const p = game.player;
@@ -618,6 +656,8 @@ assert(sawBullets && sawBombs && sawFlames, 'new-weapon projectiles (bullets/bom
 assert(burnDone && burnAsserted, 'burn DoT kill path never exercised');
 assert(dashIFrameStep === 2, 'dash i-frame E2E never completed');
 assert(synDone, 'synergy E2E (blight) never completed');
+assert(e107ADone && e107BDone, '10.7 empty-pool guard E2E never completed');
+assert(gemDone && gemAsserted, 'gem pickup SFX event never exercised');
 assert(benchPhase === 2, '10.4 worst-case bench never completed');
 assert(stickDone && stickUp, 'touch stick path never exercised');
 
@@ -625,6 +665,6 @@ console.log(
   `PASS boot-sim — runs=2 (death + victory) · level-ups=${levelUps} · max enemies alive=${maxEnemies} · ` +
   `meta: gameover shards saved → Upgrades buy → maxHp 120 at run start · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
-  `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · heart heal · ` +
+  `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
   `touch stick + dash button · HUD dash --cd driven (10.1) · scores save/render/clear · quit flow · loop alive throughout`,
 );

@@ -161,8 +161,13 @@ export class Game {
     this.bus.emit('card', card, i);
     if (this.levelupQueue > 0) {
       this.cards = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng);
-      this.bus.emit('cards', this.cards);
-    } else {
+      if (this.cards.length) {
+        this.bus.emit('cards', this.cards);
+      } else {
+        this.levelupQueue = 0; // pool exhausted mid-queue — grant the rest silently
+      }
+    }
+    if (this.levelupQueue === 0) {
       this.cards = null;
       this.state = 'PLAYING';
     }
@@ -249,6 +254,7 @@ export class Game {
     const got = this.pickups.update(dt, p);
     if (got.heal > 0) p.heal(got.heal);
     if (got.xp > 0) {
+      this.bus.emit('gem');
       this.levelupQueue += p.gainXp(got.xp);
       if (this.levelupQueue > 0) this.bus.emit('levelup');
     }
@@ -314,9 +320,11 @@ export class Game {
   }
 
   _startLevelUp() {
+    const offers = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng);
+    if (!offers.length) { this.levelupQueue = 0; return; } // every card owned — grant silently
     this.state = 'LEVELUP';
-    this.cards = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng);
-    this.bus.emit('cards', this.cards);
+    this.cards = offers;
+    this.bus.emit('cards', offers);
   }
 
   // Meta upgrades (Soulshards) — buy one level of `key`; no-op when maxed/unaffordable.
