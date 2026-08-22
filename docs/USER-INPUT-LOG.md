@@ -1,13 +1,13 @@
 # USER INPUT LOG
 
-> **RULE (binding — AGENTS.md non-negotiable 8 / D63):** Ask-first. When SUBSTANTIVE human-user input/feedback/responses arrive (directives; decisions/approvals incl. corrections/rejections; answers to agent questions; bug reports + corrections; playtest feedback; phase recommendations), the agent IMMEDIATELY — before ANY additional action — asks the user whether to immediately document it. **Yes** → an entry is added below, COMPLETELY AND ACCURATELY (the user's words, verbatim, unmodified), then the agent acts on the input. **No** → no entry, proceed. NEVER documented: trivial messages (e.g. “continue”), commonly-repeated template prompts (session kick-off / session closing-handoff prompts, “Stage, commit, push.”, “proceed”-family and similar), agent-side content (thinking/tool output).
+> **RULE (binding — AGENTS.md non-negotiable 8 / D63):** Capture-before-reason. Any non-denylisted human-user message → the FIRST tool call of the turn appends an entry below — no analysis/planning/research/implementation may precede the write; this log is the only durable copy of the user's words (measured: context recall degrades with token position/total length; compaction silently drops critical items). Denylist (never document): bare control words (unless answering a pending agent question), commonly-repeated template prompts, explicit user opt-out (“DO NOT DOCUMENT…”), agent-side content. When in doubt, document.
 >
 > **Entry format (newest first):**
 > - `### YYYY-MM-DD HH:MM TZ — short title`
-> - **Received:** date + time (time as received, else date only)
+> - **Received:** date + time (user-provided time if in the message, else date only)
 > - **Classification:** `bug report` | `feature request` | `design decision` | `answer/approval` | `feedback` | `process rule`
-> - **Context:** one line — what the input responds to / triggers
-> - **Verbatim input:** the user's substantive input/feedback/responses, their words, verbatim, unmodified (fenced block); conversational/meta lines omitted
+> - **Context:** one line (max ~20 words) — what the input responds to / triggers
+> - **Verbatim input:** the user's complete message, their words, verbatim, unmodified (fenced block) — no omissions, no meta-line trimming
 
 ---
 
