@@ -17,6 +17,7 @@ import { Player, cardOffers, applyCard, recomputeStats } from '../entities/playe
 import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta } from './meta.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../entities/spawner.js';
 import { getLevel } from '../world/levels.js';
+import { buildCharacters } from '../art/characters.js';
 import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
 import { buildMinimapBase, drawMinimapLive } from '../world/minimap.js';
@@ -107,6 +108,8 @@ export class Game {
     recomputeStats(this.player);
     this.player.hp = this.player.maxHp;
     this.enemies.reset();
+    this.enemies.setDefs(buildCharacters(this.levelKey)); // per-level skins (13.3)
+    this.enemies.diff = this.level.diff;                  // per-level stat tables (A4)
     this.combat.reset();
     this.pickups.reset();
     this.particles.reset();
@@ -293,12 +296,12 @@ export class Game {
   _spawns(dt) {
     const R = CFG.run;
     const L = this.level || getLevel('m01');
-    const B = L.boss || { key: 'wraith', at: R.bossAt };
+    const B = L.boss || { key: 'wraith', at: R.bossAt, name: 'THE WRAITH' };
     if (!this.bossSpawned && this.t >= B.at) {
       const pt = this._spawnPt();
       this.enemies.spawn(B.key, pt.x, pt.y);
       this.bossSpawned = true;
-      this.bus.emit('banner', { text: 'THE WRAITH AWAKENS' });
+      this.bus.emit('banner', { text: `${B.name} AWAKENS` });
     }
     if (this.t < CFG.spawner.firstSpawn) return;
     if (this.enemies.list.length >= aliveCap(this.t, L)) {
@@ -366,7 +369,7 @@ export class Game {
     this.loop.hitStop(e.boss ? CFG.combat.hitStopBoss : CFG.combat.hitStopKill);
     if (e.boss) {
       this.camera.addShake(0.8);
-      this.bus.emit('banner', { text: 'THE WRAITH FALLS' });
+      this.bus.emit('banner', { text: `${(this.level && this.level.boss && this.level.boss.name) || 'THE WRAITH'} FALLS` });
     }
     this.bus.emit('kill');
   }

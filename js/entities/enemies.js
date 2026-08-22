@@ -13,6 +13,7 @@ export class Enemies {
     this.orbs = [];
     this.grid = new HashGrid(CFG.ai.gridCell);
     this.defs = null;      // buildCharacters() output (browser)
+    this.diff = 1;         // per-level difficulty scalar (A4) — hp/dmg at spawn
     this.orbImg = null;
     this.burnImg = null;
     this.blightImg = null;
@@ -36,11 +37,12 @@ export class Enemies {
 
   spawn(type, x, y) {
     const s = CFG.enemies[type];
+    const hp = s.hp * this.diff, dmg = s.dmg * this.diff;
     const e = {
       type, x, y, vx: 0, vy: 0,
-      hp: s.hp, maxHp: s.hp, r: s.r,
+      hp, maxHp: hp, r: s.r,
       speed: rand(s.speed[0], s.speed[1]),
-      dmg: s.dmg, xp: s.xp, score: s.score,
+      dmg, xp: s.xp, score: s.score,
       boss: !!s.boss, fly: !!s.fly, weave: !!s.weave, ranged: !!s.ranged,
       flash: 0, animT: rand(0, 3), phase: rand(0, TAU),
       state: 'chase', stateT: 0, cd: rand(1, 2.5),

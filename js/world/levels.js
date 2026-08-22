@@ -1,6 +1,6 @@
 // Per-level definitions — Phase 13. Pure data + pure layout hooks; no canvas (Node-safe).
 // The m01 layout is the original Evernight Wood generator (moved verbatim — identical output).
-// m02/m03: layout + weights + roster stat tables land with the art stages (13.2/13.3, 13.4/13.5).
+// m03: layout + weights + roster land with 13.4/13.5 (m02 weights/boss landed 13.3).
 
 import { mulberry32, clamp, TAU } from '../utils/math.js';
 
@@ -25,7 +25,7 @@ export const LEVELS = {
       brute: t > 150 ? 2 : 0,
       cultist: t > 90 ? 2.5 : 0,
     }),
-    boss: { key: 'wraith', at: 240 },
+    boss: { key: 'wraith', at: 240, name: 'THE WRAITH' },
     layout: layoutM01,
   },
   m02: {
@@ -38,7 +38,16 @@ export const LEVELS = {
     audio: 'higan',
     unlock: { level: 'm01', wins: 3 },
     palette: { skyTop: '#241226', skyHorizon: '#e8909c', ground: '#1e2a19', mm: '#191016', light: '24,10,16' }, // dusk pink + full moon (A5)
-    weights: null, boss: null, layout: layoutM02, // weights/boss land 13.3; layout 13.2
+    weights: (t) => ({   // same role curve as m01 (slot re-skins, A1) — difficulty via diff (A4)
+      rat: 5,
+      bat: t > 30 ? 3 : 0.5,
+      goblin: t > 60 ? 4 : 0,
+      wolf: t > 120 ? 3 : 0,
+      brute: t > 150 ? 2 : 0,
+      cultist: t > 90 ? 2.5 : 0,
+    }),
+    boss: { key: 'ryu', at: 240, name: 'RYŪ' },
+    layout: layoutM02,
   },
   m03: {
     key: 'm03',

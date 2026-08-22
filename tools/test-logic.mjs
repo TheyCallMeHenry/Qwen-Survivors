@@ -6,6 +6,7 @@ import { generateWorld } from '../js/world/generate.js';
 import { LEVELS, LEVEL_ORDER, getLevel } from '../js/world/levels.js';
 import { HashGrid } from '../js/utils/grid.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../js/entities/spawner.js';
+import { Enemies } from '../js/entities/enemies.js';
 import { cardOffers, applyCard, recomputeStats, cardEffectText } from '../js/entities/player.js';
 import { loadMeta, shardsFor, upgradeCost, applyMeta } from '../js/core/meta.js';
 import { rankScore } from '../js/ui/screens.js';
@@ -231,7 +232,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(pasOk, 'passives: max/val positive');
   ok(CFG.player.startWeapons.every((k) => CFG.weapons[k]), 'startWeapons: keys exist in weapons');
   const bosses = Object.keys(CFG.enemies).filter((k) => CFG.enemies[k].boss);
-  ok(bosses.length === 1 && bosses[0] === 'wraith', 'enemies: exactly one boss (wraith)');
+  ok(bosses.length === 2 && bosses[0] === 'wraith' && bosses[1] === 'ryu', 'enemies: bosses wraith (m01) + ryu (m02)');
   const wk = Object.keys(getLevel('m01').weights(300));
   ok(wk.length > 0 && wk.every((k) => CFG.enemies[k]), 'm01 weights keys ⊆ enemies');
   ok(Object.values(CFG.enemies).every((e) => Number.isInteger(e.xp) && e.xp > 0), 'enemies.xp: positive integers');
@@ -465,7 +466,8 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(m3.unlock.level === 'm02' && m3.unlock.wins === 3, 'm03 unlock: 3x m02 victories');
   ok(m1.foreground === 'snow' && m2.foreground === 'petal' && m3.foreground === 'bubble', 'levels: foreground snow/petal/bubble');
   ok(typeof m1.layout === 'function' && m1.weights(1000).rat === 5 && m1.boss.key === 'wraith' && m1.boss.at === 240, 'm01: layout/weights/boss wired');
-  ok(typeof m2.layout === 'function' && m2.weights === null && m3.layout === null && m3.weights === null, 'm02 layout wired (13.2); m02 weights + m03 layout/weights land 13.3–13.5');
+  ok(typeof m2.layout === 'function' && typeof m2.weights === 'function' && m2.boss.key === 'ryu' && m2.boss.at === 240, 'm02: layout/weights/boss (Ryū) wired (13.2/13.3)');
+  ok(m3.layout === null && m3.weights === null, 'm03 layout/weights still null (land 13.4/13.5)');
   ok(generateWorld(20260820, 'm01').trees.length === 276 && generateWorld(20260820, 'm01').decor.length === 335 && generateWorld(20260820, 'm01').colliders.length === 328, 'm01 layout: golden counts (seed 20260820) — identical to pre-13.1');
   // 13.2 — m02 (Higan) layout
   const g = generateWorld(20260822, 'm02');
@@ -485,6 +487,45 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(g.well && g.ringShrine && inb(g.well) && inb(g.ringShrine), 'm02: well + ringShrine in bounds');
   ok(g.trees.length === 274 && g.decor.length === 324 && g.colliders.length === 331, 'm02 layout: golden counts (seed 20260822)');
   ok(aliveCap(120, m1) === 70 && aliveCap(120, m2) === 87.5 && batchSize(300, m2) === 8 && near(spawnInterval(100, m2), spawnInterval(100) / 1.25), 'spawner: per-level diff scales cap/batch/interval');
+}
+
+// 13.3 — m02 roster: per-level stat tables (A4) + m02 weights (slot re-skins, A1)
+{
+  const e1 = new Enemies();
+  const e2 = new Enemies();
+  const rat0 = e1.spawn('rat', 0, 0);
+  e2.diff = 1.25;
+  const rat2b = e2.spawn('rat', 0, 0);
+  ok(rat0.hp === 20 && rat0.dmg === 8, 'diff 1.0: stats unchanged (rat 20/8)');
+  ok(rat2b.hp === 25 && rat2b.dmg === 10, 'diff 1.25: rat hp/dmg ×1.25 (25/10)');
+  const brt2 = e2.spawn('brute', 0, 0);
+  ok(brt2.hp === 350 && brt2.dmg === 31.25, 'diff 1.25: brute slot (oni) 280→350 hp, 25→31.25 dmg');
+  const ryu = e2.spawn('ryu', 0, 0);
+  ok(ryu.boss && ryu.hp === 3000 && ryu.dmg === 35, 'Ryū boss ×1.25 (3000 hp / 35 dmg)');
+  ok(e1.spawn('ryu', 0, 0).hp === 2400, 'Ryū base stats = Wraith base (pre-diff)');
+  const m1 = getLevel('m01'), m2 = getLevel('m02');
+  ok(m1.boss.name === 'THE WRAITH' && m2.boss.name === 'RYŪ', 'boss banner names per level');
+  const w2 = Object.keys(m2.weights(300));
+  ok(w2.length === 6 && w2.every((k) => CFG.enemies[k]), 'm02 weights: 6 slot keys ⊆ enemies');
+  ok(JSON.stringify(m2.weights(120)) === JSON.stringify(m1.weights(120)), 'm02 weights = m01 role curve (re-skins, A1)');
+  let earlyOk = true;
+  {
+    const rng = mulberry32(7);
+    for (let i = 0; i < 400; i++) {
+      const t = pickType(5, rng, m2);
+      if (t !== 'rat' && t !== 'bat') earlyOk = false;
+    }
+  }
+  ok(earlyOk, 'm02 pickType(t=5): only tanuki/hō-ōi slots');
+  const seen = new Set();
+  {
+    const rng = mulberry32(8);
+    for (let i = 0; i < 3000; i++) {
+      const t = pickType(250, rng, m2);
+      if (t) seen.add(t);
+    }
+  }
+  ok(seen.size === 6, 'm02 pickType(t=250): all six slot skins appear');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

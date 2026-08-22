@@ -12,7 +12,9 @@
 // DoT kill → dash i-frame E2E → touch stick + dash button → synergy E2E:
 // all-max → blight card drawn + picked → wraith boss at 4:00 → victory at
 // 5:00) → btn-go-menu → scores overlay (render/clear/back) → quit flow
-// (window.close stub + fallback screen).
+// (window.close stub + fallback screen) → 13.2 M02 menu-backdrop E2E (m02 +
+// m01 regression) → 13.3 M02 real run 3 (Higan skins + ×1.25 stats + Ryū
+// boss banner/spawn → victory 5:00).
 // Catches first-frame/wired-up runtime crashes the pure-logic tests cannot
 // see, and drives paths the happy-path sim never hit: keyboard card picks,
 // non-start weapons, heart heal, meta buy + apply, new-weapon projectiles,
@@ -185,6 +187,8 @@ const loop = new Loop({
 });
 game = new Game({ input, loop, ctx, mctx, characters, items });
 game.bus.on('gem', () => gemEvents++); // 10.8 — gem pickup SFX event counter
+const m02Banners = []; // 13.3 — run-3 boss banners (name-driven, per-level)
+game.bus.on('banner', (b) => { if (run === 3) m02Banners.push(b.text); });
 const hud = initHud(game);
 const screens = initScreens(game, { icons });
 
@@ -224,6 +228,7 @@ let synActive = false, synDone = false, synRetries = 0;
 let e107A = false, e107ADone = false, e107B = false, e107BDone = false; // 10.7 empty-pool guard E2E
 let benchPhase = 0, benchStartT = 0; // 10.4 one-shot worst-case bench: 0=off · 1=measuring · 2=done
 let bench = null;
+let m02RunDone = false; // 13.3 — M02 real run one-shot
 
 function steer() {
   const st = game.state;
@@ -504,6 +509,12 @@ function steer() {
       e107BDone = true;
     }
   }
+  if (run === 3) {
+    // 13.3 — M02 run: keep-alive so the run reaches the Ryū (t=240) + victory (t=300)
+    const p = game.player;
+    p.iframes = 1;
+    if (p.hp < 50) p.hp = 50;
+  }
   if (process.env.DEBUG_BOOT) {
     const p = game.player;
     const prevHp = p.hp;
@@ -671,6 +682,32 @@ pump(300);
 assert(game.world.level.key === 'm01', 'm01 menu backdrop regression');
 assert(game.snow.kind === 'snow', 'm01 menu backdrop foreground is not snow');
 
+// 13.3 — M02 "Higan" REAL run (13.3): m02 weights + Higan slot skins +
+// ×1.25 stat tables + Ryū boss. btn-start → startRun() → last levelKey.
+run = 3;
+game.levelKey = 'm02';
+byId['btn-start'].click();
+assert(game.state === 'PLAYING', 'btn-start did not start the m02 run');
+assert(game.levelKey === 'm02' && game.level.diff === 1.25, 'm02 run did not take level m02 (diff 1.25)');
+assert(game.enemies.diff === 1.25, 'm02 run: enemies.diff not wired');
+for (const k of ['rat', 'bat', 'goblin', 'wolf', 'brute', 'cultist', 'ryu'])
+  assert(game.enemies.defs[k] && game.enemies.defs[k].frames.length > 0, `m02 run: sprite set missing slot "${k}"`);
+{
+  const sp = game.world.playerStart;
+  const sample = game.enemies.spawn('rat', sp.x, sp.y + 400);
+  assert(sample.hp === 25 && sample.dmg === 10, 'm02 run: spawned stats not ×1.25 (25/10 expected)');
+  sample.dead = true; // compacted on the next update; not a kill
+}
+assert(pumpUntil(() => game.bossSpawned, 20 * 60 * 60), `m02 run: Ryū never spawned (state=${game.state} t=${game.t.toFixed(1)}s)`);
+const ryuBoss = game.enemies.list.find((e) => e.boss);
+assert(ryuBoss && ryuBoss.type === 'ryu', 'm02 boss is not the Ryū');
+assert(ryuBoss.hp === 3000 && ryuBoss.dmg === 35, 'Ryū stats not ×1.25 (3000/35 expected)');
+assert(m02Banners.includes('RYŪ AWAKENS'), 'm02 boss banner did not name Ryū');
+assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
+  `m02 run: expected victory, got state=${game.state} t=${game.t.toFixed(1)}s`);
+assert(game.kills > 0, 'm02 run: no kills (m02 roster never spawned?)');
+m02RunDone = true;
+
 // self-verification: every one-shot path above must have actually fired
 assert(keyPickDone, 'keyboard card pick never exercised');
 assert(heartDone && heartAsserted, 'heart pickup path never exercised');
@@ -683,11 +720,12 @@ assert(e107ADone && e107BDone, '10.7 empty-pool guard E2E never completed');
 assert(gemDone && gemAsserted, 'gem pickup SFX event never exercised');
 assert(benchPhase === 2, '10.4 worst-case bench never completed');
 assert(stickDone && stickUp, 'touch stick path never exercised');
+assert(m02RunDone, 'm02 real run (13.3) never completed');
 
 console.log(
-  `PASS boot-sim — runs=2 (death + victory) · level-ups=${levelUps} · max enemies alive=${maxEnemies} · ` +
+  `PASS boot-sim — runs=3 (death + victory + m02) · level-ups=${levelUps} · max enemies alive=${maxEnemies} · ` +
   `meta: gameover shards saved → Upgrades buy → maxHp 120 at run start · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
   `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · scores save/render/clear · quit flow · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · scores save/render/clear · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · loop alive throughout`,
 );
