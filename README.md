@@ -8,14 +8,14 @@ Desktop:
 
 - **Move:** `WASD` / Arrow keys — or click-drag anywhere on the canvas (mouse joystick)
 - **Dash (i-frames):** `Shift` / `Space` / `K` / right-click
-- **Pause:** `Esc` / `P` · **Mute:** `M`
+- **Pause:** `Esc` / `P` · **Mute:** `M` (or Pause menu → **Settings**)
 - Level-up: `1`/`2`/`3` or click a card
 
 Mobile / touch:
 
 - **Move:** touch & drag anywhere on the screen (floating joystick appears where you touch)
 - **Dash:** big button, bottom-right
-- **Pause / mute:** top-right
+- **Pause:** top-right — **Settings** in the pause menu: view zoom + mute
 
 Survive the **Evernight Wood** for **5:00**. Auto-attack, grab XP gems, level up, dodge, and face the Wraith at 4:00. Two more arenas unlock over time — **Higan** (a traditional Japanese spring map) and **The Drowned City** (a 1.5×-area underwater Atlantis) — each arena is ~25% harder than the previous; choose your arena from the level select on the main menu (Phase 13).
 

@@ -8,7 +8,7 @@ import { HashGrid } from '../js/utils/grid.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../js/entities/spawner.js';
 import { Enemies } from '../js/entities/enemies.js';
 import { cardOffers, applyCard, recomputeStats, cardEffectText } from '../js/entities/player.js';
-import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins } from '../js/core/meta.js';
+import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom } from '../js/core/meta.js';
 import { rankScore } from '../js/ui/screens.js';
 import { MUSIC, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
@@ -610,6 +610,43 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   saveWins(CFG.meta.winsKey, w);
   const w2 = loadWins(CFG.meta.winsKey);
   ok(w2.m01 === 3 && w2.m02 === 3 && w2.m03 === 0, 'wins: localStorage round-trip');
+  delete globalThis.localStorage;
+}
+
+// 13.7 — level-select persistence: last-selected level (qsurv.level.v1)
+{
+  ok(loadSelectedLevel('no-such-key') === 'm01', 'loadSelectedLevel: defaults to m01 without storage');
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, v),
+    removeItem: (k) => store.delete(k),
+  };
+  saveSelectedLevel(CFG.meta.levelKey, 'm02');
+  ok(loadSelectedLevel(CFG.meta.levelKey) === 'm02', 'selected level: localStorage round-trip (m02)');
+  saveSelectedLevel(CFG.meta.levelKey, 'not-a-level');
+  ok(loadSelectedLevel(CFG.meta.levelKey) === 'm02', 'saveSelectedLevel: invalid level key ignored (keeps m02)');
+  ok(loadSelectedLevel('other-key') === 'm01', 'loadSelectedLevel: empty/absent key falls back to m01');
+  delete globalThis.localStorage;
+}
+
+// 13.8 — view zoom: device default + persisted 0.80/1.0 (qsurv.zoom.v1)
+{
+  ok(defaultZoom(true) === CFG.zoom.touch && defaultZoom(false) === CFG.zoom.full, 'defaultZoom: 0.80 touch / 1.0 desktop');
+  ok(loadZoom('no-such-key', true) === CFG.zoom.touch, 'loadZoom: touch default without storage');
+  ok(loadZoom('no-such-key', false) === CFG.zoom.full, 'loadZoom: desktop default without storage');
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, v),
+    removeItem: (k) => store.delete(k),
+  };
+  saveZoom(CFG.zoom.key, CFG.zoom.touch);
+  ok(loadZoom(CFG.zoom.key, false) === CFG.zoom.touch, 'zoom: persisted 0.80 wins over desktop default');
+  saveZoom(CFG.zoom.key, CFG.zoom.full);
+  ok(loadZoom(CFG.zoom.key, true) === CFG.zoom.full, 'zoom: persisted 1.0 wins over touch default');
+  store.set(CFG.zoom.key, 'garbage');
+  ok(loadZoom(CFG.zoom.key, true) === CFG.zoom.touch, 'loadZoom: invalid stored value → device default');
   delete globalThis.localStorage;
 }
 

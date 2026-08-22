@@ -33,7 +33,6 @@
       <div id="hud-buttons">
         <button id="btn-dash-hud" class="hud-btn" aria-label="Dash"><svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg></button>
         <button id="btn-pause" class="hud-btn" aria-label="Pause">II</button>
-        <button id="btn-mute" class="hud-btn" aria-label="Mute"><svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3z"/><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path class="wave" d="M15 9a4.24 4.24 0 0 1 0 6"/><path class="wave" d="M18 6.5a7.5 7.5 0 0 1 0 11"/><path class="wave" d="M20.5 4.5a10.5 10.5 0 0 1 0 15"/></g><path class="slash" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M4.5 3.5l16 16"/></svg></button>
       </div>
     </div>
   </div>
@@ -51,6 +50,7 @@
     <div class="menu-box">
       <h1 class="title">QWEN<br>SURVIVORS</h1>
       <p class="subtitle">Survive the Evernight Wood</p>
+      <div id="level-select" class="level-select" role="radiogroup" aria-label="Select level"></div>
       <div class="menu-buttons">
         <button id="btn-start" class="btn btn-primary">Start Game</button>
         <button id="btn-upgrades" class="btn">Upgrades</button>
@@ -96,6 +96,17 @@
         <button id="btn-resume" class="btn btn-primary">Resume</button>
         <button id="btn-restart" class="btn">Restart</button>
         <button id="btn-menu" class="btn">Main Menu</button>
+      </div>
+      <h3 class="settings-title">Settings</h3>
+      <div class="settings">
+        <button id="set-zoom" class="set-row" aria-pressed="false">
+          <span class="set-label">View zoom</span>
+          <span class="set-val" id="set-zoom-val">Full</span>
+        </button>
+        <button id="set-mute" class="set-row" aria-pressed="false">
+          <span class="set-label">Mute</span>
+          <span class="set-val" id="set-mute-val">Off</span>
+        </button>
       </div>
     </div>
   </div>

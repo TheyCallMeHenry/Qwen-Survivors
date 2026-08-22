@@ -66,6 +66,37 @@ export function isUnlocked(wins, levelKey) {
   return (wins[lvl.unlock.level] || 0) >= lvl.unlock.wins;
 }
 
+// Last-selected level (13.7) — persist/restore the level-select choice.
+// Invalid/absent storage falls back to the first level (always unlocked).
+export function loadSelectedLevel(key) {
+  let saved = null;
+  try { saved = localStorage.getItem(key); } catch { return LEVEL_ORDER[0]; }
+  return LEVELS[saved] ? saved : LEVEL_ORDER[0];
+}
+
+export function saveSelectedLevel(key, levelKey) {
+  try { if (LEVELS[levelKey]) localStorage.setItem(key, levelKey); } catch { /* private mode */ }
+}
+
+// View zoom (13.8): camera-view factor (CFG.zoom.touch | CFG.zoom.full), persisted as raw string.
+// Invalid/absent storage falls back to the device default (touch 0.80 / desktop 1.0).
+export function defaultZoom(isTouch) {
+  return isTouch ? CFG.zoom.touch : CFG.zoom.full;
+}
+
+export function loadZoom(key, isTouch) {
+  const d = defaultZoom(isTouch);
+  try {
+    const v = Number(localStorage.getItem(key));
+    if (v === CFG.zoom.touch || v === CFG.zoom.full) return v;
+  } catch { /* private mode */ }
+  return d;
+}
+
+export function saveZoom(key, z) {
+  try { localStorage.setItem(key, String(z)); } catch { /* private mode */ }
+}
+
 // Shards earned from a finished run's stats ({score, victory}).
 export function shardsFor(stats) {
   const M = CFG.meta;

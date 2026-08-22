@@ -14,7 +14,7 @@ import { Pickups } from '../entities/pickups.js';
 import { Enemies } from '../entities/enemies.js';
 import { Combat } from '../entities/combat.js';
 import { Player, cardOffers, applyCard, recomputeStats } from '../entities/player.js';
-import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin } from './meta.js';
+import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, loadSelectedLevel, isUnlocked, loadZoom, saveZoom } from './meta.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../entities/spawner.js';
 import { getLevel } from '../world/levels.js';
 import { buildCharacters } from '../art/characters.js';
@@ -61,6 +61,15 @@ export class Game {
 
     this.meta = loadMeta(CFG.meta.storageKey);
     this.wins = loadWins(CFG.meta.winsKey); // per-level cumulative victories (13.6)
+    // Level-select choice (13.7) — clamp to unlocked (unlocks are monotonic, so this is a safety net).
+    this.selectedLevelKey = loadSelectedLevel(CFG.meta.levelKey);
+    if (!isUnlocked(this.wins, this.selectedLevelKey)) this.selectedLevelKey = 'm01';
+    this.level = getLevel(this.selectedLevelKey); // backdrop + Start honor the persisted selection
+    this.levelKey = this.selectedLevelKey;
+    // View zoom (13.8): touch default 0.80 / desktop 1.0, persisted (qsurv.zoom.v1).
+    this.zoom = loadZoom(CFG.zoom.key, document.body.classList.contains('touch'));
+    this.cw = 0;
+    this.ch = 0;
     this._phoenixKills = 0;
 
     this.minimapBase = null;
@@ -88,9 +97,23 @@ export class Game {
   }
 
   resize(w, h) {
-    this.camera.setView(w, h);
-    this.lighting.resize(w, h);
-    this.vignette = buildVignette(w, h);
+    this.cw = w;
+    this.ch = h;
+    this._applyZoom();
+  }
+
+  // Zoom (13.8): the camera view rect grows by 1/zoom (HUD DOM + minimap stay 1×).
+  _applyZoom() {
+    const vw = this.cw / this.zoom, vh = this.ch / this.zoom;
+    this.camera.setView(vw, vh);
+    this.lighting.resize(vw, vh); // half-res darkness tracks the view, not the canvas
+    this.vignette = buildVignette(this.cw, this.ch);
+  }
+
+  setZoom(z) {
+    this.zoom = z;
+    saveZoom(CFG.zoom.key, z);
+    this._applyZoom();
   }
 
   // --- public surface (wired to UI buttons by Phase 4/6) ---
@@ -134,18 +157,38 @@ export class Game {
     this.bus.emit('runstart', seed);
   }
 
+  // Regenerate the menu backdrop for the current level (fixed menuSeed — A5 preview).
+  _genMenuBackdrop() {
+    const lvl = this.level || getLevel('m01');
+    this.world.generate(lvl.menuSeed, lvl.key);
+    this.minimapBase = buildMinimapBase(this.world);
+    this.snow.reset(undefined, lvl.foreground);
+  }
+
   toMenu() {
     if (this.state === 'MENU') return;
-    if (!this.world.data) {
-      const lvl = this.level || getLevel('m01'); // A5: backdrop previews the selected/last level
-      this.world.generate(lvl.menuSeed, lvl.key);
-      this.minimapBase = buildMinimapBase(this.world);
-      this.snow.reset(undefined, lvl.foreground);
-    }
+    if (!this.world.data) this._genMenuBackdrop();
     this.camera.snap(this.world.W / 2, this.world.H / 2);
     this.menuT = 0;
     this.loop.timescale = 1;
     this.state = 'MENU';
+    this.input.clearTransient();
+  }
+
+  // Level-select preview (13.7): switch the menu backdrop to the selected level
+  // without starting a run. Called from the level-select cards.
+  previewLevel(key) {
+    const lvl = getLevel(key);
+    this.level = lvl;
+    this.levelKey = key;
+    this.world.data = null;
+    this._genMenuBackdrop();
+    this.camera.snap(this.world.W / 2, this.world.H / 2);
+    this.menuT = 0;
+    if (this.state !== 'MENU') {
+      this.loop.timescale = 1;
+      this.state = 'MENU';
+    }
     this.input.clearTransient();
   }
 
@@ -430,11 +473,16 @@ export class Game {
     const cam = this.camera;
     const vw = cam.w, vh = cam.h;
     const view = { x: cam.x + cam.ox, y: cam.y + cam.oy, w: vw, h: vh };
+    // Zoom (13.8): the enlarged view rect is centered on the canvas (no-op at zoom 1);
+    // the vignette is a 1× canvas overlay, so it stays outside this transform.
+    ctx.save();
+    ctx.translate((this.cw - vw) / 2, (this.ch - vh) / 2);
 
     if (this.state === 'MENU') {
       this.world.drawBackground(ctx, view, this.menuT);
       this.snow.draw(ctx, view, vw, vh, this.menuT);
-      if (this.vignette) ctx.drawImage(this.vignette, 0, 0, vw, vh);
+      ctx.restore();
+      if (this.vignette) ctx.drawImage(this.vignette, 0, 0, this.cw, this.ch);
       return;
     }
 
@@ -478,10 +526,11 @@ export class Game {
     this.particles.draw(ctx, x0, y0, x1, y1);
     ctx.restore();
 
-    // screen space: lighting → snow → vignette → minimap
+    // screen space: lighting → snow (still inside the view transform)
     this.lighting.draw(ctx, view, this._lights(), t, this.level.palette.light);
     this.snow.draw(ctx, view, vw, vh, t);
-    if (this.vignette) ctx.drawImage(this.vignette, 0, 0, vw, vh);
+    ctx.restore();
+    if (this.vignette) ctx.drawImage(this.vignette, 0, 0, this.cw, this.ch);
     if (this.mctx && this.minimapBase) {
       drawMinimapLive(this.mctx, this.minimapBase, p, this.enemies.list, cam, vw, vh);
     }

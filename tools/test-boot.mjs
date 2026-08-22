@@ -151,7 +151,7 @@ const { CFG } = await import('../js/config.js');
 const { Loop } = await import('../js/core/loop.js');
 const { Input } = await import('../js/core/input.js');
 const { Game } = await import('../js/core/game.js');
-const { saveMeta } = await import('../js/core/meta.js');
+const { saveMeta, saveSelectedLevel } = await import('../js/core/meta.js');
 const { buildCharacters } = await import('../js/art/characters.js');
 const { buildItems, buildIcons } = await import('../js/art/items.js');
 const { initHud } = await import('../js/ui/hud.js');
@@ -320,7 +320,7 @@ function steer() {
     }
     if (!muted) {
       muted = true;
-      byId['btn-mute'].click(); // consumed on next update → 'mute' → hud writes LS
+      byId['set-mute'].click(); // consumed on next update → 'mute' → hud writes LS (13.8: Settings row)
     }
   }
   if (run === 2) {
@@ -569,8 +569,64 @@ function pumpUntil(pred, frames) {
 
 // menu, then the user's exact action
 pump(90);
+
+// 13.7 — level select E2E (fresh LS: 0 wins → only m01 unlocked + selected)
+{
+  const ls = byId['level-select'];
+  assert(ls.children.length === 3, `level select: expected 3 cards, got ${ls.children.length}`);
+  const [c0, c1, c2] = ls.children;
+  assert(c0.classList.contains('sel') && !c0.classList.contains('locked'), 'level select: m01 selected + unlocked by default');
+  assert(c1.classList.contains('locked') && c2.classList.contains('locked'), 'level select: m02/m03 locked at 0 wins');
+  assert(c0.children[1].textContent.includes('Evernight Wood'), 'level select: m01 card shows the level name');
+  assert(c1.children[2].children[0].textContent.includes('Locked') && c1.children[2].children[0].textContent.includes('Evernight Wood'), 'level select: locked m02 shows the requirement');
+  let denied = 0;
+  game.bus.on('denied', () => denied++);
+  c2.click(); // locked m03 → denied blip + shake, selection unchanged
+  assert(denied === 1, 'level select: locked tap did not emit the denied blip');
+  assert(game.selectedLevelKey === 'm01', 'level select: locked tap changed the selection');
+  assert(c2.classList.contains('shake'), 'level select: locked tap did not shake the card');
+  // Simulate 3 m01 wins → m02 unlocked; re-render via a scores-overlay round trip; select m02
+  game.wins.m01 = 3;
+  byId['btn-scores'].click(); pump(30);
+  byId['btn-scores-back'].click(); pump(30);
+  const [u0, u1, u2] = byId['level-select'].children;
+  assert(!u1.classList.contains('locked'), 'level select: m02 not unlocked after 3\u00d7 m01 wins (re-render)');
+  u1.click(); // select m02
+  assert(game.selectedLevelKey === 'm02' && game.levelKey === 'm02', 'level select: selecting m02 did not set selection + backdrop');
+  assert(localStorage.getItem(CFG.meta.levelKey) === 'm02', 'level select: m02 selection not persisted');
+  assert(byId['level-select'].children[1].classList.contains('sel'), 'level select: m02 card not marked selected after re-render');
+  // Restore a clean state so the existing run-1..run-4 flow is unaffected
+  game.wins.m01 = 0; game.wins.m02 = 0; game.wins.m03 = 0;
+  game.selectedLevelKey = 'm01';
+  saveSelectedLevel(CFG.meta.levelKey, 'm01');
+  game.previewLevel('m01');
+  byId['btn-scores'].click(); pump(30);
+  byId['btn-scores-back'].click(); pump(30);
+  assert(byId['level-select'].children[0].classList.contains('sel') && byId['level-select'].children[1].classList.contains('locked'),
+    'level select: reset state not restored (m01 sel + m02 locked expected)');
+}
+
+// 13.8 — view zoom + Pause-menu Settings E2E (harness is non-touch → desktop default 1.0)
+{
+  assert(game.zoom === CFG.zoom.full, 'zoom: desktop default is not full view (1.0)');
+  assert(game.camera.w === 1280 && game.camera.h === 800, 'zoom: camera view not 1:1 with the canvas at default');
+  byId['set-zoom'].click();
+  assert(game.zoom === CFG.zoom.touch, 'zoom: Settings toggle did not switch to 0.80');
+  assert(Math.abs(game.camera.w - 1600) < 1e-6 && Math.abs(game.camera.h - 1000) < 1e-6, 'zoom: camera view not enlarged to 1600×1000');
+  assert(localStorage.getItem(CFG.zoom.key) === '0.8', 'zoom: 0.80 selection not persisted');
+  byId['set-zoom'].click();
+  assert(game.zoom === CFG.zoom.full && Math.abs(game.camera.w - 1280) < 1e-6, 'zoom: toggle back to 1.0 failed');
+  assert(localStorage.getItem(CFG.zoom.key) === '1', 'zoom: 1.0 selection not persisted');
+  byId['set-mute'].click(); pump(30);
+  assert(localStorage.getItem(CFG.scores.muteKey) === '1', 'settings mute: toggle did not persist qsurv.mute');
+  assert(byId['set-mute'].classList.contains('muted'), 'settings mute: row not marked muted');
+  byId['set-mute'].click(); pump(30);
+  assert(localStorage.getItem(CFG.scores.muteKey) === '0', 'settings mute: un-mute did not persist');
+}
+
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start click did not start the run');
+assert(game.levelKey === 'm01', 'btn-start did not begin the selected level (m01)');
 
 // run 1: stand still (keep-alive iframes in steer) → kills + level-up cards +
 // heart/pause one-shots → force death through the real damage pipeline
@@ -774,5 +830,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 120 at run start · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
   `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · scores save/render/clear · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · scores save/render/clear · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · loop alive throughout`,
 );

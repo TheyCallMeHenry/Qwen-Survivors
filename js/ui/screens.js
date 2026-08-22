@@ -7,7 +7,8 @@
 
 import { CFG } from '../config.js';
 import { fmtTime } from '../utils/math.js';
-import { upgradeCost } from '../core/meta.js';
+import { upgradeCost, isUnlocked, saveSelectedLevel } from '../core/meta.js';
+import { LEVELS, LEVEL_ORDER } from '../world/levels.js';
 import { cardEffectText } from '../entities/player.js';
 
 // --- pure (Node-tested) ---
@@ -56,6 +57,7 @@ export function initScreens(game, { icons }) {
   const goStats = $('go-stats');
   const metaShards = $('meta-shards');
   const metaList = $('meta-list');
+  const levelSelect = $('level-select');
   const { storageKey, max } = CFG.scores;
 
   let cur = '';
@@ -63,6 +65,68 @@ export function initScreens(game, { icons }) {
   let hurtTimer = null;
 
   const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
+
+  // --- level select (13.7): 3 radio cards; locked visible + denied; selection persists ---
+  function renderLevels() {
+    levelSelect.innerHTML = '';
+    const wins = game.wins;
+    for (const key of LEVEL_ORDER) {
+      const lvl = LEVELS[key];
+      const unlocked = isUnlocked(wins, key);
+      const sel = key === game.selectedLevelKey;
+      const need = lvl.unlock.wins;
+      const have = Math.min(wins[lvl.unlock.level] || 0, need);
+      const card = document.createElement('div');
+      card.classList.add('lv-card');
+      if (sel) card.classList.add('sel');
+      if (!unlocked) card.classList.add('locked');
+      card.setAttribute('role', 'radio');
+      card.setAttribute('aria-checked', sel ? 'true' : 'false');
+      card.tabIndex = 0;
+      const chip = document.createElement('span');
+      chip.className = 'lv-chip';
+      chip.style.background = `linear-gradient(180deg, ${lvl.palette.skyTop}, ${lvl.palette.skyHorizon})`;
+      const h = document.createElement('h3');
+      h.textContent = lvl.name;
+      card.append(chip, h);
+      if (need > 0) {
+        const line = document.createElement('div');
+        line.className = 'lv-line';
+        if (!unlocked) {
+          const r = document.createElement('span');
+          r.className = 'lv-req';
+          r.textContent = `Locked · ${need}\u00d7 ${LEVELS[lvl.unlock.level].name}`;
+          line.append(r);
+        }
+        const pips = document.createElement('div');
+        pips.className = 'lv-pips';
+        for (let i = 0; i < need; i++) {
+          const d = document.createElement('span');
+          d.className = i < have ? 'pip on' : 'pip';
+          pips.append(d);
+        }
+        line.append(pips);
+        card.append(line);
+      }
+      const choose = () => {
+        if (!unlocked) {
+          game.bus.emit('denied'); // blip (sfx) + shake (below)
+          card.classList.add('shake');
+          setTimeout(() => card.classList.remove('shake'), 320);
+          return;
+        }
+        game.selectedLevelKey = key;
+        saveSelectedLevel(CFG.meta.levelKey, key);
+        game.previewLevel(key); // big menu backdrop re-generates for this level
+        renderLevels();
+      };
+      card.addEventListener('click', choose);
+      card.addEventListener('keydown', (e) => {
+        if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); choose(); }
+      });
+      levelSelect.append(card);
+    }
+  }
 
   const update = () => {
     const st = game.state;
@@ -73,7 +137,7 @@ export function initScreens(game, { icons }) {
     else if (st === 'LEVELUP') name = 'levelup';
     else if (st === 'GAMEOVER') name = 'gameover';
     else name = 'none';
-    if (name !== cur) { cur = name; show(name); }
+    if (name !== cur) { cur = name; show(name); if (name === 'menu') renderLevels(); }
   };
 
   // --- transients ---
@@ -232,7 +296,7 @@ export function initScreens(game, { icons }) {
     window.close();
     overlay = 'quit'; // fallback notice if close() is blocked
   }
-  on('btn-start', () => game.startRun());
+  on('btn-start', () => game.startRun()); // no-arg → starts game.levelKey (the level-select choice, 13.7)
   on('btn-scores', () => { renderScores(); overlay = 'scores'; });
   on('btn-upgrades', () => { renderUpgrades(); overlay = 'upgrades'; });
   on('btn-upgrades-back', () => { overlay = null; });

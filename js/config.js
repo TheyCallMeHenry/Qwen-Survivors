@@ -31,6 +31,10 @@ export const CFG = {
 
   camera: { follow: 9, lead: 0.14, shakeDecay: 3.4 },
 
+  // View zoom (13.8): camera-view factor — 0.80 = zoomed out (×1.56 area) / 1.0 = full view.
+  // Touch default 0.80 (D13), persisted per-browser; HUD DOM + minimap always stay 1×.
+  zoom: { touch: 0.8, full: 1.0, key: 'qsurv.zoom.v1' },
+
   menu: {
     // (menu backdrop seed moved to the level def: levels.js menuSeed, Phase 13)
     amp: 0.2,            // camera drift amplitude (× world size)
@@ -258,7 +262,8 @@ export const CFG = {
   // Persistent meta progression (Soulshards + between-run upgrades). localStorage.
   meta: {
     storageKey: 'qsurv.meta.v1',
-    winsKey: 'qsurv.wins.v1',   // per-level cumulative victory counts (13.6)
+    winsKey: 'qsurv.wins.v1',        // per-level cumulative victory counts (13.6)
+    levelKey: 'qsurv.level.v1',      // last-selected level (13.7)
     shardPerScore: 400,   // shards per score point
     victoryBonus: 25,     // flat bonus shards on victory
     upgrades: {

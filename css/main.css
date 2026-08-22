@@ -124,11 +124,6 @@ html, body {
   cursor: pointer;
 }
 .hud-btn:active { transform: scale(0.94); }
-/* Mute icon (inline SVG): waves = sound on, slash = off */
-#btn-mute .slash { display: none; }
-#btn-mute.muted { color: var(--danger); }
-#btn-mute.muted .wave { display: none; }
-#btn-mute.muted .slash { display: inline; }
 /* dash status for ALL environments (the touch ring lives on #btn-dash); same --cd conic sweep */
 #btn-dash-hud {
   display: grid; place-items: center;
@@ -179,6 +174,7 @@ body.touch #touch-ui { display: block; }
   position: fixed; inset: 0; z-index: 30;
   display: flex; align-items: center; justify-content: center;
   padding: 20px;
+  padding: calc(20px + var(--safe-t)) calc(20px + var(--safe-l)) calc(20px + var(--safe-b)) calc(20px + var(--safe-r));
   background: linear-gradient(180deg, rgba(5, 7, 15, 0.38), rgba(5, 7, 15, 0.72));
   overflow: auto;
 }
@@ -212,6 +208,39 @@ body.touch #touch-ui { display: block; }
 
 .menu-buttons { display: flex; flex-direction: column; gap: 12px; width: min(78vw, 320px); }
 .menu-row { flex-direction: row; justify-content: center; width: auto; }
+
+/* ============ level select (13.7) ============ */
+.level-select { display: flex; flex-direction: column; gap: 10px; width: min(78vw, 320px); }
+.lv-card {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 72px; padding: 10px 14px;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: linear-gradient(180deg, rgba(24, 32, 52, 0.9), rgba(13, 18, 32, 0.9));
+  color: var(--text); text-align: left; cursor: pointer;
+  transition: border-color 0.12s ease, transform 0.08s ease;
+}
+.lv-card:hover { border-color: var(--accent); }
+.lv-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lv-card.sel {
+  border-color: rgba(94, 234, 212, 0.8);
+  box-shadow: 0 0 20px rgba(94, 234, 212, 0.18), inset 0 0 16px rgba(94, 234, 212, 0.06);
+}
+.lv-card.locked { cursor: not-allowed; border-style: dashed; color: var(--dim); }
+.lv-card.locked:hover { border-color: var(--line); }
+.lv-chip { width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--line); flex-shrink: 0; }
+.lv-card.locked .lv-chip { filter: saturate(0.4) brightness(0.8); }
+.lv-card h3 { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: 0.03em; }
+.lv-line { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.lv-req { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: var(--danger); }
+.lv-pips { display: flex; gap: 4px; }
+@keyframes lv-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.lv-card.shake { animation: lv-shake 0.32s ease; }
 
 .btn {
   min-height: 72px; padding: 0 22px;
@@ -304,6 +333,24 @@ body.touch .kbd-only { display: none; }
 .pip.on { background: var(--accent); }
 .meta-cost { font-size: 12px; font-weight: 800; color: var(--accent2); font-variant-numeric: tabular-nums; }
 .meta-row .btn { min-width: 72px; }
+
+/* Pause-menu Settings (13.8) — view zoom + mute, ≥72 px rows (mobile parity) */
+.settings-title {
+  margin: 6px 0 0; font-size: 12px; font-weight: 800;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim);
+}
+.settings { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.set-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 72px; padding: 10px 16px;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text); font: inherit; cursor: pointer; text-align: left;
+}
+.set-row:active { transform: scale(0.98); }
+.set-row .set-label { font-size: 14px; font-weight: 700; }
+.set-row .set-val { font-size: 13px; font-weight: 800; color: var(--dim); }
+.set-row.on .set-val, .set-row.muted .set-val { color: var(--accent2); }
 .meta-row .btn[disabled] { opacity: 0.45; cursor: default; transform: none; }
 
 /* level up cards */

@@ -14,7 +14,7 @@ const A = CFG.audio;
 const GAPS = {
   dash: 0.25, kill: 0.04, hurt: 0.2, death: 0, chime: 0.4,
   card: 0.15, banner: 0.6, runstart: 0.5, gameover: 0.5,
-  pistol: 0.07, boom: 0.12, fire: 0.09, gem: 0.05,
+  pistol: 0.07, boom: 0.12, fire: 0.09, gem: 0.05, denied: 0.18,
 };
 
 export function initSfx(game) {
@@ -154,6 +154,10 @@ export function initSfx(game) {
     gem(t) { // bright pickup blip — short + high, distinct from the level-up chime
       tone(graph.sfx, 'sine', 1318.5, t, 0.002, 0.3, 0.09, 1975.5);
     },
+    denied(t) { // locked-tap blip (13.7) — short descending double, clearly "no"
+      tone(graph.sfx, 'square', 164.81, t, 0.004, 0.2, 0.09);
+      tone(graph.sfx, 'square', 116.54, t + 0.08, 0.004, 0.2, 0.12);
+    },
   };
 
   const last = Object.create(null);
@@ -180,6 +184,7 @@ export function initSfx(game) {
     bus.on('boom', () => play('boom')),
     bus.on('fire', () => play('fire')),
     bus.on('gem', () => play('gem')),
+    bus.on('denied', () => play('denied')),
     bus.on('mute', () => setMuted(readMuted())),
   );
 
