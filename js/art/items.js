@@ -3,14 +3,34 @@
 import { makeCanvas, glowSprite, shadowSprite, poly, roundRectPath } from './base.js';
 import { TAU } from '../utils/math.js';
 
-function gemSprite() {
+// Per-level pickup tints (13.10, A5): m01 = original, M02 gold-pink, M03 cyan.
+const GEM_PAL = {
+  m01: { glow: '94,234,212', stops: ['#25f2cf', '#0fb89b', '#0a6f60'], edge: 'rgba(6,60,50,0.6)' },
+  m02: { glow: '255,196,128', stops: ['#ffd98a', '#ff9e7d', '#c94f6d'], edge: 'rgba(120,40,60,0.6)' },
+  m03: { glow: '80,220,255', stops: ['#6fd8ff', '#1f9fd8', '#0d5f96'], edge: 'rgba(8,60,90,0.6)' },
+};
+const HEART_PAL = {
+  m01: { top: '#ff7d90', low: '#d42a4c', edge: 'rgba(90,10,30,0.65)' },
+  m02: { top: '#ffb3a0', low: '#e0446e', edge: 'rgba(120,20,50,0.65)' },
+  m03: { top: '#7fe8e0', low: '#18a8c8', edge: 'rgba(10,60,90,0.65)' },
+};
+
+// Per-level gem/heart pair (13.10): m01 default; unknown level falls back to m01.
+export function gemHeartFor(levelKey) {
+  return {
+    gem: gemSprite(GEM_PAL[levelKey] || GEM_PAL.m01),
+    heart: heartSprite(HEART_PAL[levelKey] || HEART_PAL.m01),
+  };
+}
+
+function gemSprite(pal = GEM_PAL.m01) {
   const c = makeCanvas(24, 26);
   const g = c.getContext('2d');
-  g.drawImage(glowSprite(11, '94,234,212', 0.35), 0, -1);
+  g.drawImage(glowSprite(11, pal.glow, 0.35), 0, -1);
   const grad = g.createLinearGradient(0, 2, 0, 24);
-  grad.addColorStop(0, '#25f2cf');
-  grad.addColorStop(0.5, '#0fb89b');
-  grad.addColorStop(1, '#0a6f60');
+  grad.addColorStop(0, pal.stops[0]);
+  grad.addColorStop(0.5, pal.stops[1]);
+  grad.addColorStop(1, pal.stops[2]);
   g.fillStyle = grad;
   poly(g, [[12, 1], [21, 12], [12, 24], [3, 12]]);
   g.fill();
@@ -20,14 +40,14 @@ function gemSprite() {
   g.fill();
   g.fillStyle = 'rgba(255,255,255,0.85)';
   g.fillRect(8, 6, 2, 2);
-  g.strokeStyle = 'rgba(6,60,50,0.6)';
+  g.strokeStyle = pal.edge;
   g.lineWidth = 1;
   poly(g, [[12, 1], [21, 12], [12, 24], [3, 12]]);
   g.stroke();
   return c;
 }
 
-function heartSprite() {
+function heartSprite(pal = HEART_PAL.m01) {
   const c = makeCanvas(22, 20);
   const g = c.getContext('2d');
   const path = () => {
@@ -40,12 +60,12 @@ function heartSprite() {
     g.closePath();
   };
   const grad = g.createLinearGradient(0, 2, 0, 19);
-  grad.addColorStop(0, '#ff7d90');
-  grad.addColorStop(1, '#d42a4c');
+  grad.addColorStop(0, pal.top);
+  grad.addColorStop(1, pal.low);
   path();
   g.fillStyle = grad;
   g.fill();
-  g.strokeStyle = 'rgba(90,10,30,0.65)';
+  g.strokeStyle = pal.edge;
   g.lineWidth = 1;
   g.stroke();
   g.fillStyle = 'rgba(255,220,228,0.85)';
@@ -510,9 +530,8 @@ export function buildIcons() {
 }
 
 export function buildItems() {
+  // gem/heart are per-level (gemHeartFor, 13.10) — not built here.
   return {
-    gem: gemSprite(),
-    heart: heartSprite(),
     bolt: boltSprite(),
     orb: orbSprite(),
     boomerang: boomerangSprite(),

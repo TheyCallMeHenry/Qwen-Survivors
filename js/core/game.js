@@ -16,8 +16,9 @@ import { Combat } from '../entities/combat.js';
 import { Player, cardOffers, applyCard, recomputeStats } from '../entities/player.js';
 import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, loadSelectedLevel, isUnlocked, loadZoom, saveZoom } from './meta.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../entities/spawner.js';
-import { getLevel } from '../world/levels.js';
+import { getLevel, LEVEL_ORDER } from '../world/levels.js';
 import { buildCharacters } from '../art/characters.js';
+import { gemHeartFor } from '../art/items.js';
 import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
 import { buildMinimapBase, drawMinimapLive } from '../world/minimap.js';
@@ -35,7 +36,7 @@ export class Game {
     this.lighting = new Lighting();
     this.snow = new Snow();
     this.particles = new Particles();
-    this.pickups = new Pickups({ gem: items.gem, heart: items.heart });
+    this.pickups = new Pickups({}); // gem/heart reskin per level (13.10)
     this.enemies = new Enemies();
     this.enemies.setDefs(characters);
     this.enemies.orbImg = items.orb;
@@ -66,6 +67,7 @@ export class Game {
     if (!isUnlocked(this.wins, this.selectedLevelKey)) this.selectedLevelKey = 'm01';
     this.level = getLevel(this.selectedLevelKey); // backdrop + Start honor the persisted selection
     this.levelKey = this.selectedLevelKey;
+    this._reskinPickups();
     // View zoom (13.8): touch default 0.80 / desktop 1.0, persisted (qsurv.zoom.v1).
     this.zoom = loadZoom(CFG.zoom.key, document.body.classList.contains('touch'));
     this.cw = 0;
@@ -116,12 +118,20 @@ export class Game {
     this._applyZoom();
   }
 
+  // Per-level pickup tint (13.10): gem/heart follow the level.
+  _reskinPickups() {
+    const gh = gemHeartFor(this.levelKey);
+    this.pickups.gemImg = gh.gem;
+    this.pickups.heartImg = gh.heart;
+  }
+
   // --- public surface (wired to UI buttons by Phase 4/6) ---
 
   startRun(levelKey) {
     // levelKey omitted → keep the last level (retry / game-over Again)
     this.level = getLevel(levelKey || this.levelKey || 'm01');
     this.levelKey = this.level.key;
+    this._reskinPickups();
     const seed = (Math.random() * 4294967296) | 0;
     this.rng = mulberry32(seed ^ 0x9e3779b9);
     this.world.generate(seed, this.levelKey);
@@ -181,6 +191,7 @@ export class Game {
     const lvl = getLevel(key);
     this.level = lvl;
     this.levelKey = key;
+    this._reskinPickups();
     this.world.data = null;
     this._genMenuBackdrop();
     this.camera.snap(this.world.W / 2, this.world.H / 2);
@@ -445,8 +456,12 @@ export class Game {
     this.meta.shards += gain;
     saveMeta(CFG.meta.storageKey, this.meta);
     if (victory) {
+      const wasUnlocked = LEVEL_ORDER.map((k) => isUnlocked(this.wins, k));
       recordWin(this.wins, this.levelKey || 'm01'); // victory-only (deaths don't count)
       saveWins(CFG.meta.winsKey, this.wins);
+      // 13.10: fired after DAWN BREAKS — the screens banner queue holds it until that finishes.
+      if (LEVEL_ORDER.some((k, i) => !wasUnlocked[i] && isUnlocked(this.wins, k)))
+        this.bus.emit('banner', { text: 'NEW MAP UNLOCKED' });
     }
     this.bus.emit('meta', this.meta);
     this.bus.emit('gameover', { ...st, shards: gain });

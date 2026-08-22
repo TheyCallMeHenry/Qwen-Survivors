@@ -44,6 +44,40 @@ export const MUSIC = {
   ],
 };
 
+// 13.11 Per-level flavor layers (A5) — scheduled on the SAME 4-bar lattice as MUSIC
+// (m01 'wood' gets nothing: the 10.6 track stands untouched). Slots hold a
+// frequency or null (rest), like MUSIC.pulse/color. 'higan' = Map 02 (temple
+// bell + wind chime + taiko; taiko thickens while the boss is up), 'drowned'
+// = Map 03 (rising bubble blips + one whale-song glide per loop; the muffle
+// lives in CFG.audio — a lowpass the music level bus routes through when
+// levelKey is 'm03', wired in startMusic).
+export const FLAVOR = {
+  higan: {
+    bell: [73.42, null, null, null], // D2 temple strike, once per loop
+    chime: [
+      [null, null, null, null, null, 587.33, null, null], // D5 ping
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, 698.46, null, null, null, null], // F5 ping
+      [null, null, null, null, null, null, 493.88, null], // B4 ping
+    ],
+    taiko: [
+      [55, null, null, null, 55, null, null, null],
+      [null, null, null, null, 55, null, null, null],
+      [55, null, null, null, 55, null, null, null],
+      [null, null, null, null, null, null, 55, null],
+    ],
+  },
+  drowned: {
+    bubble: [
+      [null, null, 880, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null],
+      [null, null, null, null, 1174.66, null, null, null],
+      [null, null, null, null, null, null, 698.46, null],
+    ],
+    whale: [1, null, null, null], // one glide per loop, bar 0 step 0
+  },
+};
+
 export function initMusic(game, sfx) {
   const bus = game.bus;
   let playing = false;
@@ -51,6 +85,7 @@ export function initMusic(game, sfx) {
   let nextT = 0;
   let nodes = null; // { level, delay } (+ wind/texture graph, created once)
   let howlAt = Infinity;
+  let level = null; // 13.11: levelKey for the flavor layers (set at startMusic)
 
   const off = [];
 
@@ -59,7 +94,13 @@ export function initMusic(game, sfx) {
   function build(c, musicBus, ambBus) {
     const level = c.createGain();
     level.gain.value = 1;
-    level.connect(musicBus);
+    // 13.11 muffle: level -> lowpass -> musicBus. Default pass-through (~no-op);
+    // startMusic retunes it per levelKey (m03 = deep underwater muffle).
+    const muffle = c.createBiquadFilter();
+    muffle.type = 'lowpass';
+    muffle.frequency.value = A.muffleOff;
+    level.connect(muffle);
+    muffle.connect(musicBus);
     const delay = c.createDelay(1);
     delay.delayTime.value = A.delayTime;
     const fb = c.createGain();
@@ -129,7 +170,7 @@ export function initMusic(game, sfx) {
     tSrc.start();
     tLfo.start();
 
-    nodes = { level, delay };
+    nodes = { level, delay, muffle };
     howlAt = c.currentTime + rand(A.howlEvery[0], A.howlEvery[1]);
   }
 
@@ -222,7 +263,74 @@ export function initMusic(game, sfx) {
     lfo.stop(t + BAR + 0.4);
   }
 
-  function scheduleStep(bar, s8, t) {
+  // 13.11 flavor voices (per-level, A5) — additive layers, m01 schedules none.
+  function bellVoice(c, f, t) {
+    const dur = 1.8;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(A.bellGain, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    const o2 = c.createOscillator(); o2.type = 'sine'; o2.frequency.value = f * 2.76; // inharmonic partial
+    const g2 = c.createGain(); g2.gain.value = 0.4;
+    o.connect(g); o2.connect(g2); g2.connect(g);
+    g.connect(nodes.level);
+    o.start(t); o.stop(t + dur + 0.1); o2.start(t); o2.stop(t + dur + 0.1);
+  }
+  function chimeVoice(c, f, t) {
+    const dur = 0.9;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(A.chimeGain, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    o.connect(g);
+    g.connect(nodes.level);
+    const send = c.createGain(); // ring out across the bar line via the dark delay
+    send.gain.value = 0.5;
+    g.connect(send);
+    send.connect(nodes.delay);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  function taikoVoice(c, f, t, boss) {
+    const dur = 0.4;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(A.taikoGain * (boss ? 1.6 : 1), t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    o.frequency.exponentialRampToValueAtTime(f * 0.6, t + dur * 0.7); // pitch drop
+    o.connect(g); g.connect(nodes.level);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  function bubbleVoice(c, f, t) {
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(A.bubbleGain, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+    const o = c.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(f * 0.6, t);
+    o.frequency.linearRampToValueAtTime(f, t + 0.1); // rising chirp
+    o.connect(g); g.connect(nodes.level);
+    o.start(t); o.stop(t + 0.2);
+  }
+  function whaleVoice(c, t) {
+    const dur = 3.5;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(A.whaleGain, t + 0.6);
+    g.gain.setValueAtTime(A.whaleGain, t + dur - 0.8);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const o = c.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(160, t);
+    o.frequency.linearRampToValueAtTime(240, t + dur * 0.45); // up…
+    o.frequency.linearRampToValueAtTime(150, t + dur * 0.8); // …and down
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 600;
+    o.connect(lp); lp.connect(g); g.connect(nodes.level);
+    o.start(t); o.stop(t + dur + 0.1);
+  }
+
+  function scheduleStep(bar, s8, t, boss = false) {
     const c = sfx.ctx();
     if (s8 === 0) {
       subVoice(c, MUSIC.sub[bar], t);
@@ -232,6 +340,23 @@ export function initMusic(game, sfx) {
     if (p !== null) pulseVoice(c, p, t);
     const k = MUSIC.color[bar][s8];
     if (k !== null) colorVoice(c, k, t);
+    // 13.11: per-level flavor — m01 ('wood') has no entry, so m01 stays untouched
+    const f = FLAVOR[level];
+    if (f) {
+      const b = f.bell;
+      if (b && b[bar] !== null && s8 === 0) bellVoice(c, b[bar], t);
+      const ch = f.chime;
+      if (ch && ch[bar][s8] !== null) chimeVoice(c, ch[bar][s8], t);
+      const tk = f.taiko;
+      if (tk) {
+        if (boss) { if (s8 === 0 || s8 === 4) taikoVoice(c, 55, t, true); } // boss: on every beat
+        else { const v = tk[bar][s8]; if (v !== null) taikoVoice(c, v, t, false); }
+      }
+      const bb = f.bubble;
+      if (bb && bb[bar][s8] !== null) bubbleVoice(c, bb[bar][s8], t);
+      const wh = f.whale;
+      if (wh && wh[bar] !== null && s8 === 0) whaleVoice(c, t);
+    }
   }
 
   function howl(c, ambBus) {
@@ -297,6 +422,8 @@ export function initMusic(game, sfx) {
     playing = true;
     if (reset) step = 0;
     nextT = 0;
+    level = game.levelKey || 'm01';
+    if (nodes) nodes.muffle.frequency.value = level === 'm03' ? A.muffleM03 : A.muffleOff;
     setLevel(1);
   }
 
@@ -321,7 +448,7 @@ export function initMusic(game, sfx) {
     if (playing) {
       if (!nextT || nextT < c.currentTime - 0.5) nextT = c.currentTime + 0.1;
       while (nextT < c.currentTime + A.schedAhead) {
-        scheduleStep(Math.floor(step / 8) % MUSIC.bars, step % 8, nextT);
+        scheduleStep(Math.floor(step / 8) % MUSIC.bars, step % 8, nextT, game.bossSpawned);
         step++;
         nextT += EIGHTH;
       }

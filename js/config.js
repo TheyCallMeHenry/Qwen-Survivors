@@ -34,6 +34,7 @@ export const CFG = {
   // View zoom (13.8): camera-view factor — 0.80 = zoomed out (×1.56 area) / 1.0 = full view.
   // Touch default 0.80 (D13), persisted per-browser; HUD DOM + minimap always stay 1×.
   zoom: { touch: 0.8, full: 1.0, key: 'qsurv.zoom.v1' },
+  ui: { bannerMs: 2600 }, // banner hold before the next queued banner shows (CSS bannerIn 2.6 s)
 
   menu: {
     // (menu backdrop seed moved to the level def: levels.js menuSeed, Phase 13)
@@ -246,6 +247,10 @@ export const CFG = {
     pulseGain: 0.6,
     colorGain: 0.12, colorSend: 0.5,
     delayTime: 0.34, delayFb: 0.38,
+    // 13.11 — per-level flavor voices + m03 muffle (level bus routes through a lowpass)
+    bellGain: 0.05, chimeGain: 0.04, taikoGain: 0.09, bubbleGain: 0.03, whaleGain: 0.06,
+    muffleOff: 12000, // pass-through cutoff (audibly a no-op) for m01/m02
+    muffleM03: 600,   // The Drowned City — muffled, deep, underwater
     texGain: 0.05, texCutoff: 240, texLfoHz: 0.03, texLfoDepth: 120,
     // ambience (unchanged since Phase 5)
     windGain: 0.45, windLfoHz: 0.045, windCutoff: 420,

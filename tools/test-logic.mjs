@@ -9,8 +9,8 @@ import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../js/
 import { Enemies } from '../js/entities/enemies.js';
 import { cardOffers, applyCard, recomputeStats, cardEffectText } from '../js/entities/player.js';
 import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom } from '../js/core/meta.js';
-import { rankScore } from '../js/ui/screens.js';
-import { MUSIC, initMusic } from '../js/audio/music.js';
+import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
+import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
 
 let pass = 0;
@@ -398,6 +398,18 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(M.color.every((row) => slots(row) === 1), 'MUSIC: exactly one lone color tone per bar');
 }
 
+// 13.11 — per-level FLAVOR data (m01 gets NO entry: the 10.6 track stands untouched)
+const slots0 = (row) => row.filter((f) => f !== null).length;
+{
+  ok(Object.keys(FLAVOR).join(',') === 'higan,drowned', 'FLAVOR: only higan/drowned (m01 stays untouched)');
+  const h = FLAVOR.higan, d = FLAVOR.drowned;
+  ok(h.bell.filter((f) => f !== null).length === 1 && h.bell[0] === 73.42, 'higan bell: 1 strike per loop (D2)');
+  ok([1, 0, 1, 1].every((n, b) => slots0(h.chime[b]) === n), 'higan chime: 3 pings per loop (D5/F5/B4)');
+  ok([2, 1, 2, 1].every((n, b) => slots0(h.taiko[b]) === n), 'higan taiko: 6 base hits per loop');
+  ok([1, 0, 1, 1].every((n, b) => slots0(d.bubble[b]) === n), 'drowned bubble: 3 rising blips per loop');
+  ok(d.whale.join(',') === '1,,,', 'drowned whale: exactly 1 glide per loop (bar 0)');
+}
+
 // Scheduler seam test: pump a fake AudioContext clock for 12 full loops across
 // the loop boundary — the lookahead must wrap cleanly (exact BAR lattice, no
 // gap/double/drift) and every voice count must land exactly. No-op params mean
@@ -452,6 +464,51 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(drones.length === 294, `MUSIC pump: ${drones.length} drone oscs (want 294 — 6 x 49 bar starts)`);
   const lfos = started.filter((o) => o.type === 'sine' && near(o.f0, CFG.audio.droneLfoHz) && near(o.t1 - o.t0, BAR + 0.4, 1e-6));
   ok(lfos.length === 49, `MUSIC pump: ${lfos.length} drone LFOs (want 49)`);
+  // 13.11 — per-level flavor pumps (same fake-ctx trick): m01 invariance first, then
+  // higan (bell/chime/taiko, boss-taiko) and drowned (bubble/whale) voice counts.
+  const pump = (levelKey, boss) => {
+    const f2 = { currentTime: 0.5, sampleRate: 44100, oscs: [] };
+    f2.createGain = () => ({ gain: param(), connect() {} });
+    f2.createOscillator = () => {
+      const o = { type: 'sine', frequency: param(), detune: { value: 0 }, t0: null, t1: null, connect() {},
+        start(t) { o.t0 = t; }, stop(t) { o.t1 = t; } };
+      f2.oscs.push(o);
+      return o;
+    };
+    f2.createDelay = () => ({ delayTime: param(), connect() {} });
+    f2.createBiquadFilter = () => ({ type: 'lowpass', frequency: param(), Q: { value: 0 }, connect() {} });
+    f2.createBuffer = (ch, len) => ({ length: len, getChannelData: () => new Float32Array(len) });
+    f2.createBufferSource = () => ({ buffer: null, loop: false, connect() {}, start() {}, stop() {} });
+    const bus2 = makeBus();
+    const m2 = initMusic({ bus: bus2, levelKey, bossSpawned: boss }, { ctx: () => f2, gain: () => dummy });
+    bus2.emit('runstart');
+    while (f2.currentTime < 0.5 + 48 * BAR + 0.2) { f2.currentTime += 0.01; m2.update(); }
+    return f2.oscs.filter((o) => o.t0 !== null && o.t1 !== null)
+      .map((o) => ({ type: o.type, f0: o.frequency.value, dur: o.t1 - o.t0, t0: o.t0 }));
+  };
+  const CUTOFF = 0.5 + 48 * BAR; // exclude the margin-scheduled loop-13 bar-0 hits
+  const count = (oscs, f0s, dur) => oscs.filter((o) => o.type === 'sine' && f0s.includes(o.f0) && near(o.dur, dur, 1e-6) && o.t0 < CUTOFF).length;
+  {
+    const m01 = pump('m01', false);
+    const subs = m01.filter((o) => o.type === 'sine' && o.f0 > 25 && o.f0 < 50 && near(o.dur, BAR, 1e-6)).length;
+    const pulses = count(m01, [36.71, 43.65, 32], 0.5);
+    const colors = m01.filter((o) => o.type === 'sine' && o.f0 > 150).length;
+    const drones = m01.filter((o) => o.type === 'sawtooth' && o.f0 > 60 && o.f0 < 500).length;
+    ok(subs === 49 && pulses === 60 && colors === 96 && drones === 294, `MUSIC pump m01: ${subs} subs / ${pulses} pulses / ${colors} colors / ${drones} drones — 10.6 invariance, zero flavor oscs`);
+  }
+  {
+    const hi = pump('higan', false);
+    ok(count(hi, [73.42, 202.6392], 1.9) === 24, 'higan pump: 24 bell oscs (12 strikes x 2 partials)');
+    ok(count(hi, [587.33, 698.46, 493.88], 0.95) === 36, 'higan pump: 36 chime pings (3 per loop)');
+    ok(count(hi, [55], 0.45) === 72, 'higan pump: 72 taiko hits (6 per loop base pattern)');
+    const hb = pump('higan', true);
+    ok(count(hb, [55], 0.45) === 96, 'higan pump boss: 96 taiko hits (8 per loop — s8 0/4 every bar)');
+  }
+  {
+    const dw = pump('drowned', false);
+    ok(count(dw, [0], 0.2) === 36, 'drowned pump: 36 bubbles (3 per loop)');
+    ok(count(dw, [0], 3.6) === 12, 'drowned pump: 12 whale glides (1 per loop)');
+  }
 }
 
 // --- Phase 13 — level framework (13.1) ---
@@ -647,6 +704,27 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(loadZoom(CFG.zoom.key, true) === CFG.zoom.full, 'zoom: persisted 1.0 wins over touch default');
   store.set(CFG.zoom.key, 'garbage');
   ok(loadZoom(CFG.zoom.key, true) === CFG.zoom.touch, 'loadZoom: invalid stored value → device default');
+  delete globalThis.localStorage;
+}
+
+// --- 13.9 Per-level high-score keys: m01 keeps the original key (no data loss) ---
+{
+  ok(scoreKeyFor('m01') === CFG.scores.storageKey, '13.9: m01 keeps the original score key');
+  ok(scoreKeyFor('m02') === 'qsurv.hiscores.m02.v1', '13.9: m02 sibling key');
+  ok(scoreKeyFor('m03') === 'qsurv.hiscores.m03.v1', '13.9: m03 sibling key');
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, v),
+    removeItem: (k) => store.delete(k),
+  };
+  saveScores(CFG.scores.storageKey, [{ score: 100, time: 30, kills: 1, level: 1, date: '2026-01-01' }], CFG.scores.max);
+  saveScores(scoreKeyFor('m02'), [{ score: 50, time: 20, kills: 2, level: 2, date: '2026-01-01' }], CFG.scores.max);
+  ok(loadScores(CFG.scores.storageKey).length === 1 && loadScores(CFG.scores.storageKey)[0].score === 100, '13.9: m01 list untouched by m02 save');
+  ok(loadScores(scoreKeyFor('m02')).length === 1 && loadScores(scoreKeyFor('m02'))[0].score === 50, '13.9: m02 list separate');
+  ok(loadScores(scoreKeyFor('m03')).length === 0, '13.9: m03 list empty until saved');
+  const r = rankScore(loadScores(scoreKeyFor('m02')), { score: 60, time: 25, kills: 3, level: 2, date: '2026-01-02' }, CFG.scores.max);
+  ok(r.rank === 0 && r.isRecord, '13.9: ranking computed within the run-level list');
   delete globalThis.localStorage;
 }
 

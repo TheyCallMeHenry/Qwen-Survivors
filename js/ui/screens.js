@@ -35,6 +35,12 @@ export function saveScores(key, list, max = 10) {
   try { localStorage.setItem(key, JSON.stringify(list.slice(0, max))); } catch { /* private mode */ }
 }
 
+// Per-level score-list LS keys (13.9): Map 01 keeps the ORIGINAL key (no data loss);
+// other levels get siblings `qsurv.hiscores.<level>.v1`.
+export function scoreKeyFor(levelKey) {
+  return levelKey === LEVEL_ORDER[0] ? CFG.scores.storageKey : `qsurv.hiscores.${levelKey}.v1`;
+}
+
 // --- browser ---
 
 export function initScreens(game, { icons }) {
@@ -58,11 +64,13 @@ export function initScreens(game, { icons }) {
   const metaShards = $('meta-shards');
   const metaList = $('meta-list');
   const levelSelect = $('level-select');
-  const { storageKey, max } = CFG.scores;
+  const { max } = CFG.scores;
 
   let cur = '';
   let overlay = null; // 'scores' | 'quit' | 'upgrades' | null — local overlays above the menu
   let hurtTimer = null;
+  let bannerQueue = [];
+  let bannerAt = 0;
 
   const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
 
@@ -138,14 +146,27 @@ export function initScreens(game, { icons }) {
     else if (st === 'GAMEOVER') name = 'gameover';
     else name = 'none';
     if (name !== cur) { cur = name; show(name); if (name === 'menu') renderLevels(); }
+    // Banner queue (13.10): a queued banner (e.g. NEW MAP UNLOCKED after DAWN BREAKS)
+    // takes over once the current one holds for CFG.ui.bannerMs.
+    if (bannerQueue.length && performance.now() - bannerAt >= CFG.ui.bannerMs) {
+      banner.textContent = bannerQueue.shift();
+      banner.classList.remove('show');
+      void banner.offsetWidth; // reflow to restart the CSS animation
+      banner.classList.add('show');
+      bannerAt = performance.now();
+    }
   };
 
   // --- transients ---
   game.bus.on('banner', (b) => {
-    banner.textContent = b.text;
-    banner.classList.remove('show');
-    void banner.offsetWidth; // reflow to restart the CSS animation
-    banner.classList.add('show');
+    if (banner.classList.contains('show')) bannerQueue.push(b.text); // 13.10: queue instead of clobbering
+    else {
+      banner.textContent = b.text;
+      banner.classList.remove('show');
+      void banner.offsetWidth; // reflow to restart the CSS animation
+      banner.classList.add('show');
+      bannerAt = performance.now();
+    }
   });
   game.bus.on('hurt', () => {
     hurtFlash.classList.add('on');
@@ -202,8 +223,9 @@ export function initScreens(game, { icons }) {
       score: stats.score, time: stats.time, kills: stats.kills, level: stats.level,
       date: new Date().toISOString().slice(0, 10),
     };
-    const { list, isRecord } = rankScore(loadScores(storageKey), entry, max);
-    saveScores(storageKey, list, max);
+    const key = scoreKeyFor(game.levelKey || LEVEL_ORDER[0]);
+    const { list, isRecord } = rankScore(loadScores(key), entry, max);
+    saveScores(key, list, max);
     goNewRecord.classList.toggle('hidden', !isRecord);
     goStats.innerHTML = '';
     const row = (k, v) => {
@@ -216,6 +238,14 @@ export function initScreens(game, { icons }) {
     row('Kills', String(stats.kills));
     row('Level', String(stats.level));
     row('Soulshards', '+' + (stats.shards || 0));
+    // 13.10: unlock-progress line for the next locked level (victory lines stay deferred, D51)
+    for (const k of LEVEL_ORDER) {
+      const lvl = LEVELS[k];
+      if (!isUnlocked(game.wins, k)) {
+        row('Unlocks', `${lvl.name} — ${game.wins[lvl.unlock.level] || 0}/${lvl.unlock.wins} wins`);
+        break;
+      }
+    }
   });
 
   // --- upgrades (meta progression) screen ---
@@ -265,7 +295,7 @@ export function initScreens(game, { icons }) {
 
   // --- high scores screen ---
   function renderScores() {
-    const list = loadScores(storageKey);
+    const list = loadScores(scoreKeyFor(game.selectedLevelKey || LEVEL_ORDER[0]));
     scoresList.innerHTML = '';
     if (!list.length) {
       const li = document.createElement('li');
@@ -301,7 +331,7 @@ export function initScreens(game, { icons }) {
   on('btn-upgrades', () => { renderUpgrades(); overlay = 'upgrades'; });
   on('btn-upgrades-back', () => { overlay = null; });
   on('btn-quit', attemptClose);
-  on('btn-clear-scores', () => { saveScores(storageKey, [], max); renderScores(); });
+  on('btn-clear-scores', () => { saveScores(scoreKeyFor(game.selectedLevelKey || LEVEL_ORDER[0]), [], max); renderScores(); });
   on('btn-scores-back', () => { overlay = null; });
   on('btn-resume', () => game.resume());
   on('btn-restart', () => game.startRun());

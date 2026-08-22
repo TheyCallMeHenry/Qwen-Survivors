@@ -153,9 +153,9 @@ const { Input } = await import('../js/core/input.js');
 const { Game } = await import('../js/core/game.js');
 const { saveMeta, saveSelectedLevel } = await import('../js/core/meta.js');
 const { buildCharacters } = await import('../js/art/characters.js');
-const { buildItems, buildIcons } = await import('../js/art/items.js');
+const { buildItems, buildIcons, gemHeartFor } = await import('../js/art/items.js');
 const { initHud } = await import('../js/ui/hud.js');
-const { initScreens } = await import('../js/ui/screens.js');
+const { initScreens, saveScores } = await import('../js/ui/screens.js');
 const { aliveCap } = await import('../js/entities/spawner.js');
 const { getLevel } = await import('../js/world/levels.js');
 const { clamp } = await import('../js/utils/math.js');
@@ -175,8 +175,12 @@ const icons = buildIcons();
 for (const k of Object.keys(CFG.enemies))
   assert(characters[k] && characters[k].frames.length > 0, `characters missing enemy "${k}"`);
 assert(characters.player.idle.length > 0 && characters.player.run.length > 0, 'characters missing player frames');
-for (const k of ['gem', 'heart', 'orb', 'bolt', 'boomerang', 'blade', 'bullet', 'bomb', 'flame', 'explosion', 'burn', 'blight'])
+for (const k of ['orb', 'bolt', 'boomerang', 'blade', 'bullet', 'bomb', 'flame', 'explosion', 'burn', 'blight'])
   assert(items[k], `items missing "${k}"`);
+for (const lk of ['m01', 'm02', 'm03']) { // gem/heart are per-level now (13.10)
+  const gh = gemHeartFor(lk);
+  assert(gh.gem.width === 24 && gh.heart.width === 22, `gemHeartFor(${lk}) wrong sprite shape`);
+}
 
 let game;
 const loop = new Loop({
@@ -624,6 +628,30 @@ pump(90);
   assert(localStorage.getItem(CFG.scores.muteKey) === '0', 'settings mute: un-mute did not persist');
 }
 
+// 13.10 — per-level flavor: NEW MAP UNLOCKED banner (fires once when the cumulative-win
+// threshold crosses) + game-over unlock-progress line. Synthetic victories via the real
+// _gameOver path (state is MENU; the gameover screen + bus are the real ones).
+{
+  const unlockBanners = [];
+  game.bus.on('banner', (b) => { if (b.text === 'NEW MAP UNLOCKED') unlockBanners.push(b); });
+  game.wins.m01 = 2; // one win before the m02 unlock threshold (3×)
+  game._gameOver(true);
+  assert(unlockBanners.length === 1, '13.10: NEW MAP UNLOCKED banner did not fire at the 3rd m01 win');
+  assert(game.wins.m01 === 3, '13.10: victory did not record the win');
+  assert(byId['go-stats'].children.length === 12,
+    '13.10: game-over screen expected 6 stat rows (5 + Unlocks)');
+  assert(byId['go-stats'].children[11].textContent === 'The Drowned City — 0/3 wins',
+    '13.10: game-over screen missing the unlock-progress line');
+  byId['btn-go-menu'].click();
+  pump(30);
+  game._gameOver(true); // m03 still locked but nothing newly crossed → no second banner
+  assert(unlockBanners.length === 1, '13.10: NEW MAP UNLOCKED fired again without a new unlock');
+  byId['btn-go-menu'].click();
+  pump(30);
+  game.wins.m01 = 0; // restore clean state for the run-1..4 flow
+  saveScores(CFG.scores.storageKey, [], CFG.scores.max); // keep the scores E2E clean
+}
+
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start click did not start the run');
 assert(game.levelKey === 'm01', 'btn-start did not begin the selected level (m01)');
@@ -762,6 +790,9 @@ run = 3;
 game.levelKey = 'm02';
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start did not start the m02 run');
+const m02Gem = game.pickups.gemImg;
+assert(m02Gem && m02Gem.width === 24 && game.pickups.heartImg.width === 22,
+  '13.10: pickup reskin (gem/heart) not applied at m02 run start');
 assert(game.levelKey === 'm02' && game.level.diff === 1.25, 'm02 run did not take level m02 (diff 1.25)');
 assert(game.enemies.diff === 1.25, 'm02 run: enemies.diff not wired');
 for (const k of ['rat', 'bat', 'goblin', 'wolf', 'brute', 'cultist', 'ryu'])
@@ -780,6 +811,11 @@ assert(m02Banners.includes('RYŪ AWAKENS'), 'm02 boss banner did not name Ryū')
 assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
   `m02 run: expected victory, got state=${game.state} t=${game.t.toFixed(1)}s`);
 assert(game.kills > 0, 'm02 run: no kills (m02 roster never spawned?)');
+{
+  const m02Scores = JSON.parse(localStorage.getItem('qsurv.hiscores.m02.v1') || '[]');
+  assert(m02Scores.length === 1 && m02Scores[0].score === game.stats().score,
+    '13.9: m02 victory score not saved to the m02 list');
+}
 m02RunDone = true;
 
 // 13.5 — M03 "The Drowned City" REAL run (13.5): m03 weights + drowned slot skins +
@@ -790,6 +826,8 @@ assert(game.state === 'MENU', 'm03 run: btn-go-menu did not return to menu');
 game.levelKey = 'm03';
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start did not start the m03 run');
+assert(game.pickups.gemImg && game.pickups.gemImg !== m02Gem,
+  '13.10: m03 run did not reskin the pickups');
 assert(game.levelKey === 'm03' && game.level.diff === 1.56, 'm03 run did not take level m03 (diff 1.56)');
 assert(game.enemies.diff === 1.56, 'm03 run: enemies.diff not wired');
 for (const k of ['rat', 'bat', 'goblin', 'wolf', 'brute', 'cultist', 'shark'])
@@ -808,6 +846,11 @@ assert(m03Banners.includes('THE GREAT WHITE AWAKENS'), 'm03 boss banner did not 
 assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
   `m03 run: expected victory, got state=${game.state} t=${game.t.toFixed(1)}s`);
 assert(game.kills > 0, 'm03 run: no kills (m03 roster never spawned?)');
+{
+  const m03Scores = JSON.parse(localStorage.getItem('qsurv.hiscores.m03.v1') || '[]');
+  assert(m03Scores.length === 1 && m03Scores[0].score === game.stats().score,
+    '13.9: m03 victory score not saved to the m03 list');
+}
 m03RunDone = true;
 
 // self-verification: every one-shot path above must have actually fired
@@ -824,11 +867,13 @@ assert(benchPhase === 2, '10.4 worst-case bench never completed');
 assert(stickDone && stickUp, 'touch stick path never exercised');
 assert(m02RunDone, 'm02 real run (13.3) never completed');
 assert(m03RunDone, 'm03 real run (13.5) never completed');
+assert(JSON.parse(localStorage.getItem(CFG.scores.storageKey) || '[]').length === 0,
+  '13.9: m01 score list mutated by m02/m03 runs (cleared earlier; no cross-level leakage)');
 
 console.log(
   `PASS boot-sim — runs=4 (death + victory + m02 + m03) · level-ups=${levelUps} · max enemies alive=${maxEnemies} · ` +
   `meta: gameover shards saved → Upgrades buy → maxHp 120 at run start · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
   `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · scores save/render/clear · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · loop alive throughout`,
 );
