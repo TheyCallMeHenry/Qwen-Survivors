@@ -10,7 +10,7 @@ import { Enemies } from '../js/entities/enemies.js';
 import { Player, cardOffers, applyCard, recomputeStats, cardEffectText, charDef } from '../js/entities/player.js';
 import { Combat } from '../js/entities/combat.js';
 import { SNAP_V, WEAPON_KEYS, PASSIVE_KEYS, SYNERGY_KEYS, ENEMY_KEYS, E_FLAG_FLASH, E_FLAG_BURN, E_FLAG_BLIGHT, E_FLAG_BOSS, E_FLAG_FLIP, playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState } from '../js/net/sync.js';
-import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom } from '../js/core/meta.js';
+import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom, defaultChars, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar } from '../js/core/meta.js';
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
@@ -986,6 +986,50 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     recomputeStats(t);
     ok(near(t.maxHp, C[k].hp + 25 + 20) && near(t.dmgMul, 1.12 * 1.08 * C[k].dmg), `11.6.1: ${k} recomputeStats w/ passives + meta`);
   }
+}
+
+// --- 11.6.2 character unlock shop + selection persistence (D58, meta.js pattern) ---
+{
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+  };
+  const starter = CFG.characters.order[0];
+  ok(defaultChars().length === 1 && defaultChars()[0] === starter, '11.6.2: defaultChars = starter only');
+  ok(isCharUnlocked([], starter) && !isCharUnlocked([], 'warden'), '11.6.2: starter always unlocked, warden not by default');
+  ok(isCharUnlocked(['ranger'], 'ranger') && !isCharUnlocked(['ranger'], 'swash'), '11.6.2: unlocked list gates non-starters');
+  ok(!isCharUnlocked(['ghost'], 'ghost'), '11.6.2: ghost is not a buyable select char');
+  let r = buyChar(['mage'], 9999, 'warden');
+  ok(r.ok && r.chars.includes('warden') && r.shards === 9999 - CFG.characters.warden.cost, '11.6.2: buyChar spends the D58 cost');
+  r = buyChar(['mage'], 1499, 'ranger');
+  ok(!r.ok && r.shards === 1499 && !r.chars.includes('ranger'), '11.6.2: buyChar below cost no-ops');
+  r = buyChar(['mage', 'warden'], 9999, 'warden');
+  ok(!r.ok && r.shards === 9999, '11.6.2: buying an unlocked char no-ops (no double spend)');
+  r = buyChar(['mage'], 9999, 'nope');
+  ok(!r.ok && r.shards === 9999, '11.6.2: buyChar unknown key no-ops');
+  r = buyChar(['mage'], 9999, starter);
+  ok(!r.ok && r.shards === 9999, '11.6.2: buying the starter no-ops');
+
+  const KEY = 'qsurv.test.chars';
+  ok(isCharUnlocked(loadChars(KEY), starter) && loadChars(KEY).length === 1, '11.6.2: loadChars fresh LS → starter only');
+  saveChars(KEY, ['mage', 'ranger', 'bogus']);
+  const lc = loadChars(KEY);
+  ok(lc.length === 2 && lc.includes('ranger') && !lc.includes('bogus') && lc.includes('mage'),
+    '11.6.2: loadChars filters to valid keys + keeps the starter');
+  saveChars(KEY, 'corrupt{');
+  ok(loadChars(KEY).length === 1 && loadChars(KEY)[0] === starter, '11.6.2: loadChars corrupt JSON → default');
+
+  const CKEY = 'qsurv.test.char';
+  ok(loadSelectedChar(CKEY) === starter, '11.6.2: loadSelectedChar fresh LS → starter');
+  saveSelectedChar(CKEY, 'swash');
+  ok(loadSelectedChar(CKEY) === 'swash', '11.6.2: loadSelectedChar round-trips a valid char');
+  saveSelectedChar(CKEY, 'ghost');
+  ok(loadSelectedChar(CKEY) === 'swash', '11.6.2: saveSelectedChar rejects ghost (co-op-only)');
+  saveSelectedChar(CKEY, 'nope');
+  ok(loadSelectedChar(CKEY) === 'swash', '11.6.2: saveSelectedChar rejects unknown keys');
+  delete globalThis.localStorage;
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

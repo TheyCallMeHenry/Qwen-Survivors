@@ -295,6 +295,7 @@ export const CFG = {
     winsKey: 'qsurv.wins.v1',        // per-level cumulative victory counts (13.6)
     levelKey: 'qsurv.level.v1',      // last-selected level (13.7)
     charKey: 'qsurv.character.v1',   // last-selected playable character (11.6.2)
+    charListKey: 'qsurv.chars.v1',   // unlocked character keys (11.6.2, D58)
     shardPerScore: 400,   // shards per score point
     victoryBonus: 25,     // flat bonus shards on victory
     upgrades: {

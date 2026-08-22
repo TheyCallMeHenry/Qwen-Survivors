@@ -641,6 +641,55 @@ pump(90);
   assert(localStorage.getItem(CFG.scores.muteKey) === '0', 'settings mute: un-mute did not persist');
 }
 
+// 11.6.2 — character select E2E (D58 Soulshard shop + selection + run-start application)
+{
+  const cs = () => byId['char-list'].children;
+  localStorage.removeItem(CFG.meta.charListKey);
+  localStorage.removeItem(CFG.meta.charKey);
+  game.meta.shards = 9999;
+  saveMeta(CFG.meta.storageKey, game.meta);
+  let denied = 0;
+  const offDenied = game.bus.on('denied', () => denied++);
+
+  document.getElementById('btn-character').click();
+  pump(30);
+  assert(!byId['screen-select'].classList.contains('hidden'), '11.6.2: select screen not shown');
+  assert(byId['screen-menu'].classList.contains('hidden'), '11.6.2: menu screen not hidden under the select');
+  assert(cs().length === 4, `11.6.2: expected 4 char cards, got ${cs().length}`);
+  const [cm, cw, cr, csw] = cs();
+  assert(cm.classList.contains('sel'), '11.6.2: starter (mage) selected by default');
+  assert(cw.classList.contains('locked') && cr.classList.contains('locked') && csw.classList.contains('locked'),
+    '11.6.2: non-starters locked on fresh LS');
+  assert(cw.children[2].children[0].textContent.includes('3500'), '11.6.2: locked warden does not show its D58 cost');
+  assert(byId['char-shards'].textContent.includes('9999'), '11.6.2: shard wallet not rendered');
+
+  cw.click(); // affordable → buy + select in one tap
+  assert(game.charKey === 'warden' && game.player.charKey === 'warden', '11.6.2: warden purchase did not select it');
+  assert(game.chars.includes('warden') && game.meta.shards === 9999 - 3500, '11.6.2: warden purchase did not spend the 3500 cost');
+  assert(localStorage.getItem(CFG.meta.charKey) === 'warden', '11.6.2: warden selection not persisted');
+  assert(JSON.parse(localStorage.getItem(CFG.meta.charListKey)).includes('warden'), '11.6.2: warden unlock not persisted');
+  assert(cs()[1].classList.contains('sel') && !cs()[1].classList.contains('locked'), '11.6.2: re-render did not mark warden selected + unlocked');
+  assert(byId['char-shards'].textContent.includes('6499'), '11.6.2: shard wallet not updated after purchase');
+
+  csw.click(); // 7500 > 6499 remaining → denied, not selected
+  assert(denied === 1, '11.6.2: unaffordable tap did not emit the denied blip');
+  assert(csw.classList.contains('shake'), '11.6.2: unaffordable tap did not shake the card');
+  assert(game.charKey === 'warden' && game.meta.shards === 6499, '11.6.2: unaffordable tap changed the selection/shards');
+
+  byId['btn-char-confirm'].click(); // 2b: the select closes on confirm
+  pump(30);
+  assert(byId['screen-select'].classList.contains('hidden') && !byId['screen-menu'].classList.contains('hidden'),
+    '11.6.2: confirm did not close the select back to the menu');
+  assert(game.state === 'MENU', '11.6.2: select changed the game state');
+
+  // restore the clean solo-default state (fresh LS + mage + wallet) for the run flow below
+  game.setCharacter('mage');
+  game.meta.shards = 0;
+  saveMeta(CFG.meta.storageKey, game.meta);
+  localStorage.setItem(CFG.meta.charListKey, JSON.stringify(['mage']));
+  offDenied();
+}
+
 // 13.10 — per-level flavor: NEW MAP UNLOCKED banner (fires once when the cumulative-win
 // threshold crosses) + game-over unlock-progress line. Synthetic victories via the real
 // _gameOver path (state is MENU; the gameover screen + bus are the real ones).

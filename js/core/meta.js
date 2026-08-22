@@ -97,6 +97,53 @@ export function saveZoom(key, z) {
   try { localStorage.setItem(key, String(z)); } catch { /* private mode */ }
 }
 
+// Character unlocks (11.6.2, D58): the starter is always unlocked; the rest are
+// bought with Soulshards (cost in CFG.characters). Distinct from the map 3×-win
+// unlocks (D46) — same Soulshard economy as the Upgrades shop.
+export function defaultChars() {
+  return [CFG.characters.order[0]];
+}
+
+export function loadChars(key) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(key) || 'null');
+    const order = CFG.characters.order;
+    const list = Array.isArray(raw) ? order.filter((k) => raw.includes(k)) : [];
+    return list.includes(order[0]) ? list : [order[0], ...list];
+  } catch { return defaultChars(); }
+}
+
+export function saveChars(key, list) {
+  try { localStorage.setItem(key, JSON.stringify(list)); } catch { /* private mode */ }
+}
+
+export function isCharUnlocked(chars, key) {
+  const order = CFG.characters.order;
+  if (!order.includes(key)) return false; // ghost/unknown are not select chars
+  return key === order[0] || (chars || []).includes(key);
+}
+
+// Pure spend attempt (11.6.2): ok=false leaves shards/list untouched (no double
+// spend on the starter or an already-unlocked char; unknown keys rejected).
+export function buyChar(chars, shards, key) {
+  const def = CFG.characters[key];
+  if (!def || isCharUnlocked(chars, key)) return { chars, shards, ok: false };
+  if (shards < def.cost) return { chars, shards, ok: false };
+  return { chars: [...chars, key], shards: shards - def.cost, ok: true };
+}
+
+// Last-selected playable character (11.6.2) — persist/restore the select choice.
+// Invalid/absent storage falls back to the starter; ghost is co-op-only (never saved).
+export function loadSelectedChar(key) {
+  let saved = null;
+  try { saved = localStorage.getItem(key); } catch { return CFG.characters.order[0]; }
+  return CFG.characters.order.includes(saved) ? saved : CFG.characters.order[0];
+}
+
+export function saveSelectedChar(key, charKey) {
+  try { if (CFG.characters.order.includes(charKey)) localStorage.setItem(key, charKey); } catch { /* private mode */ }
+}
+
 // Shards earned from a finished run's stats ({score, victory}).
 export function shardsFor(stats) {
   const M = CFG.meta;

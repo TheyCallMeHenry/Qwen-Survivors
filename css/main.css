@@ -283,6 +283,43 @@ body.touch .kbd-only { display: none; }
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
 }
 
+/* ============ character select (11.6.2) ============ */
+.select-box { min-width: min(94vw, 480px); }
+.char-shards {
+  font-size: 18px; font-weight: 800; color: var(--accent2);
+  font-variant-numeric: tabular-nums;
+}
+.char-list { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.char-card {
+  display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center;
+  min-height: 72px; padding: 10px 14px;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: linear-gradient(180deg, rgba(24, 32, 52, 0.9), rgba(13, 18, 32, 0.9));
+  color: var(--text); text-align: left; cursor: pointer;
+  transition: border-color 0.12s ease, transform 0.08s ease;
+}
+.char-card:hover { border-color: var(--accent); }
+.char-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.char-card.sel {
+  border-color: rgba(94, 234, 212, 0.8);
+  box-shadow: 0 0 20px rgba(94, 234, 212, 0.18), inset 0 0 16px rgba(94, 234, 212, 0.06);
+}
+.char-card canvas { width: 64px; height: 74px; image-rendering: pixelated; }
+.char-card .char-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.char-card .char-info h3 { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: 0.03em; }
+.char-card .char-stats { font-size: 12.5px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+.char-card .char-weapon { font-size: 11.5px; font-weight: 700; color: var(--accent2); }
+.char-card .char-desc { margin: 0; font-size: 11.5px; line-height: 1.4; color: var(--dim); }
+.char-card .char-line { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; }
+.char-card .char-req { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: var(--danger); }
+.char-card.locked { cursor: not-allowed; border-style: dashed; color: var(--dim); }
+.char-card.locked:hover { border-color: var(--line); }
+.char-card.locked canvas { filter: saturate(0.3) brightness(0.7); }
+.char-card.taken { cursor: not-allowed; border-style: dashed; }
+.char-card.taken canvas { filter: grayscale(0.9) brightness(0.6); }
+.char-card.taken .char-info { opacity: 0.55; }
+.char-card.shake { animation: lv-shake 0.32s ease; }
+
 /* high scores */
 #scores-list {
   list-style: none; margin: 0; padding: 0; width: 100%;

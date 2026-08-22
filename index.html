@@ -53,6 +53,7 @@
       <div id="level-select" class="level-select" role="radiogroup" aria-label="Select level"></div>
       <div class="menu-buttons">
         <button id="btn-start" class="btn btn-primary">Start Game</button>
+        <button id="btn-character" class="btn">Character</button>
         <button id="btn-upgrades" class="btn">Upgrades</button>
         <button id="btn-scores" class="btn">High Scores</button>
         <button id="btn-quit" class="btn">Quit</button>
@@ -62,6 +63,18 @@
       <div class="controls-hint">
         <div class="hint-row kbd-only"><b>Move</b> WASD / arrows / click-drag &nbsp;·&nbsp; <b>Dash</b> Shift / Space / right-click &nbsp;·&nbsp; <b>Pause</b> Esc &nbsp;·&nbsp; <b>Mute</b> M</div>
         <div class="hint-row touch-only"><b>Move</b> touch &amp; drag &nbsp;·&nbsp; <b>Dash</b> bottom-right button &nbsp;·&nbsp; <b>Pause</b> top-right</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHARACTER SELECT (11.6.2 — full-screen 2b select, closes on confirm) -->
+  <div id="screen-select" class="screen hidden">
+    <div class="panel-box select-box">
+      <h2 class="screen-title">Choose Character</h2>
+      <div id="char-shards" class="char-shards"></div>
+      <div id="char-list" class="char-list" role="radiogroup" aria-label="Select character"></div>
+      <div class="menu-buttons menu-row">
+        <button id="btn-char-confirm" class="btn btn-primary">Confirm</button>
       </div>
     </div>
   </div>

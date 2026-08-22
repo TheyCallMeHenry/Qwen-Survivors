@@ -14,10 +14,10 @@ import { Pickups } from '../entities/pickups.js';
 import { Enemies } from '../entities/enemies.js';
 import { Combat } from '../entities/combat.js';
 import { Player, cardOffers, applyCard, recomputeStats } from '../entities/player.js';
-import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, loadSelectedLevel, isUnlocked, loadZoom, saveZoom } from './meta.js';
+import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, loadSelectedLevel, isUnlocked, loadZoom, saveZoom, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar } from './meta.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../entities/spawner.js';
 import { getLevel, LEVEL_ORDER } from '../world/levels.js';
-import { buildCharacters } from '../art/characters.js';
+import { buildCharacters, buildRoster } from '../art/characters.js';
 import { gemHeartFor } from '../art/items.js';
 import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
@@ -47,9 +47,17 @@ export class Game {
     this.combat.boltImg = items.bolt;
     this.combat.axeImg = items.boomerang;
     this.combat.bladeImg = items.blade;
-    this.player = new Player(characters.player);
-    this.player.flashes = [characters.player.idle.map(flashCopy), characters.player.run.map(flashCopy)];
-    this.playerShadow = shadowSprite(characters.player.shadowR, characters.player.shadowR, 0.35);
+    // Character roster (11.6.2, D58/D62): local ghost tint = seat 0; solo default =
+    // starter; the select screen (screens.js) drives setCharacter/buyCharacter.
+    this.roster = buildRoster(CFG.ghostColors[0]);
+    this.chars = loadChars(CFG.meta.charListKey);
+    this.charKey = loadSelectedChar(CFG.meta.charKey);
+    if (!isCharUnlocked(this.chars, this.charKey)) this.charKey = CFG.characters.order[0];
+    const sheet = this.roster[this.charKey];
+    this.player = new Player(sheet);
+    this.player.setCharacter(this.charKey);
+    this.player.flashes = [sheet.idle.map(flashCopy), sheet.run.map(flashCopy)];
+    this.playerShadow = shadowSprite(sheet.shadowR, sheet.shadowR, 0.35);
     this.players = [this.player]; // live player array (co-op: host sim + remote inputs, 11.2)
     this.remote = [];             // remote Player instances (host sim / client render)
     this.net = null;              // CoopConn (solo: never set → all co-op paths skip)
@@ -444,6 +452,32 @@ export class Game {
     this.meta.upgrades[key] = level + 1;
     saveMeta(CFG.meta.storageKey, this.meta);
     this.bus.emit('meta', this.meta);
+  }
+
+  // 11.6.2: select the playable character (persisted; co-op unique-per-player lands 11.6.4).
+  setCharacter(key) {
+    if (!CFG.characters[key] || !isCharUnlocked(this.chars, key)) return this.charKey;
+    this.player.setCharacter(key);
+    this.charKey = key;
+    saveSelectedChar(CFG.meta.charKey, key);
+    const sheet = this.roster[key]; // roster art/flash/shadow swap (D62)
+    this.player.def = sheet;
+    this.player.flashes = [sheet.idle.map(flashCopy), sheet.run.map(flashCopy)];
+    this.playerShadow = shadowSprite(sheet.shadowR, sheet.shadowR, 0.35);
+    this.bus.emit('char', key);
+    return key;
+  }
+
+  // 11.6.2: Soulshard character shop (D58) — same economy as Upgrades, own persisted list.
+  buyCharacter(key) {
+    const res = buyChar(this.chars, this.meta.shards, key);
+    if (!res.ok) return res;
+    this.chars = res.chars;
+    this.meta.shards = res.shards;
+    saveChars(CFG.meta.charListKey, this.chars);
+    saveMeta(CFG.meta.storageKey, this.meta);
+    this.bus.emit('meta', this.meta);
+    return res;
   }
 
   // --- combat callbacks (wired in constructor) ---

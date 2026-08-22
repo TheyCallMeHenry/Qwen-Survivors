@@ -7,7 +7,7 @@
 
 import { CFG } from '../config.js';
 import { fmtTime } from '../utils/math.js';
-import { upgradeCost, isUnlocked, saveSelectedLevel } from '../core/meta.js';
+import { upgradeCost, isUnlocked, saveSelectedLevel, isCharUnlocked } from '../core/meta.js';
 import { LEVELS, LEVEL_ORDER } from '../world/levels.js';
 import { cardEffectText } from '../entities/player.js';
 
@@ -47,6 +47,7 @@ export function initScreens(game, { icons }) {
   const $ = (id) => document.getElementById(id);
   const screens = {
     menu: $('screen-menu'),
+    select: $('screen-select'),
     scores: $('screen-scores'),
     pause: $('screen-pause'),
     levelup: $('screen-levelup'),
@@ -64,13 +65,15 @@ export function initScreens(game, { icons }) {
   const metaShards = $('meta-shards');
   const metaList = $('meta-list');
   const levelSelect = $('level-select');
+  const charList = $('char-list');
+  const charShards = $('char-shards');
   const coopBtn = $('btn-coop');
   const coopStatus = $('coop-status');
   const coopLeave = $('btn-coop-leave');
   const { max } = CFG.scores;
 
   let cur = '';
-  let overlay = null; // 'scores' | 'quit' | 'upgrades' | null — local overlays above the menu
+  let overlay = null; // 'scores' | 'select' | 'quit' | 'upgrades' | null — local overlays above the menu
   let hurtTimer = null;
   let bannerQueue = [];
   let bannerAt = 0;
@@ -137,6 +140,81 @@ export function initScreens(game, { icons }) {
         if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); choose(); }
       });
       levelSelect.append(card);
+    }
+  }
+
+  // --- character select (11.6.2): full-screen 2b select, closes on confirm (D61) ---
+  // Stats are shown per card (D57); locked cards show cost + requirement (D58) and
+  // buy + select in one tap when affordable. 11.6.4: taken set greys out co-op picks (D56).
+  function renderChars() {
+    charShards.textContent = `${game.meta.shards} ◆`;
+    charList.innerHTML = '';
+    const taken = new Set(); // 11.6.4 hook: chars selected by other seated players
+    for (const key of CFG.characters.order) {
+      const def = CFG.characters[key];
+      const unlocked = isCharUnlocked(game.chars, key);
+      const sel = key === game.charKey;
+      const card = document.createElement('div');
+      card.classList.add('char-card');
+      if (sel) card.classList.add('sel');
+      if (!unlocked) card.classList.add('locked');
+      if (taken.has(key)) card.classList.add('taken');
+      card.setAttribute('role', 'radio');
+      card.setAttribute('aria-checked', sel ? 'true' : 'false');
+      card.tabIndex = 0;
+      const sheet = game.roster[key];
+      const cv = document.createElement('canvas');
+      cv.width = sheet.w * 2; cv.height = sheet.h * 2;
+      cv.getContext('2d').drawImage(sheet.idle[0], 0, 0, sheet.w * 2, sheet.h * 2);
+      const info = document.createElement('div');
+      info.className = 'char-info';
+      const h = document.createElement('h3'); h.textContent = def.name;
+      const stats = document.createElement('div');
+      stats.className = 'char-stats';
+      stats.textContent = `HP ${def.hp} · Dmg ×${def.dmg} · Speed ${def.speed}`;
+      const wpn = document.createElement('div');
+      wpn.className = 'char-weapon';
+      wpn.textContent = `Starts with: ${CFG.weapons[def.weapon].name}`;
+      const p = document.createElement('p');
+      p.className = 'char-desc';
+      p.textContent = def.desc;
+      info.append(h, stats, wpn, p);
+      const line = document.createElement('div');
+      line.className = 'char-line';
+      if (taken.has(key)) {
+        const tk = document.createElement('span');
+        tk.className = 'char-req';
+        tk.textContent = 'TAKEN';
+        line.append(tk);
+      } else if (!unlocked) {
+        const req = document.createElement('span');
+        req.className = 'char-req';
+        req.textContent = `Locked · ${def.cost} ◆`;
+        line.append(req);
+      }
+      card.append(cv, info);
+      if (line.children.length) card.append(line);
+      const choose = () => {
+        if (taken.has(key)) {
+          game.bus.emit('denied'); // blip (sfx) + shake (below)
+          card.classList.add('shake');
+          setTimeout(() => card.classList.remove('shake'), 320);
+          return;
+        }
+        if (!unlocked && !game.buyCharacter(key).ok) {
+          game.bus.emit('denied');
+          card.classList.add('shake');
+          setTimeout(() => card.classList.remove('shake'), 320);
+          return;
+        }
+        game.setCharacter(key);
+        renderChars();
+      };
+      card.addEventListener('click', choose);
+      card.addEventListener('keydown', (e) => {
+        if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); choose(); }
+      });
+      charList.append(card);
     }
   }
 
@@ -321,7 +399,7 @@ export function initScreens(game, { icons }) {
       metaList.append(rowEl);
     }
   }
-  game.bus.on('meta', () => { if (overlay === 'upgrades') renderUpgrades(); });
+  game.bus.on('meta', () => { if (overlay === 'upgrades') renderUpgrades(); if (overlay === 'select') renderChars(); });
 
   // --- high scores screen ---
   function renderScores() {
@@ -357,6 +435,8 @@ export function initScreens(game, { icons }) {
     overlay = 'quit'; // fallback notice if close() is blocked
   }
   on('btn-start', () => game.startRun()); // no-arg → starts game.levelKey (the level-select choice, 13.7)
+  on('btn-character', () => { renderChars(); overlay = 'select'; });
+  on('btn-char-confirm', () => { overlay = null; });
   on('btn-scores', () => { renderScores(); overlay = 'scores'; });
   on('btn-upgrades', () => { renderUpgrades(); overlay = 'upgrades'; });
   on('btn-upgrades-back', () => { overlay = null; });
