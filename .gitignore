@@ -6,3 +6,6 @@ server-err.log
 # V8 crash dumps + profiling output (runtime artifacts, not source)
 isolate-*-v8.log
 prof-out.txt
+
+# Human-user local notes (session transcripts etc.) — never commit (public repo)
+human-user-notes_AI-agent-ignore/
