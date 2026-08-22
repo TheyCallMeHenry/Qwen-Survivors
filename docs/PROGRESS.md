@@ -9,7 +9,7 @@
 - **Gates (all three green before any tick):** `node tools/check.mjs` **33/33** · `node tools/test-logic.mjs` **384/384** · `node tools/test-boot.mjs` **`PASS boot-sim` (runs=4 + 11.1/11.2 E2E + 11.3 scaling + 11.4 leash + 11.5 exclusivity)**.
 - **Overall:** Phases 0–9 done (published) + 10.1–10.8 + 13.1–13.13 done (Phase 13 COMPLETE) + **11.1–11.5 done**; next **11.6 characters** → 11.7–11.12 → **11.13 web research** → **Phase 12 weapons** → **10.9 optimization (LAST, D25)** → **2.9 user browser sign-off** (re-verify post-co-op) → project DONE. Blocking: none.
 - **Published:** public repo `TheyCallMeHenry/Qwen-Survivors` (initial commit `03eeac2` + `667364f` Phase 8 docs) · Pages **https://theycallmehenry.github.io/Qwen-Survivors/** (the share link; repo must stay public — flip back: `gh repo edit --visibility private`).
-- **Git:** last commit `3eb8783` (11.4) pushed 2026-08-22; **11.5 changes uncommitted** (commit only if the user asks, AGENTS rule 7). Pages auto-deploys from main within a few minutes.
+- **Git:** tree clean — 11.5 level-up scoping + weapon exclusivity committed + pushed 2026-08-22 (= `4292001`; prior: `3eb8783` 11.4). Pages auto-deploys from main within a few minutes. Commit only if the user asks (AGENTS rule 7).
 - **Server:** detached node on **47893** (log `server.log`; dies on reboot). Check before starting another: `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:47893/` → 200 = already up.
 
 ## Master Checklist
