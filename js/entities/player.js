@@ -4,10 +4,17 @@
 import { CFG } from '../config.js';
 import { approach, clamp } from '../utils/math.js';
 
+// 11.6: playable-character stat lookup (D57). `key` = character key; falls back to the
+// starter (mage) so plain test objects without charKey behave as the solo default.
+export function charDef(key) {
+  return CFG.characters[key] || CFG.characters.mage;
+}
+
 export class Player {
   constructor(def) {
     this.def = def; // characters.player {w, h, shadowR, idle[2], run[4]}
     this.flashes = null; // [idleFlash[2], runFlash[4]] — injected (browser)
+    this.charKey = 'mage'; // 11.6: selected playable (solo default = starter, D58)
     this.x = 0; this.y = 0; this.vx = 0; this.vy = 0;
     this.r = CFG.player.r;
     this.maxHp = CFG.player.maxHp;
@@ -32,15 +39,23 @@ export class Player {
     this._flameAng = 0;
   }
 
+  // 11.6: select the playable character (D56: unique per co-op player; solo: menu pick).
+  // Unknown keys are ignored (solo default stays mage).
+  setCharacter(key) {
+    if (CFG.characters[key]) this.charKey = key;
+    return this.charKey;
+  }
+
   reset(x, y) {
+    const c = charDef(this.charKey);
     this.x = x; this.y = y; this.vx = 0; this.vy = 0;
-    this.maxHp = CFG.player.maxHp;
+    this.maxHp = c.hp;
     this.hp = this.maxHp;
     this.iframes = 0; this.flash = 0;
     this.dashT = 0; this.dashCd = 0; this.dashAng = 0; this.aimAng = 0;
     this.level = 1; this.xp = 0;
     this.weapons = {};
-    for (const k of CFG.player.startWeapons) this.weapons[k] = 1;
+    if (c.weapon) this.weapons[c.weapon] = 1; // 11.6/D34: per-character starting weapon (ghost: none)
     this.passives = {};
     this.synergies = {};
     this.dmgMul = 1; this.speedMul = 1; this.magnet = 1; this.regen = 0;
@@ -99,7 +114,7 @@ export class Player {
       this.vx = Math.cos(this.dashAng) * P.dashSpeed;
       this.vy = Math.sin(this.dashAng) * P.dashSpeed;
     } else if (am > 0.1) {
-      const sp = P.speed * this.speedMul;
+      const sp = charDef(this.charKey).speed * this.speedMul; // 11.6: per-character base speed
       this.vx = approach(this.vx, ax * sp, P.accel, dt);
       this.vy = approach(this.vy, ay * sp, P.accel, dt);
     } else {
@@ -394,11 +409,12 @@ function _metaEffect(key, level) {
 
 // Rebuild derived stats from the passive table. target = Player or plain object.
 export function recomputeStats(p) {
-  p.dmgMul = (1 + CFG.passives.dmg.val * (p.passives.dmg || 0)) * (1 + (p.metaDmg || 0));
+  const c = charDef(p.charKey); // 11.6: per-character base stats (D57)
+  p.dmgMul = (1 + CFG.passives.dmg.val * (p.passives.dmg || 0)) * (1 + (p.metaDmg || 0)) * c.dmg;
   p.speedMul = (1 + CFG.passives.speed.val * (p.passives.speed || 0)) * (1 + (p.metaSpeed || 0));
   p.magnet = 1 + CFG.passives.magnet.val * (p.passives.magnet || 0);
   p.regen = CFG.passives.regen.val * (p.passives.regen || 0);
-  p.maxHp = CFG.player.maxHp + CFG.passives.hp.val * (p.passives.hp || 0) + (p.metaHp || 0);
+  p.maxHp = c.hp + CFG.passives.hp.val * (p.passives.hp || 0) + (p.metaHp || 0);
 }
 
 // Up to 3 distinct upgrade candidates: weapon upgrades, new weapons (≤ cap),

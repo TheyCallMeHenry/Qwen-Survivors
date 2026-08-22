@@ -7,7 +7,7 @@ import { LEVELS, LEVEL_ORDER, getLevel } from '../js/world/levels.js';
 import { HashGrid } from '../js/utils/grid.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../js/entities/spawner.js';
 import { Enemies } from '../js/entities/enemies.js';
-import { Player, cardOffers, applyCard, recomputeStats, cardEffectText } from '../js/entities/player.js';
+import { Player, cardOffers, applyCard, recomputeStats, cardEffectText, charDef } from '../js/entities/player.js';
 import { Combat } from '../js/entities/combat.js';
 import { SNAP_V, WEAPON_KEYS, PASSIVE_KEYS, SYNERGY_KEYS, ENEMY_KEYS, E_FLAG_FLASH, E_FLAG_BURN, E_FLAG_BLIGHT, E_FLAG_BOSS, E_FLAG_FLIP, playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState } from '../js/net/sync.js';
 import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom } from '../js/core/meta.js';
@@ -229,12 +229,13 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(flaOk, 'weapons.flame: tick↑ dot↑ range↑ fuel↑ recharge↓');
 }
 
-// --- Passives / startWeapons / boss / spawner weights ---
+// --- Passives / character starting weapons / boss / spawner weights ---
 {
   let pasOk = true;
   for (const p of Object.values(CFG.passives)) if (!(p.max > 0 && p.val > 0)) pasOk = false;
   ok(pasOk, 'passives: max/val positive');
-  ok(CFG.player.startWeapons.every((k) => CFG.weapons[k]), 'startWeapons: keys exist in weapons');
+  ok(CFG.characters.order.every((k) => CFG.weapons[CFG.characters[k].weapon]) && CFG.characters.ghost.weapon === null,
+    'characters: starting weapons exist in weapons (ghost: none)');
   const bosses = Object.keys(CFG.enemies).filter((k) => CFG.enemies[k].boss);
   ok(bosses.length === 3 && bosses[0] === 'wraith' && bosses[1] === 'ryu' && bosses[2] === 'shark', 'enemies: bosses wraith (m01) + ryu (m02) + shark (m03)');
   const wk = Object.keys(getLevel('m01').weights(300));
@@ -375,12 +376,14 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   const p = { passives: {} };
   applyMeta(p, { shards: 0, upgrades: { maxHp: 1, dmg: 0, speed: 0, xp: 0, dash: 0 } });
   recomputeStats(p);
-  ok(p.maxHp === 120, 'applyMeta + recomputeStats: maxHp L1 → maxHp 120');
+  ok(p.maxHp === 80, 'applyMeta + recomputeStats: maxHp L1 → 80 (mage 60 + 20; plain obj = solo default)');
 }
 
 // --- applyCard (pure) ---
 {
-  const mk = () => ({ weapons: { wand: 1 }, passives: {}, maxHp: 100, hp: 100, dmgMul: 1, speedMul: 1, magnet: 1, regen: 0 });
+  // charKey 'ghost' = baseline stats (D59) so this block tests passive mechanics,
+  // not character values (the 11.6.1 block covers per-char stats).
+  const mk = () => ({ charKey: 'ghost', weapons: { wand: 1 }, passives: {}, maxHp: 100, hp: 100, dmgMul: 1, speedMul: 1, magnet: 1, regen: 0 });
   let t = mk();
   applyCard(t, { kind: 'weapon', key: 'wand', level: 2 });
   ok(t.weapons.wand === 2, 'applyCard: weapon upgrade sets level');
@@ -950,6 +953,39 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     const o = [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 300, y: 500 }][i];
     return Math.hypot(tri[0] - o.x, tri[1] - o.y) <= R + 1e-6;
   }), '11.4: 3 others (4P worst case) → within R of every one');
+}
+
+// --- 11.6.1 character roster: CFG table + per-char stats (D28/D56–D62; stat values O pending user approval) ---
+{
+  const C = CFG.characters;
+  ok(C.order.length === 4 && C.order.every((k) => C[k] && C[k].name && C[k].desc), '11.6.1: order defines 4 named chars with select desc');
+  ok(C.mage.cost === 0 && C.ranger.cost === 1500 && C.warden.cost === 3500 && C.swash.cost === 7500,
+    '11.6.1: D58 costs — mage 0, ranger 1500, warden 3500, swash 7500');
+  ok(C.order.every((k) => CFG.weapons[C[k].weapon]) && C.ghost.weapon === null, '11.6.1: starting weapons in weapons (ghost: none)');
+  ok(C.ghost.hp === 100 && C.ghost.dmg === 1 && C.ghost.speed === 265, '11.6.1: ghost = baseline (100 / 1.0 / 265)');
+  ok(C.order.every((k) => C[k].hp > 0 && C[k].dmg > 0 && C[k].speed > 0), '11.6.1: stats positive');
+  ok(charDef('nope') === C.mage && charDef('mage') === C.mage, '11.6.1: charDef unknown → mage');
+  const p0 = new Player({});
+  ok(p0.charKey === 'mage', '11.6.1: solo default charKey = mage');
+  p0.setCharacter('nope');
+  ok(p0.charKey === 'mage', '11.6.1: setCharacter ignores unknown');
+  for (const k of [...C.order, 'ghost']) {
+    const pl = new Player({});
+    pl.setCharacter(k);
+    pl.reset(0, 0);
+    const w = C[k].weapon;
+    ok(pl.maxHp === C[k].hp && pl.hp === C[k].hp
+      && Object.keys(pl.weapons).length === (w ? 1 : 0)
+      && (!w || pl.weapons[w] === 1), `11.6.1: ${k} reset → hp ${C[k].hp} + starting weapon ${w || 'none'}`);
+  }
+  for (const k of [...C.order, 'ghost']) {
+    const t = { charKey: k, passives: {} };
+    recomputeStats(t);
+    ok(near(t.maxHp, C[k].hp) && near(t.dmgMul, C[k].dmg) && t.speedMul === 1, `11.6.1: ${k} recomputeStats base (plain obj)`);
+    t.passives = { hp: 1, dmg: 1 }; t.metaHp = 20; t.metaDmg = 0.08;
+    recomputeStats(t);
+    ok(near(t.maxHp, C[k].hp + 25 + 20) && near(t.dmgMul, 1.12 * 1.08 * C[k].dmg), `11.6.1: ${k} recomputeStats w/ passives + meta`);
+  }
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

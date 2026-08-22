@@ -7,7 +7,7 @@
 // user's path: btn-start click → run 1 (stand still → level-up cards → heart
 // pickup → forced death) → meta flow (gameover saves Soulshards → menu →
 // Upgrades screen: assert rows/shards, buy Vitality, back) → run 2 via
-// btn-start (meta maxHp 120 applied → kept alive → all 7 weapons via forced
+// btn-start (meta maxHp 80 applied (mage 60 + 20) → kept alive → all 7 weapons via forced
 // card picks → wand-off kill window → bullets/bombs/flames observed → burn
 // DoT kill → dash i-frame E2E → touch stick + dash button → synergy E2E:
 // all-max → blight card drawn + picked → wraith boss at 4:00 → victory at
@@ -152,7 +152,7 @@ const { Loop } = await import('../js/core/loop.js');
 const { Input } = await import('../js/core/input.js');
 const { Game } = await import('../js/core/game.js');
 const { saveMeta, saveSelectedLevel } = await import('../js/core/meta.js');
-const { buildCharacters } = await import('../js/art/characters.js');
+const { buildCharacters, buildRoster } = await import('../js/art/characters.js');
 const { buildItems, buildIcons, gemHeartFor } = await import('../js/art/items.js');
 const { initHud } = await import('../js/ui/hud.js');
 const { initScreens, saveScores } = await import('../js/ui/screens.js');
@@ -176,6 +176,18 @@ const icons = buildIcons();
 for (const k of Object.keys(CFG.enemies))
   assert(characters[k] && characters[k].frames.length > 0, `characters missing enemy "${k}"`);
 assert(characters.player.idle.length > 0 && characters.player.run.length > 0, 'characters missing player frames');
+// 11.6.1 roster art (D28/D62): 5 sheets × idle[2]/run[4]; warden sheet strictly
+// LARGER than the original player sprite but < brute (area, D62); ghost tint rebuild.
+{
+  const roster = buildRoster();
+  for (const k of [...CFG.characters.order, 'ghost'])
+    assert(roster[k] && roster[k].idle.length === 2 && roster[k].run.length === 4 && roster[k].w > 0 && roster[k].h > 0,
+      `roster missing "${k}" frames/sizes`);
+  assert(roster.mage.w * roster.mage.h === 56 * 64, '11.6.1: mage sheet 56×64 (original player)');
+  assert(roster.warden.w * roster.warden.h > roster.mage.w * roster.mage.h
+    && roster.warden.w * roster.warden.h < 64 * 60, '11.6.1 D62: player < warden area < brute (64×60)');
+  buildRoster('#4be3ff'); // D62 per-seat tint rebuild — no crash
+}
 for (const k of ['orb', 'bolt', 'boomerang', 'blade', 'bullet', 'bomb', 'flame', 'explosion', 'burn', 'blight'])
   assert(items[k], `items missing "${k}"`);
 for (const lk of ['m01', 'm02', 'm03']) { // gem/heart are per-level now (13.10)
@@ -280,8 +292,8 @@ function steer() {
     }
     const missing = ['axe', 'garlic', 'blades', 'pistols', 'bombs', 'flame'].filter((k) => !game.player.weapons[k]);
     if (missing.length) {
-      // startWeapons is ['wand'] — force the other weapons through the real
-      // pickCard/applyCard pipeline (the click still goes through the card DOM).
+      // the starting weapon is wand (mage default) — force the other weapons
+      // through the real pickCard/applyCard pipeline (the click still goes through the card DOM).
       game.cards = missing.map((k) => ({ kind: 'weapon', key: k, level: 1 }));
       cards[0].click();
     } else if (!keyPickDone) {
@@ -708,7 +720,7 @@ dashIFrameStep = 0; dashIFrameHp0 = 0;
 synActive = synDone = false; synRetries = 0;
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start click did not start run 2');
-assert(game.player.maxHp === 120, 'meta maxHp upgrade not applied at run start (100 + 20 expected)');
+assert(game.player.maxHp === 80, 'meta maxHp upgrade not applied at run start (mage 60 + 20 expected)');
 // Pump UNTIL victory (capped), not a fixed frame count: with the 10.5 spawn
 // band the keep-alive player farms XP near-continuously → back-to-back LEVELUP
 // states freeze the clock, and the victory check (after the level-up return in
@@ -1115,7 +1127,7 @@ m03RunDone = true;
   const gained = Object.keys(pl1.weapons).filter((k) => (pl1.weapons[k] || 0) > (pl1Owned0[k] || 0));
   assert(!gained.includes('garlic'), '11.5: owned weapon never auto-picked for a remote');
   // Ownership is asserted for true first-picks only: the starting wand
-  // (CFG.player.startWeapons) is granted at reset by nobody, so upgrades to
+  // (CFG.characters.mage.weapon) is granted at reset by nobody, so upgrades to
   // pre-owned weapons never register an owner.
   for (const k of gained) if (!(pl1Owned0[k] || 0) > 0) assert(hostG.weaponOwner[k] === pl1, `11.5: remote first-pick owns ${k}`);
   pl1.passives = pl1Passives0; recomputeStats(pl1); // restore the live sim
@@ -1151,7 +1163,7 @@ assert(JSON.parse(localStorage.getItem(CFG.scores.storageKey) || '[]').length ==
 
 console.log(
   `PASS boot-sim — runs=4 (death + victory + m02 + m03) · level-ups=${levelUps} · max enemies alive=${maxEnemies} · ` +
-  `meta: gameover shards saved → Upgrades buy → maxHp 120 at run start · ` +
+  `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
   `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
   `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) · loop alive throughout`,

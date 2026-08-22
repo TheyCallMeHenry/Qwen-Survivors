@@ -11,11 +11,16 @@ Applies to every agent session in this repo. Overrides personal defaults where s
 5. **Tuning lives in `js/config.js`.** Don't scatter magic numbers; add to config.
 6. **Mobile parity is a requirement**, not polish: touch targets ≥ 72 px, safe-area insets, pause-on-blur, gesture audio unlock.
 7. **No git commits unless the user explicitly asks.**
-8. **User-input documentation = capture-before-reason.** When a human-user message arrives that is not on the denylist, the FIRST tool call of the turn is an append to `docs/USER-INPUT-LOG.md` — no analysis, planning, research, or implementation may precede the write. Rationale (measured, not opinion): context recall degrades with token position and total length; compaction silently drops critical items whose importance surfaces later; this log is the only durable copy of the user's words.
+8. **User-input documentation = capture-before-reason.** When a human-user message arrives that is not on the denylist, the FIRST tool call of the turn is an append to `docs/USER-INPUT-LOG.md` — insert the entry block immediately after the stable `## Entries (newest first)` line (known from this rule; no prior read needed) — no analysis, planning, research, or implementation may precede the write. Rationale (measured, not opinion): context recall degrades with token position and total length; compaction silently drops critical items whose importance surfaces later; this log is the only durable copy of the user's words.
    - **Format (newest first):** `### YYYY-MM-DD HH:MM TZ — title` · **Received:** · **Classification:** `bug report` | `feature request` | `design decision` | `answer/approval` | `feedback` | `process rule` · **Context:** one line (max ~20 words) · **Verbatim input:** the user's complete message, their words, verbatim, unmodified, in a fenced block — **no omissions, no meta-line trimming**. Use the user-provided time if the message contains one; otherwise date only.
    - **After the write:** act on the input. In working context, reference the entry by title; never re-quote the body.
-   - **Denylist (never document):** bare control words with no other content (“continue”, “proceed”, “ok”, “thanks”) *unless they answer the agent's pending question*; commonly-repeated template prompts (kick-off, closing/handoff, “Stage, commit, push.”, “proceed”-family); an explicit user opt-out (“DO NOT DOCUMENT…”). Agent-side content (thinking/tool output) is not a user message and never enters the log.
-   - **When in doubt, document** — a false capture costs one line; a miss is unrecoverable.
+   - **Denylist (never document):**
+     - The session kick-off prompt, exact text (with or without a leading banner line such as “**IMMEDIATE INSTRUCTIONS:**”): “Please review this project's documentation to get up-to-speed on the current status of development and implementation then propose your recommendation for the phase(s)/step(s) we should complete within this new session.”
+     - Bare control words with no other content (“continue”, “proceed”, “ok”, “thanks”) *unless they answer the agent's pending question*
+     - Commonly-repeated template prompts (closing/handoff, “Stage, commit, push.”, “proceed”-family)
+     - An explicit user opt-out (“DO NOT DOCUMENT…”)
+     Agent-side content (thinking/tool output) is not a user message and never enters the log.
+   - **Precedence:** denylist match → never document — the doubt tiebreaker does NOT apply to denylist matches (template text is the user's own repeated wording; it is recoverable). A template **plus** substantive additions is not a denylist match → document it. Otherwise: **when in doubt, document** — a false capture costs one line; a miss is unrecoverable.
 
 ## Commands
 

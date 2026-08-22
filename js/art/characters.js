@@ -44,6 +44,140 @@ function playerFrame(dy, legL, legR) {
   });
 }
 
+// Warden 58×66 — heavy plate armor (D62: bigger than the mage, smaller than the brute 64×60), steel + amber.
+function wardenFrame(dy, legL, legR) {
+  return canvasOf(58, 66, (g) => {
+    g.save();
+    g.translate(0, dy);
+    // heavy boots
+    g.fillStyle = '#232a38';
+    g.fillRect(19 + legL, 52, 9, 12);
+    g.fillRect(32 + legR, 52, 9, 12);
+    // tower shield on back
+    roundRectPath(g, 6, 28, 9, 22, 3);
+    g.fillStyle = '#333d52';
+    g.fill();
+    // torso plate
+    roundRectPath(g, 14, 26, 31, 30, 7);
+    g.fillStyle = '#46536b';
+    g.fill();
+    g.strokeStyle = '#ffb454';
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(17, 50); g.lineTo(42, 50); g.stroke();
+    // pauldrons
+    g.fillStyle = '#55627c';
+    g.beginPath(); g.arc(18, 28, 6.5, 0, TAU); g.fill();
+    g.beginPath(); g.arc(43, 28, 6.5, 0, TAU); g.fill();
+    // helmet + visor slit (facing right)
+    g.fillStyle = '#4d5a74';
+    g.beginPath(); g.arc(32, 15, 10, 0, TAU); g.fill();
+    g.fillStyle = '#0d1118';
+    g.fillRect(30, 12, 12, 5);
+    g.fillStyle = '#ffb454';
+    g.beginPath(); g.arc(38, 14.5, 1.4, 0, TAU); g.fill();
+    g.restore();
+  });
+}
+
+// Ranger 52×60 — lean light armor, quiver + bow (fast, balanced).
+function rangerFrame(dy, legL, legR) {
+  return canvasOf(52, 60, (g) => {
+    g.save();
+    g.translate(0, dy);
+    // legs
+    g.fillStyle = '#26332a';
+    g.fillRect(20 + legL, 42, 6, 14);
+    g.fillRect(28 + legR, 42, 6, 14);
+    // quiver on back + arrow nocks
+    roundRectPath(g, 8, 18, 8, 20, 3);
+    g.fillStyle = '#4a3b28';
+    g.fill();
+    g.strokeStyle = '#c9a06a';
+    g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(9.5, 20); g.lineTo(9.5, 15); g.stroke();
+    g.beginPath(); g.moveTo(12.5, 20); g.lineTo(12.5, 16); g.stroke();
+    // tunic
+    roundRectPath(g, 15, 26, 22, 20, 5);
+    g.fillStyle = '#3d5a45';
+    g.fill();
+    // hood + face + eyes (facing right)
+    g.fillStyle = '#33503c';
+    g.beginPath(); g.arc(28, 16, 9, 0, TAU); g.fill();
+    g.fillStyle = '#0d1118';
+    g.beginPath(); g.arc(30.5, 17, 5.5, 0, TAU); g.fill();
+    g.fillStyle = '#a4ffc9';
+    g.beginPath(); g.arc(32, 16.5, 1.2, 0, TAU); g.fill();
+    g.beginPath(); g.arc(34.5, 18, 1.1, 0, TAU); g.fill();
+    // bow in the front hand
+    g.strokeStyle = '#c9a06a';
+    g.lineWidth = 2;
+    g.beginPath(); g.arc(38, 32, 9, -TAU / 4, TAU / 4); g.stroke();
+    g.restore();
+  });
+}
+
+// Swashbuckler 54×62 — duster, sash, saber (agile, upper-medium).
+function swashFrame(dy, legL, legR) {
+  return canvasOf(54, 62, (g) => {
+    g.save();
+    g.translate(0, dy);
+    // legs
+    g.fillStyle = '#33283c';
+    g.fillRect(20 + legL, 44, 6, 14);
+    g.fillRect(29 + legR, 44, 6, 14);
+    // saber on back
+    g.strokeStyle = '#d9e2f0';
+    g.lineCap = 'round';
+    g.lineWidth = 2.5;
+    g.beginPath(); g.moveTo(16, 28); g.lineTo(6, 44); g.stroke();
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(10, 26); g.lineTo(16, 24); g.stroke();
+    // duster + gold sash
+    roundRectPath(g, 16, 26, 22, 22, 5);
+    g.fillStyle = '#6a3a4a';
+    g.fill();
+    g.strokeStyle = '#e8b45a';
+    g.lineWidth = 2.5;
+    g.beginPath(); g.moveTo(18, 30); g.lineTo(36, 42); g.stroke();
+    // head: hair + face + eyes (facing right)
+    g.fillStyle = '#c98a4b';
+    g.beginPath(); g.arc(29, 15, 9, TAU / 2, TAU * 1.5); g.fill();
+    g.beginPath(); g.arc(21, 17, 4, 0, TAU); g.fill(); // back tuft
+    g.fillStyle = '#e8c39e';
+    g.beginPath(); g.arc(30, 17, 7.5, 0, TAU); g.fill();
+    g.fillStyle = '#33283c';
+    g.beginPath(); g.arc(33, 16.5, 1.2, 0, TAU); g.fill();
+    g.beginPath(); g.arc(35.5, 18, 1.1, 0, TAU); g.fill();
+    g.restore();
+  });
+}
+
+// Ghost 56×64 — classic sheet (D62), tinted per player (Pac-Man ghost colors, CFG.ghostColors).
+function ghostFrame(color, dy, legL, legR) {
+  return canvasOf(56, 64, (g) => {
+    g.save();
+    g.translate(0, dy);
+    // sheet body: dome + sides down to a scalloped hem (hem waves with the run cycle)
+    g.fillStyle = color;
+    g.beginPath();
+    g.arc(28, 24, 20, Math.PI, TAU);
+    g.lineTo(48, 52);
+    const hem = 52 + (legL > 0 ? 2 : 0);
+    g.quadraticCurveTo(44, hem + 8, 40, 52 + (legL < 0 ? 2 : 0));
+    g.quadraticCurveTo(36, hem + 8, 32, 52);
+    g.quadraticCurveTo(28, hem + 8, 24, 52 + (legL > 0 ? 2 : 0));
+    g.quadraticCurveTo(20, hem + 8, 16, 52);
+    g.lineTo(8, 24);
+    g.closePath();
+    g.fill();
+    // eyes (facing right)
+    g.fillStyle = '#0d1118';
+    g.beginPath(); g.ellipse(32, 22, 2.6, 3.4, 0, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(39, 23, 2.6, 3.4, 0, 0, TAU); g.fill();
+    g.restore();
+  });
+}
+
 function ratFrame() {
   return canvasOf(30, 26, (g) => {
     g.strokeStyle = '#8a7070';
@@ -772,4 +906,26 @@ export function buildCharacters(levelKey) {
     out.wraith = out.shark; // boss key swap — the m03 boss IS the Great White
   }
   return out;
+}
+
+// Playable-character roster art (11.6, D60): one builder per character, Player-def shaped
+// {w, h, shadowR, idle[2], run[4]} — same convention as `player` above. The mage reuses
+// the ORIGINAL frames (D62: starter keeps the Phase-10 look, bit-identity). `ghostColor`
+// tints the sheet (D62; seat order via CFG.ghostColors) — default = seat 0.
+export function buildRoster(ghostColor) {
+  const run = [[4, 0], [0, 0], [-4, 0], [0, 0]];
+  const mk = (frame, w, h, shadowR) => ({
+    w, h, shadowR,
+    idle: [frame(0, 0, 0), frame(-1, 0, 0)],
+    run: run.map(([l, r], i) => frame(i % 2 ? -1 : 0, l, r)),
+  });
+  const gc = ghostColor || '#ff4b4b';
+  const ghost = (dy, legL, legR) => ghostFrame(gc, dy, legL, legR);
+  return {
+    mage: mk(playerFrame, 56, 64, 12),
+    warden: mk(wardenFrame, 58, 66, 13),
+    ranger: mk(rangerFrame, 52, 60, 11),
+    swash: mk(swashFrame, 54, 62, 12),
+    ghost: mk(ghost, 56, 64, 12),
+  };
 }
