@@ -1,7 +1,7 @@
 // Terrain: grass tiles, ground decals, trees, rocks, village props, mountains, lakes.
 // Standing sprites have their base (feet/bottom) at the bottom-center of the canvas.
 
-import { makeCanvas, poly, sideShade, rimLight, flipX } from './base.js';
+import { makeCanvas, poly, sideShade, rimLight, flipX, glowSprite } from './base.js';
 import { mulberry32, TAU, lerp } from '../utils/math.js';
 
 function grassTile2(rng, tone) {
@@ -597,6 +597,369 @@ function lantern(v) { // 30x56 tooro (stone lantern)
   return c;
 }
 
+// --- m03 (The Drowned City) ground decals ---
+
+function sandTile3(rng, tone) {
+  const c = makeCanvas(256, 256);
+  const g = c.getContext('2d');
+  g.fillStyle = ['#0a1e28', '#091b24', '#0b2029'][tone];
+  g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 24; i++) {
+    const x = rng() * 256, y = rng() * 256, r = 16 + rng() * 34;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, rng() < 0.5 ? 'rgba(22,52,66,0.10)' : 'rgba(2,8,12,0.12)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  for (let i = 0; i < 90; i++) {
+    g.fillStyle = rng() < 0.5 ? 'rgba(60,100,120,0.4)' : 'rgba(4,12,18,0.5)';
+    g.fillRect(rng() * 256, rng() * 256, 2, 1);
+  }
+  for (let i = 0; i < 6; i++) { // faint bioluminescent plankton flecks
+    g.fillStyle = 'rgba(120,220,230,0.35)';
+    g.beginPath();
+    g.arc(rng() * 256, rng() * 256, 0.8 + rng() * 0.8, 0, TAU);
+    g.fill();
+  }
+  return c;
+}
+
+function sandTuft() { // 22x16: ripple lines
+  const c = makeCanvas(22, 16);
+  const g = c.getContext('2d');
+  g.strokeStyle = 'rgba(150,190,200,0.30)';
+  g.lineWidth = 1.2;
+  for (let i = 0; i < 3; i++) {
+    g.beginPath();
+    g.moveTo(2, 4 + i * 4);
+    g.quadraticCurveTo(11, 1 + i * 4, 20, 5 + i * 4);
+    g.stroke();
+  }
+  return c;
+}
+
+function bubbleRise() { // 14x18: small rising bubbles
+  const c = makeCanvas(14, 18);
+  const g = c.getContext('2d');
+  g.strokeStyle = 'rgba(190,235,255,0.45)';
+  g.lineWidth = 1;
+  for (const [x, y, r] of [[4, 14, 1.4], [9, 9, 1.8], [6, 3, 2.2]]) {
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.stroke();
+  }
+  return c;
+}
+
+function coralDrop() { // 14x14: small coral fragment
+  const c = makeCanvas(14, 14);
+  const g = c.getContext('2d');
+  g.lineCap = 'round';
+  g.strokeStyle = '#d86a86';
+  g.lineWidth = 2;
+  g.beginPath(); g.moveTo(7, 13); g.lineTo(5, 6); g.stroke();
+  g.beginPath(); g.moveTo(7, 13); g.lineTo(10, 5); g.stroke();
+  g.beginPath(); g.moveTo(5, 6); g.lineTo(3, 3); g.stroke();
+  g.fillStyle = '#f098ac';
+  g.beginPath(); g.arc(3, 3, 1.6, 0, TAU); g.fill();
+  g.beginPath(); g.arc(10, 5, 1.6, 0, TAU); g.fill();
+  return c;
+}
+
+function shell() { // 16x12: spiral shell
+  const c = makeCanvas(16, 12);
+  const g = c.getContext('2d');
+  g.fillStyle = '#c9b89a';
+  g.beginPath(); g.ellipse(8, 7, 6, 4.4, -0.2, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(90,70,50,0.6)';
+  g.lineWidth = 1;
+  for (let i = 0; i < 3; i++) {
+    g.beginPath();
+    g.ellipse(8, 7, 6 - i * 1.8, 4.4 - i * 1.4, -0.2, 0.3, TAU - 0.4);
+    g.stroke();
+  }
+  g.fillStyle = 'rgba(255,248,230,0.4)';
+  g.beginPath(); g.ellipse(5.5, 5.4, 2.2, 1.2, -0.3, 0, TAU); g.fill();
+  return c;
+}
+
+function ruinSlab(v) { // 46x32 broken paving slab
+  const c = makeCanvas(46, 32);
+  const g = c.getContext('2d');
+  g.fillStyle = ['#46525c', '#414c55', '#4a565f'][v];
+  poly(g, [[5, 9], [21, 3], [41, 7], [43, 21], [29, 29], [7, 27], [1, 16]]);
+  g.fill();
+  g.strokeStyle = 'rgba(8,16,22,0.5)';
+  g.lineWidth = 1.5;
+  g.stroke();
+  // crack + teal algae
+  g.strokeStyle = 'rgba(10,20,26,0.6)';
+  g.beginPath(); g.moveTo(20, 4); g.lineTo(24, 14); g.lineTo(20, 24); g.stroke();
+  g.fillStyle = 'rgba(60,140,130,0.30)';
+  g.beginPath(); g.ellipse(32, 14, 8, 4, 0.3, 0, TAU); g.fill();
+  return c;
+}
+
+// --- m03 (The Drowned City) standing sprites ---
+
+function kelpPlant(v) { // 60x150: 3 stalks with side blades
+  const w = 60, h = 150;
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  const cols = ['#2e6a4a', '#275e44', '#35755a', '#245840'];
+  g.lineCap = 'round';
+  for (const [ox, top, wd] of [[-9, 60, 6], [0, 26, 7.5], [9, 48, 5.5]]) {
+    const lean = (rngless(ox, top) - 0.5) * 22;
+    g.strokeStyle = cols[v];
+    g.lineWidth = wd;
+    g.beginPath();
+    g.moveTo(30 + ox, h);
+    g.quadraticCurveTo(30 + ox * 0.6 + lean * 0.4, (h + top) / 2, 30 + ox * 0.4 + lean, top);
+    g.stroke();
+    g.strokeStyle = cols[(v + 1) % 4];
+    g.lineWidth = 3.4;
+    for (let y = h - 18; y > top + 12; y -= 20) {
+      const s = y % 40 < 20 ? 1 : -1;
+      g.beginPath();
+      g.moveTo(30 + ox * 0.8 + lean * 0.3, y);
+      g.quadraticCurveTo(30 + ox + s * 12, y - 8, 30 + ox * 0.5 + lean * 0.5 + s * 18, y - 16);
+      g.stroke();
+    }
+    g.fillStyle = 'rgba(170,235,205,0.5)';
+    g.beginPath(); g.arc(30 + ox * 0.4 + lean, top, 2.4, 0, TAU); g.fill();
+  }
+  return c;
+}
+
+// deterministic per-variant pseudo-random (no rng state needed in shared loop)
+const rngless = (a, b) => ((a * 9301 + b * 49297) % 233280) / 233280;
+
+function kelpBigPlant(v) { // 84x190: 4 stalks, taller
+  const w = 84, h = 190;
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  const cols = ['#35755a', '#2e6a4a'];
+  g.lineCap = 'round';
+  for (const [ox, top, wd] of [[-18, 84, 8], [-6, 34, 9.5], [8, 62, 8], [20, 100, 7]]) {
+    const lean = (rngless(ox + 7, top + 3) - 0.5) * 26;
+    g.strokeStyle = cols[v];
+    g.lineWidth = wd;
+    g.beginPath();
+    g.moveTo(42 + ox, h);
+    g.quadraticCurveTo(42 + ox * 0.6 + lean * 0.4, (h + top) / 2, 42 + ox * 0.4 + lean, top);
+    g.stroke();
+    g.strokeStyle = cols[v ^ 1];
+    g.lineWidth = 4;
+    for (let y = h - 24; y > top + 14; y -= 24) {
+      const s = y % 48 < 24 ? 1 : -1;
+      g.beginPath();
+      g.moveTo(42 + ox * 0.8 + lean * 0.3, y);
+      g.quadraticCurveTo(42 + ox + s * 14, y - 10, 42 + ox * 0.5 + lean * 0.5 + s * 22, y - 20);
+      g.stroke();
+    }
+    g.fillStyle = 'rgba(170,235,205,0.5)';
+    g.beginPath(); g.arc(42 + ox * 0.4 + lean, top, 2.8, 0, TAU); g.fill();
+  }
+  return c;
+}
+
+function coralBranch(v) { // 40x46: branching coral
+  const w = 40, h = 46;
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  const main = v ? '#e88a4a' : '#e0708c';
+  const tip = v ? '#f0b078' : '#f098ac';
+  g.lineCap = 'round';
+  g.strokeStyle = main;
+  g.lineWidth = 4.5;
+  const arms = v
+    ? [[20, 46, 12, 16], [20, 46, 30, 12], [12, 16, 8, 6], [30, 12, 34, 4]]
+    : [[20, 46, 14, 14], [20, 46, 28, 10], [14, 14, 10, 4], [28, 10, 32, 2]];
+  for (const [x0, y0, x1, y1] of arms) {
+    g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo((x0 + x1) / 2, (y0 + y1) / 2 + 4, x1, y1); g.stroke();
+  }
+  g.fillStyle = tip;
+  for (const [x0, y0, x1, y1] of arms) { g.beginPath(); g.arc(x1, y1, 3, 0, TAU); g.fill(); }
+  return c;
+}
+
+function anemoneGlow(v) { // 26x30: glowing anemone (bioluminescent light hole)
+  const w = 26, h = 30;
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  const glow = glowSprite(20, v ? '150,200,255' : '90,225,235', 0.30);
+  g.drawImage(glow, 13 - 20, 22 - 20);
+  g.lineCap = 'round';
+  g.strokeStyle = v ? 'rgba(150,200,255,0.75)' : 'rgba(110,235,228,0.75)';
+  g.lineWidth = 1.6;
+  for (let i = 0; i < 8; i++) {
+    const x = 4 + i * 2.3;
+    const bend = (i - 3.5) * 1.6;
+    g.beginPath();
+    g.moveTo(13, 27);
+    g.quadraticCurveTo(x + bend * 0.4, 16, x + bend, 5 + (i % 3) * 2);
+    g.stroke();
+  }
+  g.fillStyle = v ? 'rgba(210,235,255,0.9)' : 'rgba(200,255,245,0.9)';
+  for (let i = 0; i < 8; i++) { g.beginPath(); g.arc(4 + i * 2.3 + (i - 3.5) * 1.6, 4.5 + (i % 3) * 2, 1, 0, TAU); g.fill(); }
+  g.fillStyle = '#2a3a44';
+  g.beginPath(); g.ellipse(13, 28, 8, 3, 0, 0, TAU); g.fill();
+  return c;
+}
+
+function columnBroken(v) { // 44x130 broken colonnade column
+  const w = 44, h = 130;
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  const tops = [34, 58, 12];
+  const top = tops[v];
+  g.fillStyle = '#3a4650';
+  g.fillRect(8, 116, 28, 14);
+  g.fillStyle = '#6f7f8e';
+  poly(g, [[14, 116], [14, top + 6], [18, top], [26, top + 3], [30, top + 8], [30, 116]]);
+  g.fill();
+  g.strokeStyle = 'rgba(20,30,38,0.5)';
+  g.lineWidth = 1.4;
+  for (const fx of [19, 24, 28]) { g.beginPath(); g.moveTo(fx, 112); g.lineTo(fx, top + 10); g.stroke(); }
+  // teal algae patches
+  g.fillStyle = 'rgba(46,104,92,0.4)';
+  g.beginPath(); g.ellipse(17, 100, 5, 8, 0.3, 0, TAU); g.fill();
+  g.beginPath(); g.ellipse(27, 74, 4, 6, -0.2, 0, TAU); g.fill();
+  if (v === 2) { // nearly intact: capital cap
+    g.fillStyle = '#7d8d9c';
+    g.fillRect(10, top - 4, 24, 6);
+    g.fillRect(12, top + 2, 20, 3);
+  }
+  return c;
+}
+
+function domeCity() { // 150x170: central dome + spire + glowing doorway
+  const w = 150, h = 170;
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  // platform
+  g.fillStyle = '#46525c';
+  g.beginPath(); g.ellipse(75, 152, 68, 16, 0, 0, TAU); g.fill();
+  g.fillStyle = 'rgba(10,16,22,0.4)';
+  g.beginPath(); g.ellipse(75, 156, 68, 12, 0, 0, TAU); g.fill();
+  g.fillStyle = '#5f6f80';
+  g.beginPath(); g.ellipse(75, 150, 64, 13, 0, 0, TAU); g.fill();
+  // dome
+  const dg = g.createLinearGradient(0, 40, 0, 150);
+  dg.addColorStop(0, '#78899a');
+  dg.addColorStop(1, '#4c5a68');
+  g.fillStyle = dg;
+  g.beginPath();
+  g.moveTo(18, 148);
+  g.quadraticCurveTo(20, 66, 75, 52);
+  g.quadraticCurveTo(130, 66, 132, 148);
+  g.closePath();
+  g.fill();
+  // broken spire
+  g.fillStyle = '#7d8d9c';
+  poly(g, [[70, 56], [74, 12], [80, 54]]);
+  g.fill();
+  g.fillStyle = '#4c5a68';
+  poly(g, [[80, 54], [78, 20], [84, 30]]);
+  g.fill();
+  // ribs + patina
+  g.strokeStyle = 'rgba(20,30,38,0.4)';
+  g.lineWidth = 1.4;
+  for (const rx of [38, 56, 94, 112]) { g.beginPath(); g.moveTo(75, 54); g.quadraticCurveTo(rx, 90, rx * 0.72 + 18, 146); g.stroke(); }
+  g.fillStyle = 'rgba(60,140,130,0.30)';
+  g.beginPath(); g.ellipse(44, 120, 16, 22, 0.4, 0, TAU); g.fill();
+  g.beginPath(); g.ellipse(108, 100, 12, 18, -0.3, 0, TAU); g.fill();
+  // glowing doorway
+  g.fillStyle = 'rgba(140,235,255,0.55)';
+  g.beginPath();
+  g.moveTo(64, 148); g.lineTo(64, 122); g.quadraticCurveTo(75, 112, 86, 122); g.lineTo(86, 148);
+  g.closePath();
+  g.fill();
+  sideShade(g, w, h, 'right', 0.25);
+  return c;
+}
+
+function tridentStatue() { // 48x100: pedestal + trident
+  const w = 48, h = 100;
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  g.fillStyle = '#3a4650';
+  g.fillRect(10, 82, 28, 18);
+  g.fillRect(14, 78, 20, 6);
+  g.strokeStyle = '#5a8a86';
+  g.lineCap = 'round';
+  g.lineWidth = 4;
+  g.beginPath(); g.moveTo(24, 78); g.lineTo(24, 26); g.stroke();
+  g.lineWidth = 3;
+  g.beginPath(); g.moveTo(24, 26); g.lineTo(24, 6); g.stroke();
+  g.beginPath(); g.moveTo(12, 18); g.quadraticCurveTo(11, 8, 15, 4); g.stroke();
+  g.beginPath(); g.moveTo(36, 18); g.quadraticCurveTo(37, 8, 33, 4); g.stroke();
+  g.beginPath(); g.moveTo(12, 22); g.lineTo(36, 22); g.stroke();
+  g.fillStyle = 'rgba(170,235,225,0.5)';
+  g.beginPath(); g.arc(24, 6, 2.4, 0, TAU); g.fill();
+  g.fillStyle = 'rgba(46,104,92,0.5)';
+  g.beginPath(); g.ellipse(30, 60, 4, 10, 0.2, 0, TAU); g.fill();
+  return c;
+}
+
+function wreckShip() { // 170x100: sunken hull, broken masts, coral growth
+  const w = 170, h = 100;
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  // hull
+  const hg = g.createLinearGradient(0, 40, 0, 96);
+  hg.addColorStop(0, '#4a3e30');
+  hg.addColorStop(1, '#332a20');
+  g.fillStyle = hg;
+  poly(g, [[6, 78], [14, 58], [48, 46], [104, 42], [148, 48], [166, 60], [160, 78], [120, 92], [40, 92], [10, 88]]);
+  g.fill();
+  g.strokeStyle = 'rgba(12,10,8,0.5)';
+  g.lineWidth = 1.4;
+  for (const y of [56, 66, 76]) { g.beginPath(); g.moveTo(14, y); g.lineTo(158, y + 2); g.stroke(); }
+  // raised bow + broken masts
+  g.strokeStyle = '#3d332a';
+  g.lineWidth = 5;
+  g.beginPath(); g.moveTo(150, 52); g.lineTo(168, 24); g.stroke();
+  g.lineWidth = 4;
+  g.beginPath(); g.moveTo(60, 48); g.lineTo(52, 12); g.stroke();
+  g.beginPath(); g.moveTo(104, 46); g.lineTo(112, 20); g.stroke();
+  g.lineWidth = 2;
+  g.beginPath(); g.moveTo(52, 12); g.lineTo(70, 16); g.stroke();
+  // portholes (one faintly lit)
+  for (const px of [40, 76, 112]) { g.fillStyle = 'rgba(10,14,18,0.8)'; g.beginPath(); g.arc(px, 62, 4, 0, TAU); g.fill(); }
+  g.fillStyle = 'rgba(140,235,255,0.4)';
+  g.beginPath(); g.arc(76, 62, 3, 0, TAU); g.fill();
+  // coral growth + barnacles
+  g.strokeStyle = '#d86a86';
+  g.lineWidth = 2;
+  for (const [x, y] of [[30, 88], [96, 90], [134, 84]]) {
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x - 3, y - 8); g.moveTo(x, y); g.lineTo(x + 3, y - 7); g.stroke();
+  }
+  g.fillStyle = 'rgba(190,200,205,0.35)';
+  for (let i = 0; i < 8; i++) { g.beginPath(); g.arc(20 + i * 18, 88 - (i % 2) * 3, 1.6, 0, TAU); g.fill(); }
+  return c;
+}
+
+function ventRock(v) { // 44x40: vent mound + rising bubble column
+  const w = 44, h = 40;
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  g.fillStyle = v ? '#3d4a54' : '#44525c';
+  g.beginPath();
+  g.moveTo(2, 38); g.lineTo(8, 24); g.lineTo(18, 16); g.lineTo(30, 18); g.lineTo(38, 28); g.lineTo(42, 38);
+  g.closePath();
+  g.fill();
+  g.fillStyle = 'rgba(10,16,22,0.4)';
+  g.beginPath(); g.ellipse(22, 36, 12, 4, 0, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(200,240,255,0.55)';
+  g.lineWidth = 1.2;
+  for (const [x, y, r] of [[22, 10, 1.6], [20, 5, 1.1], [24, 2, 0.9], [19, 24, 2.2], [26, 22, 1.8]]) {
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.stroke();
+  }
+  g.fillStyle = 'rgba(140,235,255,0.35)';
+  g.beginPath(); g.ellipse(22, 30, 5, 3, 0, 0, TAU); g.fill();
+  return c;
+}
+
 // Koi: 18x9 body, base at bottom-center. v = color variant.
 function koiFish(v) {
   const c = makeCanvas(18, 9);
@@ -687,6 +1050,14 @@ export function buildTerrain() {
     pathA: pathSlab(0),
     pathB: pathSlab(1),
     pathC: pathSlab(2),
+    // m03 (The Drowned City)
+    sandTuft: sandTuft(),
+    bubbleRise: bubbleRise(),
+    coralDrop: coralDrop(),
+    shell: shell(),
+    ruinA: ruinSlab(0),
+    ruinB: ruinSlab(1),
+    ruinC: ruinSlab(2),
   };
   const pine = [0, 1, 2, 3].map(pineTree);
   const pineBig = [0, 1].map(pineBigTree);
@@ -724,7 +1095,29 @@ export function buildTerrain() {
   for (let i = 0; i < 4; i++) sprites[`cherry:${i}`] = cherry[i];
   sprites.torii = torii;
   sprites['pagoda:0'] = pagoda;
-  return { grassTiles, decals, pine, pineBig, deadTree, boulders, stump, mushroom, monolith, campfire, huts, well, sprites, ground: { m01: grassTiles, m02: m02Tiles }, koi, koiF };
+  // m03 (Drowned City): own rng streams (never disturb m01's first stream)
+  const m03Tiles = [0, 1, 2].map((i) => sandTile3(mulberry32(5250 + i * 131), i));
+  const kelp = [0, 1, 2, 3].map(kelpPlant);
+  const kelpBig = [0, 1].map(kelpBigPlant);
+  const corals = [0, 1].map(coralBranch);
+  const anemones = [0, 1].map(anemoneGlow);
+  const columns = [0, 1, 2].map(columnBroken);
+  const dome = domeCity();
+  const trident = tridentStatue();
+  const wreck = wreckShip();
+  const vents = [0, 1].map(ventRock);
+  for (let i = 0; i < 4; i++) sprites[`kelp:${i}`] = kelp[i];
+  for (let i = 0; i < 2; i++) {
+    sprites[`kelpBig:${i}`] = kelpBig[i];
+    sprites[`coral:${i}`] = corals[i];
+    sprites[`anemone:${i}`] = anemones[i];
+    sprites[`vent:${i}`] = vents[i];
+  }
+  for (let i = 0; i < 3; i++) sprites[`column:${i}`] = columns[i];
+  sprites['dome:0'] = dome;
+  sprites['trident:0'] = trident;
+  sprites['wreck:0'] = wreck;
+  return { grassTiles, decals, pine, pineBig, deadTree, boulders, stump, mushroom, monolith, campfire, huts, well, sprites, ground: { m01: grassTiles, m02: m02Tiles, m03: m03Tiles }, koi, koiF };
 }
 
 // Snow-capped mountain silhouette, base at bottom edge. rng drives shape.

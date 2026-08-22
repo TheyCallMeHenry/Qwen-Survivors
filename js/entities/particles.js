@@ -130,7 +130,7 @@ export class Particles {
 }
 
 // Ambient foreground particles in screen space, parallax 1.25 vs camera.
-// kind: 'snow' (m01) | 'petal' (m02 sakura; bubble lands 13.4 with m03).
+// kind: 'snow' (m01) | 'petal' (m02 sakura) | 'bubble' (m03 — small, RISING, D49).
 export class Snow {
   constructor(count = CFG.perf.snowCount, kind = 'snow') {
     this.flakes = [];
@@ -141,36 +141,49 @@ export class Snow {
   reset(count = this.flakes.length, kind = this.kind) {
     this.kind = kind;
     const petal = kind === 'petal';
+    const bubble = kind === 'bubble';
     this.flakes = [];
     for (let i = 0; i < count; i++) {
       this.flakes.push({
         x: Math.random() * 2000,
         y: Math.random() * 2000,
-        sp: petal ? 20 + Math.random() * 30 : 28 + Math.random() * 45,
+        sp: bubble ? 20 + Math.random() * 30 : petal ? 20 + Math.random() * 30 : 28 + Math.random() * 45,
         ph: Math.random() * TAU,
-        sz: petal ? 1.6 + Math.random() * 1.8 : 1 + Math.random() * 1.8,
+        sz: bubble ? 1.2 + Math.random() * 2 : petal ? 1.6 + Math.random() * 1.8 : 1 + Math.random() * 1.8,
         a: 0.35 + Math.random() * 0.45,
       });
     }
   }
 
   update(dt) {
-    for (const f of this.flakes) f.y += f.sp * dt;
+    for (const f of this.flakes) f.y += (this.kind === 'bubble' ? -1 : 1) * f.sp * dt;
   }
 
   // Screen space. cam = view center; vw/vh = view size (CSS px).
   draw(ctx, cam, vw, vh, t) {
     const tx = vw + 80, ty = vh + 80, par = 1.25;
     const petal = this.kind === 'petal';
-    const sway = petal ? 34 : 18;
-    ctx.fillStyle = petal ? CFG.perf.petalColor : '#dfe8ff';
+    const bubble = this.kind === 'bubble';
+    const sway = bubble ? 12 : petal ? 34 : 18;
+    if (!bubble) ctx.fillStyle = petal ? CFG.perf.petalColor : '#dfe8ff';
     for (const f of this.flakes) {
       const sx = mod(f.x + Math.sin(t * 0.7 + f.ph) * sway - cam.x * par, tx) - 40;
       const sy = mod(f.y - cam.y * par, ty) - 40;
       ctx.globalAlpha = f.a;
       ctx.beginPath();
       if (petal) ctx.ellipse(sx, sy, f.sz * 1.5, f.sz * 0.75, Math.sin(t * 1.4 + f.ph) * 1.2, 0, TAU);
-      else ctx.arc(sx, sy, f.sz, 0, TAU);
+      else if (bubble) {
+        ctx.strokeStyle = CFG.perf.bubbleColor;
+        ctx.lineWidth = 1;
+        ctx.arc(sx, sy, f.sz, 0, TAU);
+        ctx.stroke();
+        ctx.globalAlpha = f.a * 0.6;
+        ctx.fillStyle = '#eafaff';
+        ctx.beginPath();
+        ctx.arc(sx - f.sz * 0.3, sy - f.sz * 0.3, Math.max(0.5, f.sz * 0.32), 0, TAU);
+        ctx.fill();
+        continue;
+      }
       ctx.fill();
     }
     ctx.globalAlpha = 1;

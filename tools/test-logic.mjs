@@ -467,7 +467,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(m1.foreground === 'snow' && m2.foreground === 'petal' && m3.foreground === 'bubble', 'levels: foreground snow/petal/bubble');
   ok(typeof m1.layout === 'function' && m1.weights(1000).rat === 5 && m1.boss.key === 'wraith' && m1.boss.at === 240, 'm01: layout/weights/boss wired');
   ok(typeof m2.layout === 'function' && typeof m2.weights === 'function' && m2.boss.key === 'ryu' && m2.boss.at === 240, 'm02: layout/weights/boss (Ryū) wired (13.2/13.3)');
-  ok(m3.layout === null && m3.weights === null, 'm03 layout/weights still null (land 13.4/13.5)');
+  ok(typeof m3.layout === 'function' && m3.weights === null && m3.boss === null, 'm03 layout wired (13.4); weights/boss land 13.5');
   ok(generateWorld(20260820, 'm01').trees.length === 276 && generateWorld(20260820, 'm01').decor.length === 335 && generateWorld(20260820, 'm01').colliders.length === 328, 'm01 layout: golden counts (seed 20260820) — identical to pre-13.1');
   // 13.2 — m02 (Higan) layout
   const g = generateWorld(20260822, 'm02');
@@ -526,6 +526,29 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     }
   }
   ok(seen.size === 6, 'm02 pickType(t=250): all six slot skins appear');
+}
+
+// 13.4 — m03 (The Drowned City) layout
+{
+  const m3 = getLevel('m03');
+  ok(typeof m3.layout === 'function' && m3.weights === null && m3.boss === null, 'm03: layout wired (13.4); weights/boss land 13.5');
+  const g = generateWorld(20260823, 'm03');
+  const g2 = generateWorld(20260823, 'm03');
+  ok(JSON.stringify(g) === JSON.stringify(g2), 'm03 layout: deterministic (seed 20260823)');
+  ok(g.W === 5145 && g.H === 3920, 'm03: world 5145x3920 (1.5x area)');
+  ok(g.trees.length > 150 && g.trees.every((t) => t.kind === 'kelp' || t.kind === 'kelpBig'), `m03: kelp-only trees (${g.trees.length})`);
+  const inb = (o) => o.x >= 70 && o.x <= 5075 && o.y >= 70 && o.y <= 3850;
+  ok(g.trees.every(inb) && g.bamboo.every(inb) && g.lanterns.every(inb) && g.monoliths.every(inb) && inb(g.pagoda) && inb(g.wreck), 'm03: kelp/coral/anemones/columns/trident/wreck in bounds');
+  ok(g.lakes.length === 3 && g.lakes.every((l) => l.school && l.koi === 5 && l.ks.length === 5) && g.lakes.every(inb), 'm03: 3 open-water fish schools (5 each), in bounds');
+  ok(g.monoliths.length === 10 && g.huts.length === 0 && g.lanterns.length === 8 && g.lights.length === g.lanterns.length + 1, 'm03: 10 broken columns + 8 anemones, lights = anemones + dome');
+  ok(g.mountains.length === 0 && g.campfires.length === 0 && g.deadTrees.length === 0 && g.rocks.length === 0 && g.mushrooms.length === 0, 'm03: no m01-only fields');
+  ok(g.decor.length > 100 && g.decor.every((d) => /^(kelp:|kelpBig:|coral:|column:|anemone:|vent:|dome:|trident:|wreck:)/.test(d.k)), 'm03: decor keys kelp/coral/column/anemone/vent/dome/trident/wreck only');
+  const m03Decals = ['sandTuft', 'bubbleRise', 'coralDrop', 'shell', 'pebble', 'moss', 'ruinA', 'ruinB', 'ruinC'];
+  ok(g.decals.length > 500 && g.decals.every((d) => m03Decals.includes(d.k)), 'm03: ~900+ decals from m03 set (+ ruin paths)');
+  ok(g.decals.filter((d) => d.k.startsWith('ruin')).length > 40, 'm03: ruined street slabs (city/wreck/school trails)');
+  ok(g.colliders.every((c) => Math.hypot(c.x - g.playerStart.x, c.y - g.playerStart.y) > 70 + (c.r || Math.max(c.rx, c.ry) || 0)), 'm03: spawn clearance');
+  ok(g.well && g.ringShrine && inb(g.well) && inb(g.ringShrine), 'm03: well (city) + dome (ringShrine) in bounds');
+  ok(g.trees.length === 319 && g.decor.length === 370 && g.colliders.length === 370, 'm03 layout: golden counts (seed 20260823)');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

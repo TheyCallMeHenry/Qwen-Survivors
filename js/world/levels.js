@@ -58,8 +58,8 @@ export const LEVELS = {
     foreground: 'bubble',   // small rising bubbles (replaces snow / petals)
     audio: 'drowned',
     unlock: { level: 'm02', wins: 3 },
-    palette: { skyTop: '#020a18', skyHorizon: '#06344e', ground: '#05141e', mm: '#04121e', light: '4,10,22' }, // deep-water gradient, no sky (A5)
-    weights: null, boss: null, layout: null, // 13.5 / 13.5 / 13.4
+    palette: { skyTop: '#04283e', skyHorizon: '#0a4a66', ground: '#05141e', mm: '#04121e', light: '4,10,22' }, // deep-water gradient: light enters at the surface (A5)
+    weights: null, boss: null, layout: layoutM03, // 13.5 / 13.5 / 13.4
   },
 };
 
@@ -469,5 +469,225 @@ function layoutM02(seed) {
     lights,
     decor,
     pagoda, ringShrine, lanterns, bamboo,
+  };
+}
+
+// --- m03 layout: The Drowned City (underwater; colonnade+dome ring landmark, wreck) ---
+function layoutM03(seed) {
+  const rng = mulberry32(seed >>> 0);
+  const W = LEVELS.m03.w, H = LEVELS.m03.h, M = LEVELS.m03.margin;
+  const rand = (a, b) => a + rng() * (b - a);
+  const pick = (arr) => arr[(rng() * arr.length) | 0];
+  const clampPos = (x, y) => ({ x: clamp(x, M, W - M), y: clamp(y, M, H - M) });
+
+  // --- city: colonnade ring around a central dome/spire, trident south of it ---
+  const village = { x: W / 2 + rand(-300, 300), y: H / 2 + rand(-240, 240) };
+  const well = { x: village.x, y: village.y };
+  const ringC = { x: village.x, y: village.y };
+  const monoliths = [];
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * TAU + rand(-0.12, 0.12);
+    monoliths.push({ x: ringC.x + Math.cos(a) * rand(240, 270), y: ringC.y + Math.sin(a) * rand(180, 200), v: i % 3 });
+  }
+  const ringShrine = { x: village.x, y: village.y, v: 0 }; // central dome/spire
+  const trident = { x: village.x + rand(-60, 60), y: village.y + 280 + rand(-40, 40) };
+  const pagoda = trident; // field kept for framework shape (m02 = pagoda)
+  const playerStart = { x: village.x, y: village.y + 90 };
+
+  // --- sunken shipwreck, away from the city ---
+  let w = { x: 0, y: 0 }, tries = 0;
+  do {
+    w = clampPos(rand(400, W - 400), rand(300, H - 300));
+    tries++;
+  } while (Math.hypot(w.x - village.x, w.y - village.y) < 1200 && tries < 24);
+  const wreck = { x: w.x, y: w.y };
+
+  // --- fish schools (open water; no pond water, koi-style t-driven orbits) ---
+  const lakes = [];
+  for (let i = 0; i < 3; i++) {
+    let s = { x: 0, y: 0 }, tr = 0;
+    do {
+      s = clampPos(rand(350, W - 350), rand(300, H - 300));
+      tr++;
+    } while (
+      (Math.hypot(s.x - village.x, s.y - village.y) < 560 ||
+        Math.hypot(s.x - wreck.x, s.y - wreck.y) < 340 ||
+        lakes.some((l) => Math.hypot(s.x - l.x, s.y - l.y) < 520)) && tr < 24
+    );
+    const rx = Math.round(rand(120, 210));
+    lakes.push({
+      x: s.x, y: s.y, rx, ry: Math.round(rx * 0.45),
+      school: true, koi: 5,
+      ks: [0, 1, 2, 3, 4].map((k) => ({ sp: 0.25 + rng() * 0.6, ph: rng() * TAU, k: k % 3 })),
+    });
+  }
+
+  // --- 5 kelp clusters ---
+  const clusters = [];
+  for (let i = 0; i < 5; i++) {
+    let c = { x: 0, y: 0 }, tr = 0;
+    do {
+      c = clampPos(rand(200, W - 200), rand(200, H - 200));
+      tr++;
+    } while (
+      (Math.hypot(c.x - village.x, c.y - village.y) < 600 ||
+        Math.hypot(c.x - wreck.x, c.y - wreck.y) < 380 ||
+        lakes.some((l) => Math.hypot(c.x - l.x, c.y - l.y) < l.rx + 240)) && tr < 24
+    );
+    clusters.push(c);
+  }
+
+  const trees = [];
+  const addTree = (x, y, kind, s) => {
+    const pt = clampPos(x, y);
+    trees.push({ x: pt.x, y: pt.y, kind, s, v: (rng() * (kind === 'kelpBig' ? 2 : 4)) | 0 });
+  };
+  for (const c of clusters) {
+    const n = 14 + (rng() * 15 | 0); // 14–28
+    for (let i = 0; i < n; i++) {
+      const gx = c.x + (rng() + rng() - 1) * 280;
+      const gy = c.y + (rng() + rng() - 1) * 280;
+      if (rng() < 0.16) addTree(gx, gy, 'kelpBig', 1.4 + rng() * 0.5);
+      else addTree(gx, gy, 'kelp', 0.8 + rng() * 0.4);
+    }
+  }
+  const nScatter = 16 + (rng() * 10 | 0);
+  for (let i = 0; i < nScatter; i++) addTree(rand(M + 40, W - M - 40), rand(M + 40, H - M - 40), 'kelp', 0.8 + rng() * 0.4);
+  // perimeter kelp ring (m01/m02 ring pattern)
+  const ringStep = 80;
+  for (let x = M + 60; x < W - M; x += ringStep * (0.8 + rng() * 0.5)) addTree(x, M + rand(30, 110), 'kelp', 1.0 + rng() * 0.35);
+  for (let x = M + 60; x < W - M; x += ringStep * (0.8 + rng() * 0.5)) addTree(x, H - M - rand(30, 110), 'kelp', 1.0 + rng() * 0.35);
+  for (let y = M + 240; y < H - M; y += ringStep * (0.8 + rng() * 0.5)) addTree(M + rand(30, 110), y, 'kelp', 1.0 + rng() * 0.35);
+  for (let y = M + 240; y < H - M; y += ringStep * (0.8 + rng() * 0.5)) addTree(W - M - rand(30, 110), y, 'kelp', 1.0 + rng() * 0.35);
+
+  // --- coral groves ---
+  const bamboo = [];
+  for (let i = 0; i < 3; i++) {
+    let g = { x: 0, y: 0 }, tr = 0;
+    do {
+      g = clampPos(rand(250, W - 250), rand(250, H - 250));
+      tr++;
+    } while (
+      (Math.hypot(g.x - village.x, g.y - village.y) < 520 ||
+        Math.hypot(g.x - wreck.x, g.y - wreck.y) < 300 ||
+        clusters.some((c) => Math.hypot(g.x - c.x, g.y - c.y) < 240) ||
+        lakes.some((l) => Math.hypot(g.x - l.x, g.y - l.y) < l.rx + 160)) && tr < 24
+    );
+    const n = 6 + (rng() * 5 | 0); // 6–10
+    for (let j = 0; j < n; j++) {
+      const pt = clampPos(g.x + rand(-80, 80), g.y + rand(-60, 60));
+      bamboo.push({ x: pt.x, y: pt.y, v: (rng() * 2) | 0 });
+    }
+  }
+
+  // --- glowing anemones: 5 city-ring + 3 per school (8) = bioluminescent light holes ---
+  const lanterns = [];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * TAU + rand(-0.3, 0.3);
+    lanterns.push({ x: village.x + Math.cos(a) * rand(320, 380), y: village.y + Math.sin(a) * rand(240, 300), v: i % 2 });
+  }
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * TAU + rand(-0.3, 0.3);
+    const l = lakes[i];
+    lanterns.push({ x: l.x + Math.cos(a) * (l.rx + 60), y: l.y + Math.sin(a) * (l.ry + 50), v: i % 2 });
+  }
+
+  // --- vents (bubble columns) ---
+  const vents = [];
+  for (let i = 0; i < 4; i++) {
+    let v = { x: 0, y: 0 }, tr = 0;
+    do {
+      v = clampPos(rand(300, W - 300), rand(300, H - 300));
+      tr++;
+    } while (Math.hypot(v.x - village.x, v.y - village.y) < 460 && tr < 24);
+    vents.push({ x: v.x, y: v.y, v: i % 2 });
+  }
+
+  // --- ruined street slabs: city→wreck, city→school, school→school ---
+  const decals = [];
+  const pave = (a, b) => {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const n = Math.max(1, Math.round(Math.hypot(dx, dy) / 64));
+    for (let i = 0; i <= n; i++) {
+      const f = i / n;
+      decals.push({
+        k: `ruin${'ABC'[(i + (rng() * 3 | 0)) % 3]}`,
+        x: a.x + dx * f + rand(-14, 14),
+        y: a.y + dy * f + rand(-14, 14),
+        s: 0.85 + rng() * 0.4,
+      });
+    }
+  };
+  pave(village, wreck);
+  pave(village, lakes[0]);
+  pave(lakes[1], lakes[2]);
+
+  // --- ~900 ground decals ---
+  const decalKeys = ['sandTuft', 'sandTuft', 'sandTuft', 'sandTuft', 'sandTuft', 'sandTuft', 'sandTuft', 'sandTuft',
+    'bubbleRise', 'bubbleRise', 'bubbleRise', 'bubbleRise', 'bubbleRise', 'bubbleRise',
+    'coralDrop', 'coralDrop', 'coralDrop', 'coralDrop',
+    'shell', 'shell', 'shell', 'shell', 'shell',
+    'pebble', 'pebble', 'pebble',
+    'moss', 'moss', 'moss'];
+  for (let i = 0; i < 900; i++) {
+    const k = pick(decalKeys);
+    decals.push({
+      k,
+      x: rand(M, W - M),
+      y: rand(M, H - M),
+      s: k === 'moss' ? 0.8 + rng() * 0.7 : 0.7 + rng() * 0.6,
+    });
+  }
+
+  // --- colliders ---
+  const colliders = [];
+  for (const t of trees) colliders.push({ x: t.x, y: t.y, r: t.kind === 'kelpBig' ? 12 : 7 + t.s * 3 });
+  for (const b of bamboo) colliders.push({ x: b.x, y: b.y, r: 7 });
+  for (const m of monoliths) colliders.push({ x: m.x, y: m.y, r: 12 });
+  colliders.push({ x: ringShrine.x - 18, y: ringShrine.y, r: 32 });
+  colliders.push({ x: ringShrine.x + 18, y: ringShrine.y, r: 32 });
+  colliders.push({ x: trident.x, y: trident.y, r: 12 });
+  colliders.push({ x: wreck.x - 55, y: wreck.y, r: 36 });
+  colliders.push({ x: wreck.x + 55, y: wreck.y, r: 36 });
+  for (const l of lanterns) colliders.push({ x: l.x, y: l.y, r: 8 });
+  for (const v of vents) colliders.push({ x: v.x, y: v.y, r: 10 });
+  // keep spawn clear (player margin 70)
+  const clear = (c) => {
+    const rr = c.r || Math.max(c.rx, c.ry) || 0;
+    return Math.hypot(c.x - playerStart.x, c.y - playerStart.y) > 70 + rr;
+  };
+  const safeColliders = colliders.filter(clear);
+
+  // --- lights: 8 anemones + city dome (bioluminescent) ---
+  const lights = lanterns.map((l) => ({ x: l.x, y: l.y - 10, r: 95, rgb: '90,225,235', flicker: 0.7 }));
+  lights.push({ x: ringShrine.x, y: ringShrine.y - 30, r: 170, rgb: '140,235,255', flicker: 0.35 });
+
+  // --- standing decor for Y-sort (keys resolved to canvases by World) ---
+  const decor = [];
+  const put = (o, k, s, w, h) => decor.push({ x: o.x, y: o.y, k, s, w, h });
+  for (const t of trees) {
+    const big = t.kind === 'kelpBig';
+    put(t, big ? `kelpBig:${t.v}` : `kelp:${t.v}`, t.s, big ? 84 : 60, big ? 190 : 150);
+  }
+  for (const b of bamboo) put(b, `coral:${b.v}`, 1, 40, 46);
+  for (const m of monoliths) put(m, `column:${m.v}`, 1, 44, 130);
+  put(ringShrine, 'dome:0', 1, 150, 170);
+  put(trident, 'trident:0', 1, 48, 100);
+  put(wreck, 'wreck:0', 1, 170, 100);
+  for (const l of lanterns) put(l, `anemone:${l.v}`, 1, 26, 30);
+  for (const v of vents) put(v, `vent:${v.v}`, 1, 44, 40);
+
+  return {
+    seed, W, H,
+    village, well, playerStart,
+    huts: [], campfires: [], monoliths,
+    lakes, mountains: [],
+    trees, deadTrees: [], rocks: [], stumps: [],
+    mushrooms: [],
+    colliders: safeColliders,
+    decals,
+    lights,
+    decor,
+    pagoda, ringShrine, lanterns, bamboo, vents, wreck, trident,
   };
 }

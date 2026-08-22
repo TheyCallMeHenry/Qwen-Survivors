@@ -153,7 +153,79 @@ function starsArr(rng, n, yMax) {
   return stars;
 }
 
+// Sun glow at the surface (m03: replaces the moon).
+function surfaceGlowSprite() {
+  const c = makeCanvas(240, 240);
+  c.getContext('2d').drawImage(glowSprite(118, '160,235,255', 0.32), 0, 0);
+  return c;
+}
+
+// God-ray light shaft: slanted quad, vertical fade (drawn screen-space, top-anchored).
+function godraySprite(rng, w, h) {
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  const skew = w * (0.25 + rng() * 0.25);
+  const shaft = (ox, ow, a) => {
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, `rgba(174,232,255,${a})`);
+    grad.addColorStop(0.75, `rgba(174,232,255,${a * 0.4})`);
+    grad.addColorStop(1, 'rgba(174,232,255,0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.moveTo(ox, 0);
+    g.lineTo(ox + ow, 0);
+    g.lineTo(ox + ow + skew, h);
+    g.lineTo(ox + skew, h);
+    g.closePath();
+    g.fill();
+  };
+  shaft(w * 0.2, w * 0.6, 0.10);
+  shaft(w * 0.38, w * 0.26, 0.12);
+  return c;
+}
+
+// Surface shimmer band (m03 near ridge): wavy lines just above the horizon line.
+function shimmerSprite() {
+  const w = 2400, h = 252;
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(160,230,255,0.05)';
+  g.fillRect(0, h - 40, w, 40);
+  for (let i = 0; i < 3; i++) {
+    g.strokeStyle = `rgba(150,225,255,${0.12 - i * 0.03})`;
+    g.lineWidth = 14 - i * 4;
+    const y = h - 8 - i * 14;
+    g.beginPath();
+    g.moveTo(0, y);
+    for (let x = 0; x < w; x += 120) g.quadraticCurveTo(x + 60, y + (x % 240 ? 6 : -6), x + 120, y);
+    g.stroke();
+  }
+  return c;
+}
+
 export function buildSky(levelKey = 'm01') {
+  if (levelKey === 'm03') {
+    const rng = mulberry32(779);
+    const godrays = [];
+    for (let i = 0; i < 7; i++) {
+      const w = 140 + rng() * 80;
+      godrays.push({
+        img: godraySprite(rng, w, 520),
+        x: rng() * 2400,
+        speed: 2 + rng() * 4,
+        alpha: 0.5 + rng() * 0.5,
+        par: 0.03 + rng() * 0.05,
+      });
+    }
+    return {
+      clouds: [],
+      stars: [], // no stars underwater — the loop is a no-op
+      moon: surfaceGlowSprite(),
+      ridges: { far: makeCanvas(2400, 200), near: shimmerSprite() },
+      star: '#bfeaff', moonX: 0.5, moonY: -0.25, moonScale: 2.4,
+      godrays,
+    };
+  }
   if (levelKey === 'm02') {
     const rng = mulberry32(778);
     const clouds = [];

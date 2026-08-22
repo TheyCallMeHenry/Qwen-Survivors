@@ -6,6 +6,7 @@
 
 import { buildSky } from '../art/sky.js';
 import { buildTerrain, mountainSprite, lakeSprite, koiPondSprite } from '../art/terrain.js';
+import { makeCanvas } from '../art/base.js';
 import { generateWorld } from './generate.js';
 import { getLevel } from './levels.js';
 import { CFG } from '../config.js';
@@ -21,6 +22,11 @@ function getSky(levelKey) {
 function getTerrain() {
   if (!terrainCache) terrainCache = buildTerrain();
   return terrainCache;
+}
+let emptyImg = null; // 1x1 transparent stand-in (m03 open-water fish schools have no pond img)
+function getEmptyImg() {
+  if (!emptyImg) emptyImg = makeCanvas(1, 1);
+  return emptyImg;
 }
 
 const CELL = 256;
@@ -49,7 +55,7 @@ export class World {
     this.mountains = d.mountains.map((m) => ({ ...m, img: mountainSprite(mulberry32(m.ms), m.w, m.h) }));
     this.lakes = d.lakes.map((l) => ({
       ...l,
-      img: l.koi ? koiPondSprite(mulberry32(l.ls), l.rx, l.ry) : lakeSprite(mulberry32(l.ls), l.rx, l.ry),
+      img: l.school ? getEmptyImg() : l.koi ? koiPondSprite(mulberry32(l.ls), l.rx, l.ry) : lakeSprite(mulberry32(l.ls), l.rx, l.ry),
     }));
     this.decor = d.decor.map((o) => ({ ...o, img: terrain.sprites[o.k] }));
     this.lights = d.lights;
@@ -173,5 +179,17 @@ export class World {
     }
 
     ctx.restore();
+
+    // m03: god-ray light shafts (screen space, slight cam parallax; under the lighting pass)
+    if (sky.godrays) {
+      for (const gr of sky.godrays) {
+        const w = gr.img.width, h = gr.img.height;
+        const span = vw + w;
+        const off = ((((gr.x + cam.x * gr.par + gr.speed * t) % span) + span) % span) - w;
+        ctx.globalAlpha = gr.alpha;
+        for (let xx = off; xx < vw; xx += span) ctx.drawImage(gr.img, xx, -24, w, h);
+      }
+      ctx.globalAlpha = 1;
+    }
   }
 }

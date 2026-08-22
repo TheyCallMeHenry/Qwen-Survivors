@@ -274,5 +274,6 @@ export const CFG = {
     particleCap: 512,
     snowCount: 90,
     petalColor: '#f7b8c8', // sakura petal (m02 foreground)
+    bubbleColor: 'rgba(205,240,255,0.8)', // rising bubble rim (m03 foreground, D49)
   },
 };

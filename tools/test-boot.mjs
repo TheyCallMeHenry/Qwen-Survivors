@@ -13,8 +13,9 @@
 // all-max → blight card drawn + picked → wraith boss at 4:00 → victory at
 // 5:00) → btn-go-menu → scores overlay (render/clear/back) → quit flow
 // (window.close stub + fallback screen) → 13.2 M02 menu-backdrop E2E (m02 +
-// m01 regression) → 13.3 M02 real run 3 (Higan skins + ×1.25 stats + Ryū
-// boss banner/spawn → victory 5:00).
+// m01 regression) → 13.4 M03 backdrop E2E (sun glow + godrays + fish schools
+// + bubble foreground) → 13.3 M02 real run 3 (Higan skins + ×1.25 stats +
+// Ryū boss banner/spawn → victory 5:00).
 // Catches first-frame/wired-up runtime crashes the pure-logic tests cannot
 // see, and drives paths the happy-path sim never hit: keyboard card picks,
 // non-start weapons, heart heal, meta buy + apply, new-weapon projectiles,
@@ -682,6 +683,20 @@ pump(300);
 assert(game.world.level.key === 'm01', 'm01 menu backdrop regression');
 assert(game.snow.kind === 'snow', 'm01 menu backdrop foreground is not snow');
 
+// 13.4 — M03 "The Drowned City" menu backdrop (no real m03 run: weights land 13.5).
+// Render pump exercises the m03 sky (sun glow + godrays pass) + open-water schools.
+game.state = 'GAMEOVER';
+game.level = getLevel('m03');
+game.levelKey = 'm03';
+game.world.data = null;
+game.toMenu();
+pump(300);
+assert(game.world.level.key === 'm03', 'm03 menu backdrop did not generate');
+assert(game.world.decor.length > 100 && game.world.decor.every((d) => d.img && d.img.width === d.w && d.img.height === d.h), 'm03 menu backdrop: decor sprites unresolved or size mismatch');
+assert(game.snow.kind === 'bubble', 'm03 menu backdrop foreground is not bubble');
+assert(game.world.lakes.length === 3 && game.world.lakes.every((l) => l.img && l.koi === 5), 'm03 fish schools not wired');
+assert(game.minimapBase, 'm03 minimap base missing');
+
 // 13.3 — M02 "Higan" REAL run (13.3): m02 weights + Higan slot skins +
 // ×1.25 stat tables + Ryū boss. btn-start → startRun() → last levelKey.
 run = 3;
@@ -727,5 +742,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 120 at run start · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
   `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · scores save/render/clear · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · scores save/render/clear · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) · loop alive throughout`,
 );
