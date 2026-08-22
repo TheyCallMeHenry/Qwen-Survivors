@@ -258,6 +258,12 @@ export const CFG = {
     howlGain: 0.5,
   },
 
+  // Co-op (Phase 11): 1 room = 1 run; host-authoritative; seats = join order.
+  coop: {
+    maxPlayers: 4,
+    perPlayer: 0.33,  // 11.3: enemy HP/damage/spawn/boss ×(1 + perPlayer × added players)
+  },
+
   scores: {
     max: 10,
     storageKey: 'qsurv.hiscores.v1',

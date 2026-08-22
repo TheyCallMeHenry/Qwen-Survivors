@@ -12,6 +12,8 @@ import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, record
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
+import { MSG, pack, unpack, profileFromMeta, createRoom, joinRoom, leaveRoom, closeRoom, coopScale } from '../js/net/coop.js';
+import { encodeFrame, consumeFrames, wsAcceptKey } from './serve.mjs';
 
 let pass = 0;
 const fails = [];
@@ -726,6 +728,62 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const r = rankScore(loadScores(scoreKeyFor('m02')), { score: 60, time: 25, kills: 3, level: 2, date: '2026-01-02' }, CFG.scores.max);
   ok(r.rank === 0 && r.isRecord, '13.9: ranking computed within the run-level list');
   delete globalThis.localStorage;
+}
+
+// --- 11.1 co-op room semantics + wire protocol + frame codec; 11.3 scaling ---
+{
+  const room = createRoom('m02');
+  ok(joinRoom(room, { id: 1, profile: { a: 1 } }).ok, '11.1: first client opens the room');
+  ok(room.hostId === 1 && room.status === 'open', '11.1: first client is host, room open');
+  ok(joinRoom(room, { id: 2 }).seat === 1 && joinRoom(room, { id: 3 }).seat === 2, '11.1: seats assigned in join order');
+  const f4 = joinRoom(room, { id: 4 });
+  ok(f4.ok && f4.n === 4, '11.1: 4 clients seated');
+  ok(joinRoom(room, { id: 5 }).reason === 'full', '11.1: 5th client → full');
+  ok(leaveRoom(room, 2).closed === false, '11.1: non-host leave keeps room open');
+  ok(room.players.length === 3 && room.players[1].seat === 1, '11.1: re-seat in join order after leave');
+  ok(leaveRoom(room, 99).closed === false, '11.1: leave unknown id is a no-op');
+  const h = leaveRoom(room, 1);
+  ok(h.closed && room.status === 'closed', '11.1: host leave closes the room');
+  ok(joinRoom(room, { id: 6 }).reason === 'closed', '11.1: join after close → closed');
+  const room2 = createRoom('m01');
+  joinRoom(room2, { id: 7 });
+  closeRoom(room2, 'run-end');
+  ok(room2.status === 'closed' && room2.reason === 'run-end', '11.1: explicit close (run end)');
+
+  const prof = profileFromMeta({ shards: 999, upgrades: { maxHp: 2, dmg: 1, speed: 3, xp: 0, dash: 5 } });
+  ok(prof.maxHpBonus === 40 && near(prof.dmgMult, 1.08) && near(prof.speedMult, 1.18) && near(prof.dashCdMult, 0.6) && prof.xpMult === 1, '11.1/D53: profile derived from meta upgrades only');
+  const round = unpack(pack({ t: 'x', v: 1 }));
+  ok(round && round.t === 'x' && round.v === 1, '11.1: pack/unpack round-trip');
+  ok(unpack('nope') === null && unpack('[1]') === null && unpack('null') === null, '11.1: unpack rejects non-objects');
+  ok(MSG.hello === 'hello' && MSG.state === 'state' && MSG.closed === 'closed', '11.1: message table');
+
+  ok(near(coopScale(1), 1) && near(coopScale(2), 1.33) && near(coopScale(3), 1.66) && near(coopScale(4), 1.99) && near(coopScale(99), 1.99) && near(coopScale(0), 1), '11.3: coopScale 1/1.33/1.66/1.99, clamped to 1..max');
+
+  const mk = (str, mask) => {
+    const p = Buffer.from(str); const len = p.length;
+    const lenB = len < 126 ? Buffer.from([0x80 | len]) : Buffer.concat([Buffer.from([0x80 | 126]), Buffer.from([(len >> 8) & 0xff, len & 0xff])]);
+    const h = Buffer.concat([Buffer.from([0x81]), lenB, Buffer.from(mask)]);
+    return Buffer.concat([h, Buffer.from(p.map((b, i) => b ^ mask[i & 3]))]);
+  };
+  let got = null;
+  const rr = consumeFrames(mk('{"t":"hello"}', [1, 2, 3, 4]), (e) => { got = e; });
+  ok(got && got.type === 'text' && unpack(got.str).t === 'hello' && rr.rest.length === 0, '11.1: consumeFrames masked client frame');
+  const seq = [];
+  consumeFrames(Buffer.concat([mk('{"a":1}', [9, 8, 7, 6]), mk('{"b":2}', [5, 4, 3, 2])]), (e) => seq.push(e.str));
+  ok(seq.length === 2 && seq[1].includes('"b"'), '11.1: two frames in one buffer');
+  const part = mk('{"split":true}', [1, 1, 1, 1]);
+  const r1 = consumeFrames(part.subarray(0, 5), () => {});
+  consumeFrames(Buffer.concat([r1.rest, part.subarray(5)]), (e) => { got = e; });
+  ok(got && got.str.includes('split'), '11.1: partial frame reassembly');
+  const out = encodeFrame(0x1, 'ok');
+  ok(out[0] === 0x81 && out[1] === 2 && out.slice(2).toString() === 'ok', '11.1: encodeFrame unmasked text');
+  const bigP = Buffer.alloc(70000, 120); // 'x'
+  const bigLen = Buffer.alloc(9); bigLen[0] = 0x80 | 127; bigLen.writeBigUInt64BE(70000n, 1);
+  const bigMask = Buffer.from([1, 1, 1, 1]);
+  for (let i = 0; i < 70000; i++) bigP[i] ^= bigMask[i & 3];
+  const rb = consumeFrames(Buffer.concat([Buffer.from([0x81]), bigLen, bigMask, bigP]), () => {});
+  ok(rb.error === 'max-payload', '11.1: oversized frame → max-payload');
+  ok(wsAcceptKey('dGhlIHNhbXBsZSBub25jZQ==') === 's3pPLMBiTxaQ9kYGzzhZRbK+xOo=', '11.1: RFC 6455 accept key');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

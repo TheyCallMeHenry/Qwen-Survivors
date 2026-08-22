@@ -853,6 +853,73 @@ assert(game.kills > 0, 'm03 run: no kills (m03 roster never spawned?)');
 }
 m03RunDone = true;
 
+// 11.1 — co-op transport E2E: the real serve.mjs (WS upgrade + frame codec +
+// room relay) on an ephemeral loopback port, driven by native WebSocket clients
+// (Node 22+). Ephemeral port 0 — the only fixed port stays 47893 (serve.mjs).
+{
+  const { createGameServer, attachCoopRoom } = await import('../tools/serve.mjs');
+  const srv = createGameServer();
+  attachCoopRoom(srv);
+  await new Promise((res) => srv.listen(0, '127.0.0.1', res));
+  const url = `ws://127.0.0.1:${srv.address().port}`;
+  const clients = [];
+  const mk = () => {
+    const c = { w: new WebSocket(url), msgs: [] };
+    c.opened = new Promise((res, rej) => {
+      c.w.addEventListener('open', res);
+      c.w.addEventListener('error', () => rej(new Error('11.1 E2E: ws connect failed')));
+    });
+    c.w.addEventListener('message', (ev) => { c.msgs.push(JSON.parse(String(ev.data))); });
+    // Poll the inbox (not event-queued): WS frames can be delivered batched,
+    // so a wait registered between awaits must still see earlier messages.
+    c.wait = (pred, what, ms = 3000) => new Promise((res, rej) => {
+      const t0 = Date.now();
+      const to = setInterval(() => {
+        const i = c.msgs.findIndex(pred);
+        if (i !== -1) { clearInterval(to); const [m] = c.msgs.splice(i, 1); res(m); }
+        else if (Date.now() - t0 > ms) { clearInterval(to); rej(new Error('11.1 E2E timeout: ' + what)); }
+      }, 5);
+    });
+    c.send = (m) => c.w.send(JSON.stringify(m));
+    clients.push(c);
+    return c;
+  };
+  const a = mk(), b = mk(), d = mk();
+  await Promise.all([a, b, d].map((c) => c.opened));
+  a.send({ t: 'hello', levelKey: 'm01', profile: { maxHpBonus: 20 } });
+  const ja = await a.wait((m) => m.t === 'joined', 'a joined');
+  assert(ja.seat === 0 && ja.n === 1 && ja.levelKey === 'm01', '11.1: first client must be host seat 0 of the m01 room');
+  b.send({ t: 'hello', levelKey: 'm01' });
+  const jb = await b.wait((m) => m.t === 'joined', 'b joined');
+  assert(jb.seat === 1 && jb.n === 2, '11.1: second client seat 1, n=2');
+  const ro = await a.wait((m) => m.t === 'roster' && m.ids.length === 2, 'a roster after b');
+  assert(ro.levelKey === 'm01', '11.1: roster carries the room level key');
+  d.send({ t: 'hello' });
+  const jd = await d.wait((m) => m.t === 'joined', 'd joined');
+  assert(jd.seat === 2 && jd.n === 3, '11.1: third client seat 2, n=3');
+  const e = mk();
+  await e.opened;
+  e.send({ t: 'hello' });
+  const je = await e.wait((m) => m.t === 'joined', 'e joined');
+  assert(je.seat === 3 && je.n === 4, '11.1: fourth client fills the room');
+  const g = mk();
+  await g.opened;
+  g.send({ t: 'hello' });
+  await g.wait((m) => m.t === 'full', 'fifth client rejected full');
+  b.w.close();
+  await a.wait((m) => m.t === 'left', 'a notified of b leave');
+  await a.wait((m) => m.t === 'roster' && m.ids.length === 3, 'a roster after b leave');
+  a.w.close();
+  await d.wait((m) => m.t === 'closed' && m.reason === 'host-leave', 'd notified of host leave');
+  const f = mk();
+  await f.opened;
+  f.send({ t: 'hello', levelKey: 'm02' });
+  const jf = await f.wait((m) => m.t === 'joined', 'f joined fresh room');
+  assert(jf.seat === 0 && jf.levelKey === 'm02', '11.1: room re-opens after close (new run)');
+  for (const c of clients) c.w.close();
+  await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });
+}
+
 // self-verification: every one-shot path above must have actually fired
 assert(keyPickDone, 'keyboard card pick never exercised');
 assert(heartDone && heartAsserted, 'heart pickup path never exercised');
@@ -875,5 +942,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 120 at run start · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
   `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · loop alive throughout`,
 );
