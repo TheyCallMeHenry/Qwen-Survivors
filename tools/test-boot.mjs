@@ -1083,6 +1083,11 @@ m03RunDone = true;
   // 11.5 level-up scoping + weapon exclusivity (live 3P run: per-player cap = 3).
   if (hostG.state === 'LEVELUP') hostG.pickCard(0);
   assert(weaponCap(hostG.players.length) === 3, '11.5: 3P equip cap = 3 standard weapons per player');
+  // Deterministic baseline: the pump's rng picks (and the forced picks below, which
+  // bypass the offer-level cap) must not leak into this section — every player back
+  // to the starting wand, ownership map cleared.
+  hostG.weaponOwner = {};
+  for (const p of hostG.players) p.weapons = { wand: 1 };
   // Host (local) player picks a NEW weapon through the real pick path.
   hostG.levelupQueue = 1;
   hostG.state = 'LEVELUP';
@@ -1109,7 +1114,10 @@ m03RunDone = true;
   hostG._remoteLevelUps(pl1, 1);
   const gained = Object.keys(pl1.weapons).filter((k) => (pl1.weapons[k] || 0) > (pl1Owned0[k] || 0));
   assert(!gained.includes('garlic'), '11.5: owned weapon never auto-picked for a remote');
-  for (const k of gained) assert(hostG.weaponOwner[k] === pl1, `11.5: remote first-pick owns ${k}`);
+  // Ownership is asserted for true first-picks only: the starting wand
+  // (CFG.player.startWeapons) is granted at reset by nobody, so upgrades to
+  // pre-owned weapons never register an owner.
+  for (const k of gained) if (!(pl1Owned0[k] || 0) > 0) assert(hostG.weaponOwner[k] === pl1, `11.5: remote first-pick owns ${k}`);
   pl1.passives = pl1Passives0; recomputeStats(pl1); // restore the live sim
   for (const p of hostG.players) assert(Object.keys(p.weapons).length <= 3, '11.5: cap respected (≤3 standard weapons, 3P)');
 
