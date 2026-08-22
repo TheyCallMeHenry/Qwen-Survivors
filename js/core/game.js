@@ -5,7 +5,7 @@
 // pickups → level-up gate → ambience/camera → victory check.
 import { CFG } from '../config.js';
 import { makeBus } from '../utils/bus.js';
-import { mulberry32 } from '../utils/math.js';
+import { mulberry32, clamp } from '../utils/math.js';
 import { World } from '../world/world.js';
 import { Camera } from '../systems/camera.js';
 import { Lighting } from '../systems/lighting.js';
@@ -23,7 +23,7 @@ import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
 import { buildMinimapBase, drawMinimapLive } from '../world/minimap.js';
 import { playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState, ENEMY_KEYS } from '../net/sync.js';
-import { MSG, profileFromMeta, coopScale } from '../net/coop.js';
+import { MSG, profileFromMeta, coopScale, leashClamp } from '../net/coop.js';
 import { CoopConn } from '../net/conn.js';
 
 export class Game {
@@ -330,6 +330,7 @@ export class Game {
     }
     this.t += dt;
     for (const r of this.remote) if (!r.dead) this._remoteStep(dt, r); // co-op host
+    this._coopLeash(); // 11.4: pairwise vision leash (no-op when players.length === 1)
 
     this._spawns(dt);
     this.enemies.update(dt, this.players, this.world, this.combat);
@@ -613,6 +614,20 @@ export class Game {
     r.update(dt, ax, this.combat, this.enemies, this.world);
   }
 
+  // 11.4 leash (A2): host-side only (clients never sim) — every live player
+  // held within CFG.coop.leashR of every other live player. Projection can
+  // overshoot the world edge near a wall, so re-clamp to the world margin.
+  _coopLeash() {
+    if (this.players.length < 2) return; // solo invariance (11.11)
+    const R = CFG.coop.leashR, M = CFG.world.margin;
+    const live = this.players.filter((pl) => !pl.dead);
+    for (const pl of live) {
+      const [x, y] = leashClamp(pl.x, pl.y, live.filter((q) => q !== pl), R);
+      pl.x = clamp(x, M, CFG.world.w - M);
+      pl.y = clamp(y, M, CFG.world.h - M);
+    }
+  }
+
   _remoteLevelUps(pl, ups) {
     for (let i = 0; i < ups; i++) {
       const offers = cardOffers(pl.weapons, pl.passives, pl.synergies, this.rng);
@@ -790,9 +805,10 @@ export class Game {
   _lights() {
     const L = CFG.lighting;
     const p = this.player;
+    const pr = this.players.length > 1 ? CFG.coop.leashR : L.playerR; // 11.4: expanded co-op vision
     const lights = this.world.lights.slice();
-    lights.push({ x: p.x, y: p.y, r: L.playerR, rgb: L.playerRgb, flicker: L.playerFlicker });
-    for (const r of this.remote) if (!r.dead) lights.push({ x: r.x, y: r.y, r: L.playerR, rgb: L.playerRgb, flicker: L.playerFlicker });
+    lights.push({ x: p.x, y: p.y, r: pr, rgb: L.playerRgb, flicker: L.playerFlicker });
+    for (const r of this.remote) if (!r.dead) lights.push({ x: r.x, y: r.y, r: pr, rgb: L.playerRgb, flicker: L.playerFlicker });
     for (const e of this.enemies.list) {
       if (e.boss && !e.dead) {
         lights.push({ x: e.x, y: e.y, r: L.bossR, rgb: L.bossRgb, flicker: L.bossFlicker });

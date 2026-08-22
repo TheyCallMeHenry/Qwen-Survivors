@@ -1059,6 +1059,26 @@ m03RunDone = true;
   assert(hostG.players[1].x > hpx + 1,
     `11.2: client input drives the host remote player (state=${hostG.state} dead=${seat1.dead} hp=${seat1.hp} dx=${(seat1.x - hpx).toFixed(2)})`);
 
+  // 11.4 leash: teleport c2's seat 1.5×leashR from the host player → the host
+  // sim pulls every pairwise distance back ≤ leashR (convergence poll —
+  // residual decel + keepAlive revives add drift; the leash itself converges
+  // in 1–2 frames).
+  const s3 = hostG.players[2];
+  s3.x = hostG.player.x + CFG.coop.leashR * 1.5;
+  s3.y = hostG.player.y + CFG.coop.leashR * 0.75;
+  let leashed = false;
+  for (let i = 0; i < 120; i++) {
+    keepAlive();
+    hostG.update(DT); c1G.update(DT); c2G.update(DT);
+    if (i % 30 === 29) await tick();
+    const ps = hostG.players;
+    leashed = Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) <= CFG.coop.leashR + 1e-6
+      && Math.hypot(ps[0].x - ps[2].x, ps[0].y - ps[2].y) <= CFG.coop.leashR + 1e-6
+      && Math.hypot(ps[1].x - ps[2].x, ps[1].y - ps[2].y) <= CFG.coop.leashR + 1e-6;
+    if (leashed) break;
+  }
+  assert(leashed, '11.4: co-op leash — all pairwise player distances held ≤ CFG.coop.leashR after a 1.5R teleport');
+
   // Leave: c2 drops → roster reconciles on the host; run continues (host + c1 alive).
   rawC.w.close();
   const ro2 = await rawA.wait((m) => m.t === 'roster' && m.players.length === 2, 'host roster after c2 leave');
@@ -1092,5 +1112,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 120 at run start · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
   `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) · loop alive throughout`,
 );

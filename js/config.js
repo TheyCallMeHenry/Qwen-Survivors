@@ -263,6 +263,7 @@ export const CFG = {
     maxPlayers: 4,
     perPlayer: 0.33,  // 11.3: enemy HP/damage/spawn/boss ×(1 + perPlayer × added players)
     interpLag: 0.1,  // 11.2: client render lag for snapshot interpolation (s)
+    leashR: 700,  // 11.4: co-op shared vision radius — every player pair held ≤ this; player light radius in co-op (solo keeps 510)
   },
 
   scores: {

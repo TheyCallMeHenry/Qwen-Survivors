@@ -14,7 +14,7 @@ import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, record
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
-import { MSG, pack, unpack, profileFromMeta, createRoom, joinRoom, leaveRoom, closeRoom, coopScale } from '../js/net/coop.js';
+import { MSG, pack, unpack, profileFromMeta, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp } from '../js/net/coop.js';
 import { encodeFrame, consumeFrames, wsAcceptKey } from './serve.mjs';
 
 let pass = 0;
@@ -883,6 +883,31 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const boss = en.spawn('wraith', 0, 0);
   ok(boss.boss && near(boss.maxHp, CFG.enemies.wraith.hp * 1.66) && near(boss.dmg, CFG.enemies.wraith.dmg * 1.66),
     '11.3: boss HP/dmg same ramp (Q7)');
+}
+
+// --- 11.4 player leash: pairwise vision radius (A2) — pure projection helper ---
+{
+  const R = CFG.coop.leashR;
+  ok(Number.isFinite(R) && R > CFG.lighting.playerR,
+    '11.4: CFG.coop.leashR expanded from the solo vision radius');
+  const none = leashClamp(10, 20, [], R);
+  ok(none[0] === 10 && none[1] === 20, '11.4: no others → no-op (solo invariance)');
+  const same = leashClamp(100, 100, [{ x: 100, y: 100 }], R);
+  ok(same[0] === 100 && same[1] === 100, '11.4: coincident other (d=0) → unchanged, no NaN');
+  const inside = leashClamp(0, 100, [{ x: 0, y: 0 }, { x: 200, y: 0 }], R);
+  ok(inside[0] === 0 && inside[1] === 100, '11.4: within R of all → unchanged');
+  const exact = leashClamp(0, R, [{ x: 0, y: 0 }], R);
+  ok(exact[0] === 0 && exact[1] === R, '11.4: exactly at R → unchanged (strict >)');
+  const far = leashClamp(0, 2000, [{ x: 0, y: 0 }], R);
+  ok(near(Math.hypot(far[0], far[1]), R, 1e-6), '11.4: >R from one other → projected to the R circle');
+  const lens = leashClamp(1500, 400, [{ x: 0, y: 0 }, { x: 800, y: 0 }], R);
+  ok(Math.hypot(lens[0], lens[1]) <= R + 1e-6 && Math.hypot(lens[0] - 800, lens[1]) <= R + 1e-6,
+    '11.4: >R from two others → converges within R of both');
+  const tri = leashClamp(1200, 800, [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 300, y: 500 }], R);
+  ok([0, 1, 2].every((i) => {
+    const o = [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 300, y: 500 }][i];
+    return Math.hypot(tri[0] - o.x, tri[1] - o.y) <= R + 1e-6;
+  }), '11.4: 3 others (4P worst case) → within R of every one');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

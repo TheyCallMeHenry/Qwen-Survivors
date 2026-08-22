@@ -82,3 +82,25 @@ export function coopScale(n) {
   const c = Math.min(p.maxPlayers, Math.max(1, Math.floor(n) || 1));
   return 1 + p.perPlayer * (c - 1);
 }
+
+// 11.4 leash (A2): every player stays within R of EVERY other player (all
+// pairwise distances ≤ R — every player sees every other). Project (x, y) into
+// the intersection of the radius-R disks around `others` (convex — iterative
+// projection converges; the host re-clamps to the world margin afterwards).
+export function leashClamp(x, y, others, R) {
+  for (let i = 0; i < 8; i++) {
+    let moved = false;
+    for (const o of others) {
+      const dx = x - o.x, dy = y - o.y;
+      const d = Math.hypot(dx, dy);
+      if (d > R && d > 0) {
+        const k = R / d;
+        x = o.x + dx * k;
+        y = o.y + dy * k;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return [x, y];
+}
