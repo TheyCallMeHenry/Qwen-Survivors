@@ -989,6 +989,7 @@ m03RunDone = true;
 
   hostG.startRun('m01');
   assert(hostG.netRole === 'host' && hostG.players.length === 3, '11.2: host sim owns all 3 players');
+  assert(Math.abs(hostG.enemies.coopS - 1.66) < 1e-9, '11.3: 3P host run arms coopS = coopScale(3) = 1.66');
   const rs1 = await rawB.wait((m) => m.t === 'runstart', 'c1 runstart');
   const rs2 = await rawC.wait((m) => m.t === 'runstart', 'c2 runstart');
   assert(rs1.seed === rs2.seed && typeof rs1.seed === 'number' && rs1.levelKey === 'm01',
@@ -1011,7 +1012,14 @@ m03RunDone = true;
   let lastSt = null, enemySeen = 0;
   const stWatch = (m) => { if (m.t === 'state') { lastSt = m; enemySeen = Math.max(enemySeen, m.enemies.length); } };
   rawB.w.addEventListener('message', (ev) => stWatch(JSON.parse(String(ev.data))));
+  // 11.3 density keeps the idle seats alive (and the host off the LEVELUP screen)
+  // so the E2E exercises sync, not death/cards.
+  const keepAlive = () => {
+    for (const p of hostG.players) if (p.dead || p.hp < p.maxHp * 0.5) { p.dead = false; p.hp = p.maxHp; p.iframes = 5; }
+    if (hostG.state === 'LEVELUP') hostG.pickCard(0);
+  };
   for (let i = 0; i < 1500; i++) {
+    keepAlive();
     hostG.update(DT);
     c1G.update(DT);
     c2G.update(DT);
@@ -1019,23 +1027,37 @@ m03RunDone = true;
   }
   await tick();
   assert(enemySeen > 0, '11.2: no enemies in the host state after 25 s of sim');
+  const S3 = hostG.enemies.coopS;
+  assert(hostG.enemies.list.some((e) => !e.boss)
+    && hostG.enemies.list.every((e) => e.boss || Math.abs(e.maxHp - CFG.enemies[e.type].hp * S3) < 1e-6),
+    '11.3: 3P host spawn — every non-boss enemy maxHp = base × coopScale(3) (boss same ramp, Q7)');
   assert(lastSt.v === 1 && lastSt.step > 100 && lastSt.score >= 0,
     '11.2: state relayed with v/step fields (relay passthrough)');
   assert(c1G.enemies.list.length > 0, '11.2: client applied enemy snapshots');
   const seat1 = hostG.players[1]; // c1G is seat 1 (join order)
-  assert(Math.abs(c1G.player.x - seat1.x) < 0.6 && Math.abs(c1G.player.y - seat1.y) < 0.6,
-    '11.2: client-local position tracks the host within r1 + interp');
+  // Knockback transients (1.66× more hits at 3P, 11.3): poll until the lagged
+  // client interp converges on the host's seat-1 position (2 s sim ≫ decay).
+  let tracked = false;
+  for (let i = 0; i < 120; i++) {
+    keepAlive();
+    hostG.update(DT); c1G.update(DT); c2G.update(DT);
+    if (i % 30 === 29) await tick();
+    if (Math.abs(c1G.player.x - seat1.x) < 0.6 && Math.abs(c1G.player.y - seat1.y) < 0.6) { tracked = true; break; }
+  }
+  assert(tracked, '11.2: client-local position tracks the host within r1 + interp');
   const hpx = hostG.players[1].x;
   // Real input path: keydown (no keyup) reaches every Input on the window —
   // client B's _clientUpdate sends axes(1,0) to the host each step.
   (winListeners.keydown || []).forEach((f) => f({ code: 'KeyD', repeat: false, preventDefault() {} }));
   for (let i = 0; i < 90; i++) {
+    keepAlive();
     hostG.update(DT); c1G.update(DT); c2G.update(DT);
     if (i % 30 === 29) await tick();
   }
   (winListeners.keyup || []).forEach((f) => f({ code: 'KeyD', repeat: false, preventDefault() {} }));
   await tick();
-  assert(hostG.players[1].x > hpx + 1, '11.2: client input drives the host remote player');
+  assert(hostG.players[1].x > hpx + 1,
+    `11.2: client input drives the host remote player (state=${hostG.state} dead=${seat1.dead} hp=${seat1.hp} dx=${(seat1.x - hpx).toFixed(2)})`);
 
   // Leave: c2 drops → roster reconciles on the host; run continues (host + c1 alive).
   rawC.w.close();

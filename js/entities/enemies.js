@@ -15,6 +15,7 @@ export class Enemies {
     this.seq = 0;          // stable enemy ids (co-op snapshots, 11.2)
     this.defs = null;      // buildCharacters() output (browser)
     this.diff = 1;         // per-level difficulty scalar (A4) — hp/dmg at spawn
+    this.coopS = 1;        // co-op difficulty factor (11.3: coopScale(players); 1.0 solo)
     this.orbImg = null;
     this.burnImg = null;
     this.blightImg = null;
@@ -39,7 +40,8 @@ export class Enemies {
 
   spawn(type, x, y) {
     const s = CFG.enemies[type];
-    const hp = s.hp * this.diff, dmg = s.dmg * this.diff;
+    const d = this.diff * this.coopS;
+    const hp = s.hp * d, dmg = s.dmg * d;
     const e = {
       type, x, y, vx: 0, vy: 0, sid: ++this.seq,
       hp, maxHp: hp, r: s.r,

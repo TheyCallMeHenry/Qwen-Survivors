@@ -859,6 +859,32 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(killed === B, '11.2: damageEnemy → onKill(e, owner)');
 }
 
+// --- 11.3 difficulty scaling: coopScale ramp on enemy HP/dmg, spawn curves, boss ---
+{
+  ok(coopScale(1) === 1 && coopScale(0) === 1, '11.3: coopScale(≤1) = 1 (solo invariance)');
+  ok(near(coopScale(2), 1.33) && near(coopScale(3), 1.66) && near(coopScale(4), 1.99),
+    '11.3: coopScale 2P/3P/4P = 1.33/1.66/1.99');
+  ok(coopScale(99) === coopScale(4), '11.3: coopScale clamps at maxPlayers');
+  const m01 = getLevel('m01');
+  ok(aliveCap(120, m01, 1.33) === aliveCap(120, m01) * 1.33
+    && batchSize(300, m01, 1.33) === Math.round(batchSize(300, m01) * 1.33)
+    && near(spawnInterval(100, m01, 1.33), spawnInterval(100, m01) / 1.33),
+    '11.3: aliveCap ×s, batch ×s (rounded), interval ÷s');
+  ok(aliveCap(120, m01) === 70 && batchSize(300, m01) === 6 && near(spawnInterval(100, m01), 1.23),
+    '11.3: s default 1 = solo invariance (m01 curves)');
+  const en = new Enemies();
+  en.diff = 1; en.coopS = 1;
+  const r1 = en.spawn('rat', 0, 0);
+  en.coopS = 1.33;
+  const r2 = en.spawn('rat', 0, 0);
+  ok(r1.maxHp === CFG.enemies.rat.hp && near(r2.maxHp, CFG.enemies.rat.hp * 1.33) && near(r2.dmg, CFG.enemies.rat.dmg * 1.33),
+    '11.3: spawn HP/dmg ×coopS (non-boss)');
+  en.coopS = 1.66;
+  const boss = en.spawn('wraith', 0, 0);
+  ok(boss.boss && near(boss.maxHp, CFG.enemies.wraith.hp * 1.66) && near(boss.dmg, CFG.enemies.wraith.dmg * 1.66),
+    '11.3: boss HP/dmg same ramp (Q7)');
+}
+
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);
 for (const f of fails) console.error(`  FAIL ${f}`);
 process.exit(fails.length ? 1 : 0);

@@ -23,7 +23,7 @@ import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
 import { buildMinimapBase, drawMinimapLive } from '../world/minimap.js';
 import { playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState, ENEMY_KEYS } from '../net/sync.js';
-import { MSG, profileFromMeta } from '../net/coop.js';
+import { MSG, profileFromMeta, coopScale } from '../net/coop.js';
 import { CoopConn } from '../net/conn.js';
 
 export class Game {
@@ -178,6 +178,7 @@ export class Game {
     this._coopSeed = seed;
     this.bus.emit('runstart', seed);
     if (this.net && this.netRole === 'host') this._coopStartRun(seed); // 11.2
+    this.enemies.coopS = coopScale(this.players.length); // 11.3: ramp enemy HP/dmg/spawn/boss by player count (solo = 1.0)
   }
 
   // Regenerate the menu backdrop for the current level (fixed menuSeed — A5 preview).
@@ -377,6 +378,7 @@ export class Game {
     const R = CFG.run;
     const L = this.level || getLevel('m01');
     const B = L.boss || { key: 'wraith', at: R.bossAt, name: 'THE WRAITH' };
+    const S = this.enemies.coopS; // 11.3 co-op difficulty factor (1.0 solo)
     if (!this.bossSpawned && this.t >= B.at) {
       const pt = this._spawnPt();
       this.enemies.spawn(B.key, pt.x, pt.y);
@@ -384,17 +386,17 @@ export class Game {
       this.bus.emit('banner', { text: `${B.name} AWAKENS` });
     }
     if (this.t < CFG.spawner.firstSpawn) return;
-    if (this.enemies.list.length >= aliveCap(this.t, L)) {
-      this.spawnT = Math.min(this.spawnT, spawnInterval(this.t, L));
+    if (this.enemies.list.length >= aliveCap(this.t, L, S)) {
+      this.spawnT = Math.min(this.spawnT, spawnInterval(this.t, L, S));
       return;
     }
     this.spawnT += dt;
     let n = 0;
-    while (this.spawnT >= spawnInterval(this.t, L) && n < 4) {
-      this.spawnT -= spawnInterval(this.t, L);
+    while (this.spawnT >= spawnInterval(this.t, L, S) && n < 4) {
+      this.spawnT -= spawnInterval(this.t, L, S);
       const type = pickType(this.t, this.rng, L);
       if (type) {
-        const n2 = batchSize(this.t, L);
+        const n2 = batchSize(this.t, L, S);
         for (let i = 0; i < n2; i++) {
           const pt = this._spawnPt();
           this.enemies.spawn(type, pt.x, pt.y);
@@ -402,7 +404,7 @@ export class Game {
       }
       n++;
     }
-    if (n >= 4) this.spawnT = Math.min(this.spawnT, spawnInterval(this.t));
+    if (n >= 4) this.spawnT = Math.min(this.spawnT, spawnInterval(this.t, L, S));
   }
 
   _spawnPt() {
@@ -561,6 +563,7 @@ export class Game {
       }
     }
     this.players = [this.player, ...this.remote];
+    this.enemies.coopS = coopScale(this.players.length); // 11.3: live ramp on mid-run join/leave
     if (grew) this.net.sendRunStart(this.netMyId, this._coopSeed, this.levelKey); // mid-run joiner gets the seed
   }
 
