@@ -129,22 +129,26 @@ export class Particles {
   }
 }
 
-// Ambient snow in screen space, parallax 1.25 vs camera.
+// Ambient foreground particles in screen space, parallax 1.25 vs camera.
+// kind: 'snow' (m01) | 'petal' (m02 sakura; bubble lands 13.4 with m03).
 export class Snow {
-  constructor(count = CFG.perf.snowCount) {
+  constructor(count = CFG.perf.snowCount, kind = 'snow') {
     this.flakes = [];
-    this.reset(count);
+    this.kind = kind;
+    this.reset(count, kind);
   }
 
-  reset(count = this.flakes.length) {
+  reset(count = this.flakes.length, kind = this.kind) {
+    this.kind = kind;
+    const petal = kind === 'petal';
     this.flakes = [];
     for (let i = 0; i < count; i++) {
       this.flakes.push({
         x: Math.random() * 2000,
         y: Math.random() * 2000,
-        sp: 28 + Math.random() * 45,
+        sp: petal ? 20 + Math.random() * 30 : 28 + Math.random() * 45,
         ph: Math.random() * TAU,
-        sz: 1 + Math.random() * 1.8,
+        sz: petal ? 1.6 + Math.random() * 1.8 : 1 + Math.random() * 1.8,
         a: 0.35 + Math.random() * 0.45,
       });
     }
@@ -157,13 +161,16 @@ export class Snow {
   // Screen space. cam = view center; vw/vh = view size (CSS px).
   draw(ctx, cam, vw, vh, t) {
     const tx = vw + 80, ty = vh + 80, par = 1.25;
-    ctx.fillStyle = '#dfe8ff';
+    const petal = this.kind === 'petal';
+    const sway = petal ? 34 : 18;
+    ctx.fillStyle = petal ? CFG.perf.petalColor : '#dfe8ff';
     for (const f of this.flakes) {
-      const sx = mod(f.x + Math.sin(t * 0.7 + f.ph) * 18 - cam.x * par, tx) - 40;
+      const sx = mod(f.x + Math.sin(t * 0.7 + f.ph) * sway - cam.x * par, tx) - 40;
       const sy = mod(f.y - cam.y * par, ty) - 40;
       ctx.globalAlpha = f.a;
       ctx.beginPath();
-      ctx.arc(sx, sy, f.sz, 0, TAU);
+      if (petal) ctx.ellipse(sx, sy, f.sz * 1.5, f.sz * 0.75, Math.sin(t * 1.4 + f.ph) * 1.2, 0, TAU);
+      else ctx.arc(sx, sy, f.sz, 0, TAU);
       ctx.fill();
     }
     ctx.globalAlpha = 1;

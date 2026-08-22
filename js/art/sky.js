@@ -1,6 +1,6 @@
 // Sky: gradient band, twinkling stars, moon, drifting clouds, distant ridge silhouettes.
 
-import { makeCanvas, glowSprite } from './base.js';
+import { makeCanvas, glowSprite, poly } from './base.js';
 import { TAU, mulberry32 } from '../utils/math.js';
 
 function cloudSprite(rng, w) {
@@ -89,7 +89,104 @@ function ridge(w, h, amp, color, snow, rng) {
   return c;
 }
 
-export function buildSky() {
+// Flat stratus band (m02 dusk: pink-gray ellipses).
+function stratusSprite(rng, w) {
+  const h = Math.round(w * 0.22);
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  for (let i = 0; i < 3; i++) {
+    const px = w * 0.2 + rng() * w * 0.6;
+    const py = h * (0.35 + rng() * 0.3);
+    const pr = (14 + rng() * 16) * (w / 480);
+    const grad = g.createRadialGradient(px, py, pr * 0.2, px, py, pr * 1.6);
+    grad.addColorStop(0, 'rgba(214,166,186,0.30)');
+    grad.addColorStop(0.7, 'rgba(160,120,150,0.18)');
+    grad.addColorStop(1, 'rgba(140,100,130,0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.ellipse(px, py, pr * 2.2, pr * 0.6, 0, 0, TAU);
+    g.fill();
+  }
+  return c;
+}
+
+// Mt. Fuji: seamless 2400px tile, single snow-capped peak centered.
+function fujiSprite() {
+  const w = 2400, h = 300;
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  const px = w / 2, peakY = 30;
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#4b2c47');
+  grad.addColorStop(1, '#33203c');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.moveTo(0, h);
+  g.lineTo(0, h * 0.86);
+  g.quadraticCurveTo(w * 0.28, h * 0.52, px - 140, peakY + 40);
+  g.quadraticCurveTo(px - 40, peakY + 8, px, peakY);
+  g.quadraticCurveTo(px + 40, peakY + 8, px + 140, peakY + 40);
+  g.quadraticCurveTo(w * 0.72, h * 0.52, w, h * 0.88);
+  g.lineTo(w, h);
+  g.closePath();
+  g.fill();
+  // snow cap (zigzag under the summit)
+  const cap = [[px, peakY]];
+  for (let i = 1; i <= 5; i++) cap.push([px + 20 * i, peakY + 8 * i + (i % 2 ? 5 : -2)]);
+  for (let i = 5; i >= 1; i--) cap.push([px - 17 * i, peakY + 8 * i + ((i + 1) % 2 ? 4 : -2)]);
+  poly(g, cap);
+  g.fillStyle = 'rgba(244,236,242,0.92)';
+  g.fill();
+  return c;
+}
+
+function starsArr(rng, n, yMax) {
+  const stars = [];
+  for (let i = 0; i < n; i++) {
+    stars.push({
+      x: rng(), y: rng() * yMax,
+      r: 0.6 + rng() * 1.1,
+      ph: rng() * TAU, sp: 0.5 + rng() * 1.6,
+      a: 0.3 + rng() * 0.55,
+    });
+  }
+  return stars;
+}
+
+export function buildSky(levelKey = 'm01') {
+  if (levelKey === 'm02') {
+    const rng = mulberry32(778);
+    const clouds = [];
+    const bands = [
+      { yFrac: 0.10, scale: 0.6, speed: 3, alpha: 0.6 },
+      { yFrac: 0.22, scale: 0.9, speed: 5, alpha: 0.8 },
+      { yFrac: 0.34, scale: 1.2, speed: 8, alpha: 1 },
+    ];
+    for (const b of bands) {
+      const n = 1 + ((rng() * 2) | 0); // 1–2 per band
+      for (let i = 0; i < n; i++) {
+        const w = 360 + rng() * 260;
+        clouds.push({
+          img: stratusSprite(rng, w),
+          x: rng() * 2400,
+          yFrac: b.yFrac + (rng() - 0.5) * 0.06,
+          speed: b.speed * (0.8 + rng() * 0.5),
+          scale: b.scale * (0.85 + rng() * 0.4),
+          alpha: b.alpha,
+        });
+      }
+    }
+    return {
+      clouds,
+      stars: starsArr(rng, 80, 0.55),
+      moon: moonSprite(),
+      ridges: {
+        far: fujiSprite(),
+        near: ridge(2400, 150, 60, '#33203c', false, rng),
+      },
+      star: '#ffe9f0', moonX: 0.72, moonY: 0.16, moonScale: 1.45,
+    };
+  }
   const rng = mulberry32(777);
   const clouds = [];
   const bands = [
@@ -110,22 +207,14 @@ export function buildSky() {
       });
     }
   }
-  const stars = [];
-  for (let i = 0; i < 110; i++) {
-    stars.push({
-      x: rng(), y: rng() * 0.55,
-      r: 0.6 + rng() * 1.1,
-      ph: rng() * TAU, sp: 0.5 + rng() * 1.6,
-      a: 0.3 + rng() * 0.55,
-    });
-  }
   return {
     clouds,
-    stars,
+    stars: starsArr(rng, 110, 0.55),
     moon: moonSprite(),
     ridges: {
       far: ridge(2400, 200, 66, '#252b4c', false, rng),
       near: ridge(2400, 252, 104, '#1b2138', true, rng),
     },
+    star: '#cfd8ff', moonX: 0.06, moonY: 0.22, moonScale: 1,
   };
 }

@@ -110,7 +110,7 @@ export class Game {
     this.combat.reset();
     this.pickups.reset();
     this.particles.reset();
-    this.snow.reset();
+    this.snow.reset(undefined, this.level.foreground);
     this.camera.snap(s.x, s.y);
     this.t = 0;
     this.score = 0;
@@ -136,6 +136,7 @@ export class Game {
       const lvl = this.level || getLevel('m01'); // A5: backdrop previews the selected/last level
       this.world.generate(lvl.menuSeed, lvl.key);
       this.minimapBase = buildMinimapBase(this.world);
+      this.snow.reset(undefined, lvl.foreground);
     }
     this.camera.snap(this.world.W / 2, this.world.H / 2);
     this.menuT = 0;
@@ -470,7 +471,7 @@ export class Game {
     ctx.restore();
 
     // screen space: lighting → snow → vignette → minimap
-    this.lighting.draw(ctx, view, this._lights(), t);
+    this.lighting.draw(ctx, view, this._lights(), t, this.level.palette.light);
     this.snow.draw(ctx, view, vw, vh, t);
     if (this.vignette) ctx.drawImage(this.vignette, 0, 0, vw, vh);
     if (this.mctx && this.minimapBase) {

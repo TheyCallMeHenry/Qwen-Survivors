@@ -465,8 +465,25 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(m3.unlock.level === 'm02' && m3.unlock.wins === 3, 'm03 unlock: 3x m02 victories');
   ok(m1.foreground === 'snow' && m2.foreground === 'petal' && m3.foreground === 'bubble', 'levels: foreground snow/petal/bubble');
   ok(typeof m1.layout === 'function' && m1.weights(1000).rat === 5 && m1.boss.key === 'wraith' && m1.boss.at === 240, 'm01: layout/weights/boss wired');
-  ok(m2.layout === null && m3.layout === null && m2.weights === null && m3.weights === null, 'm02/m03: layout/weights land with 13.2–13.5');
+  ok(typeof m2.layout === 'function' && m2.weights === null && m3.layout === null && m3.weights === null, 'm02 layout wired (13.2); m02 weights + m03 layout/weights land 13.3–13.5');
   ok(generateWorld(20260820, 'm01').trees.length === 276 && generateWorld(20260820, 'm01').decor.length === 335 && generateWorld(20260820, 'm01').colliders.length === 328, 'm01 layout: golden counts (seed 20260820) — identical to pre-13.1');
+  // 13.2 — m02 (Higan) layout
+  const g = generateWorld(20260822, 'm02');
+  const g2 = generateWorld(20260822, 'm02');
+  ok(JSON.stringify(g) === JSON.stringify(g2), 'm02 layout: deterministic (seed 20260822)');
+  ok(g.trees.length > 150 && g.trees.every((t) => t.kind === 'cherry' || t.kind === 'cherryBig'), `m02: cherry-only trees (${g.trees.length})`);
+  const inb = (o) => o.x >= 70 && o.x <= 4130 && o.y >= 70 && o.y <= 3130;
+  ok(g.trees.every(inb) && g.huts.every(inb) && g.bamboo.every(inb) && g.lanterns.every(inb) && inb(g.pagoda), 'm02: trees/huts/bamboo/lanterns/pagoda in bounds');
+  ok(g.lakes.length === 1 && g.lakes[0].koi === 3 && g.lakes[0].ks.length === 3 && g.lakes.every(inb), 'm02: 1 koi pond, 3 koi, in bounds');
+  ok(g.monoliths.length === 6 && g.huts.length === 6 && g.pagoda && g.lanterns.length === 8 && g.lights.length === g.lanterns.length + 1, 'm02: 6 torii + 6 shrines + pagoda + 8 lanterns, lights = lanterns + ring shrine');
+  ok(g.mountains.length === 0 && g.campfires.length === 0 && g.deadTrees.length === 0 && g.rocks.length === 0 && g.mushrooms.length === 0, 'm02: no m01-only fields');
+  ok(g.decor.length > 100 && g.decor.every((d) => /^(cherry:|cherryBig:|bamboo:|torii$|shrine:|pagoda:|lantern:|stump$)/.test(d.k)), 'm02: decor keys cherry/cherryBig/bamboo/torii/shrine/pagoda/lantern/stump only');
+  const m02Decals = ['tuftG', 'petalDrop', 'flowerC', 'pebble', 'stone', 'moss', 'pathA', 'pathB', 'pathC'];
+  ok(g.decals.length > 500 && g.decals.every((d) => m02Decals.includes(d.k)), 'm02: ~900+ decals from m02 set (+ paths)');
+  ok(g.decals.filter((d) => d.k.startsWith('path')).length > 40, 'm02: stone paths (village/pond/ring/cluster trails)');
+  ok(g.colliders.every((c) => Math.hypot(c.x - g.playerStart.x, c.y - g.playerStart.y) > 70 + (c.r || Math.max(c.rx, c.ry) || 0)), 'm02: spawn clearance');
+  ok(g.well && g.ringShrine && inb(g.well) && inb(g.ringShrine), 'm02: well + ringShrine in bounds');
+  ok(g.trees.length === 274 && g.decor.length === 324 && g.colliders.length === 331, 'm02 layout: golden counts (seed 20260822)');
   ok(aliveCap(120, m1) === 70 && aliveCap(120, m2) === 87.5 && batchSize(300, m2) === 8 && near(spawnInterval(100, m2), spawnInterval(100) / 1.25), 'spawner: per-level diff scales cap/batch/interval');
 }
 

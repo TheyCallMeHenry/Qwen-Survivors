@@ -16,7 +16,7 @@ export const LEVELS = {
     foreground: 'snow',
     audio: 'wood',
     unlock: { level: null, wins: 0 },
-    palette: { skyTop: '#0b1026', skyHorizon: '#3a2c4e', ground: '#131c17', mm: '#0b111e' },
+    palette: { skyTop: '#0b1026', skyHorizon: '#3a2c4e', ground: '#131c17', mm: '#0b111e', light: '8,10,24' },
     weights: (t) => ({
       rat: 5,
       bat: t > 30 ? 3 : 0.5,
@@ -37,8 +37,8 @@ export const LEVELS = {
     foreground: 'petal',    // sakura petals — Map 02 only (replaces snow)
     audio: 'higan',
     unlock: { level: 'm01', wins: 3 },
-    palette: { skyTop: '#241226', skyHorizon: '#e8909c', ground: '#221a16', mm: '#191016' }, // dusk pink + full moon (A5); final values 13.2
-    weights: null, boss: null, layout: null, // 13.3 / 13.3 / 13.2
+    palette: { skyTop: '#241226', skyHorizon: '#e8909c', ground: '#1e2a19', mm: '#191016', light: '24,10,16' }, // dusk pink + full moon (A5)
+    weights: null, boss: null, layout: layoutM02, // weights/boss land 13.3; layout 13.2
   },
   m03: {
     key: 'm03',
@@ -49,7 +49,7 @@ export const LEVELS = {
     foreground: 'bubble',   // small rising bubbles (replaces snow / petals)
     audio: 'drowned',
     unlock: { level: 'm02', wins: 3 },
-    palette: { skyTop: '#020a18', skyHorizon: '#06344e', ground: '#05141e', mm: '#04121e' }, // deep-water gradient, no sky (A5); final values 13.4
+    palette: { skyTop: '#020a18', skyHorizon: '#06344e', ground: '#05141e', mm: '#04121e', light: '4,10,22' }, // deep-water gradient, no sky (A5)
     weights: null, boss: null, layout: null, // 13.5 / 13.5 / 13.4
   },
 };
@@ -249,5 +249,216 @@ function layoutM01(seed) {
     decals,
     lights,
     decor,
+  };
+}
+
+// --- m02 layout: Higan (traditional-Japanese spring; torii ring landmark) ---
+function layoutM02(seed) {
+  const rng = mulberry32(seed >>> 0);
+  const W = LEVELS.m02.w, H = LEVELS.m02.h, M = LEVELS.m02.margin;
+  const rand = (a, b) => a + rng() * (b - a);
+  const pick = (arr) => arr[(rng() * arr.length) | 0];
+  const clampPos = (x, y) => ({ x: clamp(x, M, W - M), y: clamp(y, M, H - M) });
+
+  // --- village: 6 shrines + 1 pagoda, well at center ---
+  const village = { x: W / 2 + rand(-260, 260), y: H / 2 + rand(-200, 200) };
+  const well = { x: village.x, y: village.y };
+  const huts = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * TAU + rand(-0.4, 0.4);
+    const p = clampPos(village.x + Math.cos(a) * rand(140, 210), village.y + Math.sin(a) * rand(100, 160));
+    huts.push({ x: p.x, y: p.y, v: i % 2 });
+  }
+  const pagoda = { x: village.x + rand(-320, 320), y: village.y + rand(-260, 260) };
+  const playerStart = { x: village.x, y: village.y + 80 };
+
+  // --- koi pond (1), away from the village ---
+  let p = { x: 0, y: 0 }, tries = 0;
+  do {
+    p = clampPos(rand(300, W - 300), rand(700, H - 300));
+    tries++;
+  } while (Math.hypot(p.x - village.x, p.y - village.y) < 650 && tries < 24);
+  const rx = Math.round(rand(140, 240));
+  const lakes = [{
+    x: p.x, y: p.y, rx, ry: Math.round(rx * 0.45),
+    ls: ((seed + 1013904223) >>> 0), koi: 3,
+    ks: [0, 1, 2].map((k) => ({ sp: 0.3 + rng() * 0.7, ph: rng() * TAU, k })),
+  }];
+  const pond = lakes[0];
+
+  // --- 4 cherry clusters ---
+  const clusters = [];
+  for (let i = 0; i < 4; i++) {
+    let c = { x: 0, y: 0 }, tr = 0;
+    do {
+      c = clampPos(rand(200, W - 200), rand(200, H - 200));
+      tr++;
+    } while (
+      (Math.hypot(c.x - village.x, c.y - village.y) < 550 ||
+        Math.hypot(c.x - pond.x, c.y - pond.y) < pond.rx + 250) && tr < 24
+    );
+    clusters.push(c);
+  }
+
+  const trees = [];
+  const addTree = (x, y, kind, s) => {
+    const pt = clampPos(x, y);
+    trees.push({ x: pt.x, y: pt.y, kind, s, v: (rng() * (kind === 'cherryBig' ? 2 : 4)) | 0 });
+  };
+  for (const c of clusters) {
+    const n = 12 + (rng() * 15 | 0); // 12–26
+    for (let i = 0; i < n; i++) {
+      const gx = c.x + (rng() + rng() - 1) * 260;
+      const gy = c.y + (rng() + rng() - 1) * 260;
+      if (rng() < 0.16) addTree(gx, gy, 'cherryBig', 1.4 + rng() * 0.5);
+      else addTree(gx, gy, 'cherry', 0.8 + rng() * 0.4);
+    }
+  }
+  // scattered singletons
+  const nScatter = 14 + (rng() * 10 | 0);
+  for (let i = 0; i < nScatter; i++) addTree(rand(M + 40, W - M - 40), rand(M + 40, H - M - 40), 'cherry', 0.8 + rng() * 0.4);
+  // perimeter cherry ring (m01 pine-ring pattern)
+  const ringStep = 70;
+  for (let x = M + 60; x < W - M; x += ringStep * (0.8 + rng() * 0.5)) addTree(x, M + rand(30, 110), 'cherry', 1.0 + rng() * 0.35);
+  for (let x = M + 60; x < W - M; x += ringStep * (0.8 + rng() * 0.5)) addTree(x, H - M - rand(30, 110), 'cherry', 1.0 + rng() * 0.35);
+  for (let y = M + 240; y < H - M; y += ringStep * (0.8 + rng() * 0.5)) addTree(M + rand(30, 110), y, 'cherry', 1.0 + rng() * 0.35);
+  for (let y = M + 240; y < H - M; y += ringStep * (0.8 + rng() * 0.5)) addTree(W - M - rand(30, 110), y, 'cherry', 1.0 + rng() * 0.35);
+
+  const stumps = [];
+  for (let i = 0; i < 6; i++) stumps.push(clampPos(rand(M + 40, W - M - 40), rand(M + 40, H - M - 40)));
+
+  // --- bamboo groves ---
+  const bamboo = [];
+  for (let i = 0; i < 3; i++) {
+    let g = { x: 0, y: 0 }, tr = 0;
+    do {
+      g = clampPos(rand(200, W - 200), rand(200, H - 200));
+      tr++;
+    } while (
+      (Math.hypot(g.x - village.x, g.y - village.y) < 500 ||
+        Math.hypot(g.x - pond.x, g.y - pond.y) < pond.rx + 220 ||
+        clusters.some((c) => Math.hypot(g.x - c.x, g.y - c.y) < 220)) && tr < 24
+    );
+    const n = 6 + (rng() * 5 | 0); // 6–10 culms
+    for (let j = 0; j < n; j++) {
+      const pt = clampPos(g.x + rand(-70, 70), g.y + rand(-70, 70));
+      bamboo.push({ x: pt.x, y: pt.y, v: (rng() * 2) | 0 });
+    }
+  }
+
+  // --- lanterns: 5 village-ring + 3 pond-ring ---
+  const lanterns = [];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * TAU + rand(-0.3, 0.3);
+    lanterns.push({ x: village.x + Math.cos(a) * rand(240, 300), y: village.y + Math.sin(a) * rand(180, 230) });
+  }
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * TAU + rand(-0.3, 0.3);
+    lanterns.push({ x: pond.x + Math.cos(a) * (pond.rx + 60), y: pond.y + Math.sin(a) * (pond.ry + 50) });
+  }
+
+  // --- torii ring (landmark; monoliths field) + center shrine ---
+  const ringC = clampPos(W * 0.28 + rand(-150, 150), H * 0.30 + rand(-100, 100));
+  const monoliths = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * TAU + rand(-0.15, 0.15);
+    monoliths.push({ x: ringC.x + Math.cos(a) * 190, y: ringC.y + Math.sin(a) * 150 });
+  }
+  const ringShrine = { x: ringC.x, y: ringC.y, v: 0 };
+
+  // --- stone paths (decal slabs): village→pond, village→ring, 2 cluster trails ---
+  const decals = [];
+  const pave = (a, b) => {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const n = Math.max(1, Math.round(Math.hypot(dx, dy) / 64));
+    for (let i = 0; i <= n; i++) {
+      const f = i / n;
+      decals.push({
+        k: `path${'ABC'[(i + (rng() * 3 | 0)) % 3]}`,
+        x: a.x + dx * f + rand(-14, 14),
+        y: a.y + dy * f + rand(-14, 14),
+        s: 0.85 + rng() * 0.4,
+      });
+    }
+  };
+  pave(village, pond);
+  pave(village, ringC);
+  pave(clusters[0], clusters[1]);
+  pave(clusters[2], clusters[3]);
+
+  // --- ~900 ground decals ---
+  const decalKeys = ['tuftG', 'tuftG', 'tuftG', 'tuftG', 'tuftG', 'tuftG', 'tuftG', 'tuftG',
+    'petalDrop', 'petalDrop', 'petalDrop', 'petalDrop', 'petalDrop', 'petalDrop',
+    'flowerC', 'flowerC', 'flowerC', 'flowerC',
+    'pebble', 'pebble', 'pebble', 'pebble', 'pebble',
+    'stone', 'stone', 'stone',
+    'moss', 'moss', 'moss'];
+  for (let i = 0; i < 900; i++) {
+    const k = pick(decalKeys);
+    decals.push({
+      k,
+      x: rand(M, W - M),
+      y: rand(M, H - M),
+      s: k === 'moss' ? 0.8 + rng() * 0.7 : 0.7 + rng() * 0.6,
+    });
+  }
+
+  // --- colliders ---
+  const colliders = [];
+  for (const t of trees) colliders.push({ x: t.x, y: t.y, r: t.kind === 'cherryBig' ? 15 : 9 + t.s * 4 });
+  for (const b of bamboo) colliders.push({ x: b.x, y: b.y, r: 7 });
+  for (const h of huts) {
+    colliders.push({ x: h.x - 18, y: h.y, r: 34 });
+    colliders.push({ x: h.x + 18, y: h.y, r: 34 });
+  }
+  colliders.push({ x: pagoda.x - 18, y: pagoda.y, r: 30 });
+  colliders.push({ x: pagoda.x + 18, y: pagoda.y, r: 30 });
+  for (const l of lanterns) colliders.push({ x: l.x, y: l.y, r: 8 });
+  for (const m of monoliths) {
+    colliders.push({ x: m.x - 22, y: m.y, r: 10 });
+    colliders.push({ x: m.x + 22, y: m.y, r: 10 });
+  }
+  colliders.push({ x: ringShrine.x - 18, y: ringShrine.y, r: 34 });
+  colliders.push({ x: ringShrine.x + 18, y: ringShrine.y, r: 34 });
+  colliders.push({ x: well.x, y: well.y, r: 16 });
+  for (const l of lakes) colliders.push({ x: l.x, y: l.y, rx: l.rx, ry: l.ry, ellipse: true });
+  // keep spawn clear (player margin 70)
+  const clear = (c) => {
+    const rr = c.r || Math.max(c.rx, c.ry) || 0;
+    return Math.hypot(c.x - playerStart.x, c.y - playerStart.y) > 70 + rr;
+  };
+  const safeColliders = colliders.filter(clear);
+
+  // --- lights: 8 lanterns + ring shrine ---
+  const lights = lanterns.map((l) => ({ x: l.x, y: l.y - 14, r: 95, rgb: '255,170,80', flicker: 0.7 }));
+  lights.push({ x: ringShrine.x, y: ringShrine.y - 30, r: 150, rgb: '255,180,90', flicker: 0.35 });
+
+  // --- standing decor for Y-sort (keys resolved to canvases by World) ---
+  const decor = [];
+  const put = (o, k, s, w, h) => decor.push({ x: o.x, y: o.y, k, s, w, h });
+  for (const t of trees) {
+    const big = t.kind === 'cherryBig';
+    put(t, big ? `cherryBig:${t.v}` : `cherry:${t.v}`, t.s, big ? 90 : 64, big ? 120 : 88);
+  }
+  for (const b of bamboo) put(b, `bamboo:${b.v}`, 1, 44, 110);
+  for (const h of huts) put(h, `shrine:${h.v}`, 1, 120, 110);
+  put(pagoda, 'pagoda:0', 1, 100, 170);
+  for (const l of lanterns) put(l, 'lantern:0', 1, 30, 56);
+  for (const m of monoliths) put(m, 'torii', 1, 110, 130);
+  put(ringShrine, 'shrine:0', 1, 120, 110);
+  for (const s of stumps) put(s, 'stump', 1, 36, 26);
+
+  return {
+    seed, W, H,
+    village, well, playerStart,
+    huts, campfires: [], monoliths,
+    lakes, mountains: [],
+    trees, deadTrees: [], rocks: [], stumps,
+    mushrooms: [],
+    colliders: safeColliders,
+    decals,
+    lights,
+    decor,
+    pagoda, ringShrine, lanterns, bamboo,
   };
 }

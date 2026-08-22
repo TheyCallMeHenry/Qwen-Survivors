@@ -153,6 +153,7 @@ const { buildItems, buildIcons } = await import('../js/art/items.js');
 const { initHud } = await import('../js/ui/hud.js');
 const { initScreens } = await import('../js/ui/screens.js');
 const { aliveCap } = await import('../js/entities/spawner.js');
+const { getLevel } = await import('../js/world/levels.js');
 const { clamp } = await import('../js/utils/math.js');
 const { recomputeStats } = await import('../js/entities/player.js');
 
@@ -647,6 +648,28 @@ assert(closeCount === 1 && !byId['screen-quit'].classList.contains('hidden'), 'b
 byId['btn-quit-ack'].click();
 pump(30);
 assert(closeCount >= 2, 'btn-quit-ack did not re-attempt close');
+
+// 13.2 — M02 "Higan" menu backdrop (no real m02 run: weights land 13.3).
+// toMenu() early-returns on MENU, so force the fallback (world.data null) branch.
+game.state = 'GAMEOVER';
+game.level = getLevel('m02');
+game.levelKey = 'm02';
+game.world.data = null;
+game.toMenu();
+pump(300);
+assert(game.world.level.key === 'm02', 'm02 menu backdrop did not generate');
+assert(game.world.decor.length > 100 && game.world.decor.every((d) => d.img), 'm02 menu backdrop: decor sprites unresolved');
+assert(game.snow.kind === 'petal', 'm02 menu backdrop foreground is not petal');
+assert(game.minimapBase, 'm02 minimap base missing');
+// m01 regression: same dance returns the snow backdrop
+game.state = 'GAMEOVER';
+game.level = getLevel('m01');
+game.levelKey = 'm01';
+game.world.data = null;
+game.toMenu();
+pump(300);
+assert(game.world.level.key === 'm01', 'm01 menu backdrop regression');
+assert(game.snow.kind === 'snow', 'm01 menu backdrop foreground is not snow');
 
 // self-verification: every one-shot path above must have actually fired
 assert(keyPickDone, 'keyboard card pick never exercised');

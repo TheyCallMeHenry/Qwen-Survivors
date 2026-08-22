@@ -24,13 +24,14 @@ export class Lighting {
   }
 
   // cam = {x, y, w, h} view center + size. lights = [{x, y, r, rgb: 'r,g,b', flicker 0..1}] (world space).
-  draw(ctx, cam, lights, t) {
+  // base = 'r,g,b' darkness base (per-level palette; default = m01/CFG).
+  draw(ctx, cam, lights, t, base = CFG.lighting.base) {
     if (!this.cv) this.resize(cam.w, cam.h);
     const g = this.ctx;
     const ox = cam.x - cam.w / 2, oy = cam.y - cam.h / 2; // view top-left (world px)
 
     g.globalCompositeOperation = 'source-over';
-    g.fillStyle = `rgba(${CFG.lighting.base},${CFG.lighting.baseAlpha})`;
+    g.fillStyle = `rgba(${base},${CFG.lighting.baseAlpha})`;
     g.fillRect(0, 0, this.w, this.h);
     g.globalCompositeOperation = 'destination-out';
     for (const L of lights) this._hole(g, L, ox, oy, t);

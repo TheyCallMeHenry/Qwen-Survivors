@@ -272,5 +272,6 @@ export const CFG = {
     dprCapMobile: 1.5,
     particleCap: 512,
     snowCount: 90,
+    petalColor: '#f7b8c8', // sakura petal (m02 foreground)
   },
 };
