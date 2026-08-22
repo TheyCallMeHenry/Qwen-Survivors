@@ -8,7 +8,7 @@ import { HashGrid } from '../js/utils/grid.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../js/entities/spawner.js';
 import { Enemies } from '../js/entities/enemies.js';
 import { cardOffers, applyCard, recomputeStats, cardEffectText } from '../js/entities/player.js';
-import { loadMeta, shardsFor, upgradeCost, applyMeta } from '../js/core/meta.js';
+import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins } from '../js/core/meta.js';
 import { rankScore } from '../js/ui/screens.js';
 import { MUSIC, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
@@ -232,7 +232,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(pasOk, 'passives: max/val positive');
   ok(CFG.player.startWeapons.every((k) => CFG.weapons[k]), 'startWeapons: keys exist in weapons');
   const bosses = Object.keys(CFG.enemies).filter((k) => CFG.enemies[k].boss);
-  ok(bosses.length === 2 && bosses[0] === 'wraith' && bosses[1] === 'ryu', 'enemies: bosses wraith (m01) + ryu (m02)');
+  ok(bosses.length === 3 && bosses[0] === 'wraith' && bosses[1] === 'ryu' && bosses[2] === 'shark', 'enemies: bosses wraith (m01) + ryu (m02) + shark (m03)');
   const wk = Object.keys(getLevel('m01').weights(300));
   ok(wk.length > 0 && wk.every((k) => CFG.enemies[k]), 'm01 weights keys ⊆ enemies');
   ok(Object.values(CFG.enemies).every((e) => Number.isInteger(e.xp) && e.xp > 0), 'enemies.xp: positive integers');
@@ -467,7 +467,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(m1.foreground === 'snow' && m2.foreground === 'petal' && m3.foreground === 'bubble', 'levels: foreground snow/petal/bubble');
   ok(typeof m1.layout === 'function' && m1.weights(1000).rat === 5 && m1.boss.key === 'wraith' && m1.boss.at === 240, 'm01: layout/weights/boss wired');
   ok(typeof m2.layout === 'function' && typeof m2.weights === 'function' && m2.boss.key === 'ryu' && m2.boss.at === 240, 'm02: layout/weights/boss (Ryū) wired (13.2/13.3)');
-  ok(typeof m3.layout === 'function' && m3.weights === null && m3.boss === null, 'm03 layout wired (13.4); weights/boss land 13.5');
+  ok(typeof m3.layout === 'function' && typeof m3.weights === 'function' && m3.boss.key === 'shark' && m3.boss.at === 240, 'm03: layout/weights/boss (Great White) wired (13.4/13.5)');
   ok(generateWorld(20260820, 'm01').trees.length === 276 && generateWorld(20260820, 'm01').decor.length === 335 && generateWorld(20260820, 'm01').colliders.length === 328, 'm01 layout: golden counts (seed 20260820) — identical to pre-13.1');
   // 13.2 — m02 (Higan) layout
   const g = generateWorld(20260822, 'm02');
@@ -531,7 +531,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 // 13.4 — m03 (The Drowned City) layout
 {
   const m3 = getLevel('m03');
-  ok(typeof m3.layout === 'function' && m3.weights === null && m3.boss === null, 'm03: layout wired (13.4); weights/boss land 13.5');
+  ok(typeof m3.layout === 'function' && typeof m3.weights === 'function' && m3.boss.key === 'shark', 'm03: layout/weights/boss wired (13.4/13.5)');
   const g = generateWorld(20260823, 'm03');
   const g2 = generateWorld(20260823, 'm03');
   ok(JSON.stringify(g) === JSON.stringify(g2), 'm03 layout: deterministic (seed 20260823)');
@@ -549,6 +549,68 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(g.colliders.every((c) => Math.hypot(c.x - g.playerStart.x, c.y - g.playerStart.y) > 70 + (c.r || Math.max(c.rx, c.ry) || 0)), 'm03: spawn clearance');
   ok(g.well && g.ringShrine && inb(g.well) && inb(g.ringShrine), 'm03: well (city) + dome (ringShrine) in bounds');
   ok(g.trees.length === 319 && g.decor.length === 370 && g.colliders.length === 370, 'm03 layout: golden counts (seed 20260823)');
+}
+
+// 13.5 — m03 roster: stat tables ×1.56 (A4) + m03 weights (slot re-skins) + Great White boss
+{
+  const lm1 = getLevel('m01'), lm3 = getLevel('m03');
+  const eb = new Enemies();
+  ok(eb.spawn('shark', 0, 0).hp === 2400, 'Great White base stats = Wraith base (pre-diff)');
+  const e3 = new Enemies();
+  e3.diff = 1.56;
+  const rat3 = e3.spawn('rat', 0, 0);
+  ok(near(rat3.hp, 31.2) && rat3.dmg === 12.48, 'diff 1.56: crab slot 20→31.2 hp, 8→12.48 dmg');
+  const brt3 = e3.spawn('brute', 0, 0);
+  ok(brt3.hp === 436.8 && brt3.dmg === 39, 'diff 1.56: orca slot 280→436.8 hp, 25→39 dmg');
+  const shark = e3.spawn('shark', 0, 0);
+  ok(shark.boss && shark.hp === 3744 && shark.dmg === 43.68, 'Great White boss ×1.56 (3744 hp / 43.68 dmg)');
+  ok(lm3.boss.name === 'THE GREAT WHITE', 'm03 boss banner name');
+  const w3 = Object.keys(lm3.weights(300));
+  ok(w3.length === 6 && w3.every((k) => CFG.enemies[k]), 'm03 weights: 6 slot keys ⊆ enemies');
+  ok(JSON.stringify(lm3.weights(120)) === JSON.stringify(lm1.weights(120)), 'm03 weights = m01 role curve (re-skins)');
+  let earlyOk = true;
+  {
+    const rng = mulberry32(7);
+    for (let i = 0; i < 400; i++) {
+      const t = pickType(5, rng, lm3);
+      if (t !== 'rat' && t !== 'bat') earlyOk = false;
+    }
+  }
+  ok(earlyOk, 'm03 pickType(t=5): only crab/goldfish slots');
+  const seen = new Set();
+  {
+    const rng = mulberry32(8);
+    for (let i = 0; i < 3000; i++) {
+      const t = pickType(250, rng, lm3);
+      if (t) seen.add(t);
+    }
+  }
+  ok(seen.size === 6, 'm03 pickType(t=250): all six slot skins appear');
+}
+
+// 13.6 — unlock persistence: cumulative wins (victory-only) + unlock rules (3× each, chained)
+{
+  const lw = loadWins('no-such-key');
+  ok(LEVEL_ORDER.every((k) => lw[k] === 0), 'loadWins: defaults {0,0,0} without storage');
+  const w = defaultWins();
+  recordWin(w, 'm01'); recordWin(w, 'm01');
+  ok(w.m01 === 2 && w.m02 === 0, 'recordWin: only increments the level won');
+  ok(isUnlocked(w, 'm01'), 'm01 always unlocked');
+  ok(!isUnlocked(w, 'm02') && !isUnlocked(w, 'm03'), 'm02/m03 locked with 2 m01 wins');
+  recordWin(w, 'm01');
+  ok(isUnlocked(w, 'm02') && !isUnlocked(w, 'm03'), 'm02 unlocked at 3× m01 wins; m03 still locked');
+  recordWin(w, 'm02'); recordWin(w, 'm02'); recordWin(w, 'm02');
+  ok(isUnlocked(w, 'm03'), 'm03 unlocked at 3× m02 wins (chained)');
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, v),
+    removeItem: (k) => store.delete(k),
+  };
+  saveWins(CFG.meta.winsKey, w);
+  const w2 = loadWins(CFG.meta.winsKey);
+  ok(w2.m01 === 3 && w2.m02 === 3 && w2.m03 === 0, 'wins: localStorage round-trip');
+  delete globalThis.localStorage;
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

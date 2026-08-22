@@ -15,7 +15,8 @@
 // (window.close stub + fallback screen) → 13.2 M02 menu-backdrop E2E (m02 +
 // m01 regression) → 13.4 M03 backdrop E2E (sun glow + godrays + fish schools
 // + bubble foreground) → 13.3 M02 real run 3 (Higan skins + ×1.25 stats +
-// Ryū boss banner/spawn → victory 5:00).
+// Ryū boss banner/spawn → victory 5:00) → 13.5 M03 real run 4 (drowned
+// skins + ×1.56 stats + Great White boss banner/spawn → victory 5:00).
 // Catches first-frame/wired-up runtime crashes the pure-logic tests cannot
 // see, and drives paths the happy-path sim never hit: keyboard card picks,
 // non-start weapons, heart heal, meta buy + apply, new-weapon projectiles,
@@ -189,7 +190,8 @@ const loop = new Loop({
 game = new Game({ input, loop, ctx, mctx, characters, items });
 game.bus.on('gem', () => gemEvents++); // 10.8 — gem pickup SFX event counter
 const m02Banners = []; // 13.3 — run-3 boss banners (name-driven, per-level)
-game.bus.on('banner', (b) => { if (run === 3) m02Banners.push(b.text); });
+const m03Banners = []; // 13.5 — run-4 boss banners
+game.bus.on('banner', (b) => { if (run === 3) m02Banners.push(b.text); if (run === 4) m03Banners.push(b.text); });
 const hud = initHud(game);
 const screens = initScreens(game, { icons });
 
@@ -230,6 +232,7 @@ let e107A = false, e107ADone = false, e107B = false, e107BDone = false; // 10.7 
 let benchPhase = 0, benchStartT = 0; // 10.4 one-shot worst-case bench: 0=off · 1=measuring · 2=done
 let bench = null;
 let m02RunDone = false; // 13.3 — M02 real run one-shot
+let m03RunDone = false; // 13.5 — M03 real run one-shot
 
 function steer() {
   const st = game.state;
@@ -510,8 +513,8 @@ function steer() {
       e107BDone = true;
     }
   }
-  if (run === 3) {
-    // 13.3 — M02 run: keep-alive so the run reaches the Ryū (t=240) + victory (t=300)
+  if (run === 3 || run === 4) {
+    // 13.3/13.5 — M02/M03 run: keep-alive so the run reaches the boss (t=240) + victory (t=300)
     const p = game.player;
     p.iframes = 1;
     if (p.hp < 50) p.hp = 50;
@@ -723,6 +726,34 @@ assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
 assert(game.kills > 0, 'm02 run: no kills (m02 roster never spawned?)');
 m02RunDone = true;
 
+// 13.5 — M03 "The Drowned City" REAL run (13.5): m03 weights + drowned slot skins +
+// ×1.56 stat tables + Great White boss. btn-go-menu → btn-start → last levelKey.
+run = 4;
+byId['btn-go-menu'].click();
+assert(game.state === 'MENU', 'm03 run: btn-go-menu did not return to menu');
+game.levelKey = 'm03';
+byId['btn-start'].click();
+assert(game.state === 'PLAYING', 'btn-start did not start the m03 run');
+assert(game.levelKey === 'm03' && game.level.diff === 1.56, 'm03 run did not take level m03 (diff 1.56)');
+assert(game.enemies.diff === 1.56, 'm03 run: enemies.diff not wired');
+for (const k of ['rat', 'bat', 'goblin', 'wolf', 'brute', 'cultist', 'shark'])
+  assert(game.enemies.defs[k] && game.enemies.defs[k].frames.length > 0, `m03 run: sprite set missing slot "${k}"`);
+{
+  const sp = game.world.playerStart;
+  const sample = game.enemies.spawn('rat', sp.x, sp.y + 400);
+  assert(Math.abs(sample.hp - 31.2) < 1e-9 && sample.dmg === 12.48, 'm03 run: spawned stats not ×1.56 (31.2/12.48 expected)');
+  sample.dead = true; // compacted on the next update; not a kill
+}
+assert(pumpUntil(() => game.bossSpawned, 20 * 60 * 60), `m03 run: Great White never spawned (state=${game.state} t=${game.t.toFixed(1)}s)`);
+const sharkBoss = game.enemies.list.find((e) => e.boss);
+assert(sharkBoss && sharkBoss.type === 'shark', 'm03 boss is not the Great White');
+assert(sharkBoss.hp === 3744 && sharkBoss.dmg === 43.68, 'Great White stats not ×1.56 (3744/43.68 expected)');
+assert(m03Banners.includes('THE GREAT WHITE AWAKENS'), 'm03 boss banner did not name the Great White');
+assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
+  `m03 run: expected victory, got state=${game.state} t=${game.t.toFixed(1)}s`);
+assert(game.kills > 0, 'm03 run: no kills (m03 roster never spawned?)');
+m03RunDone = true;
+
 // self-verification: every one-shot path above must have actually fired
 assert(keyPickDone, 'keyboard card pick never exercised');
 assert(heartDone && heartAsserted, 'heart pickup path never exercised');
@@ -736,11 +767,12 @@ assert(gemDone && gemAsserted, 'gem pickup SFX event never exercised');
 assert(benchPhase === 2, '10.4 worst-case bench never completed');
 assert(stickDone && stickUp, 'touch stick path never exercised');
 assert(m02RunDone, 'm02 real run (13.3) never completed');
+assert(m03RunDone, 'm03 real run (13.5) never completed');
 
 console.log(
-  `PASS boot-sim — runs=3 (death + victory + m02) · level-ups=${levelUps} · max enemies alive=${maxEnemies} · ` +
+  `PASS boot-sim — runs=4 (death + victory + m02 + m03) · level-ups=${levelUps} · max enemies alive=${maxEnemies} · ` +
   `meta: gameover shards saved → Upgrades buy → maxHp 120 at run start · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
   `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · scores save/render/clear · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · scores save/render/clear · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · loop alive throughout`,
 );

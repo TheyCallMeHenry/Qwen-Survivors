@@ -1,6 +1,6 @@
 // Per-level definitions — Phase 13. Pure data + pure layout hooks; no canvas (Node-safe).
 // The m01 layout is the original Evernight Wood generator (moved verbatim — identical output).
-// m03: layout + weights + roster land with 13.4/13.5 (m02 weights/boss landed 13.3).
+// All levels wired: m01 13.1 · m02 13.2/13.3 · m03 13.4/13.5.
 
 import { mulberry32, clamp, TAU } from '../utils/math.js';
 
@@ -59,7 +59,16 @@ export const LEVELS = {
     audio: 'drowned',
     unlock: { level: 'm02', wins: 3 },
     palette: { skyTop: '#04283e', skyHorizon: '#0a4a66', ground: '#05141e', mm: '#04121e', light: '4,10,22' }, // deep-water gradient: light enters at the surface (A5)
-    weights: null, boss: null, layout: layoutM03, // 13.5 / 13.5 / 13.4
+    weights: (t) => ({   // same role curve as m01 (slot re-skins) — difficulty via diff (A4)
+      rat: 5,
+      bat: t > 30 ? 3 : 0.5,
+      goblin: t > 60 ? 4 : 0,
+      wolf: t > 120 ? 3 : 0,
+      brute: t > 150 ? 2 : 0,
+      cultist: t > 90 ? 2.5 : 0,
+    }),
+    boss: { key: 'shark', at: 240, name: 'THE GREAT WHITE' },
+    layout: layoutM03,
   },
 };
 

@@ -181,6 +181,7 @@ export const CFG = {
     cultist: { hp: 55,   speed: [75, 95],   dmg: 10, xp: 3,  r: 13, score: 30, ranged: true, fps: 4 },
     wraith:  { hp: 2400, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
     ryu:     { hp: 2400, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
+    shark:   { hp: 2400, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
   },
 
   ai: {
@@ -257,6 +258,7 @@ export const CFG = {
   // Persistent meta progression (Soulshards + between-run upgrades). localStorage.
   meta: {
     storageKey: 'qsurv.meta.v1',
+    winsKey: 'qsurv.wins.v1',   // per-level cumulative victory counts (13.6)
     shardPerScore: 400,   // shards per score point
     victoryBonus: 25,     // flat bonus shards on victory
     upgrades: {

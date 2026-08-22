@@ -1,7 +1,7 @@
 // Characters: player + per-level enemy skins. All face RIGHT — flip at draw time
 // with flipX(). Feet/base sit near the bottom of each canvas; shadowR is the
 // runtime soft-shadow radius. Hit-flash copies are made at use via flashCopy.
-// m01 = Evernight Wood (originals) · m02 = Higan re-skins (13.3) · m03 lands 13.5.
+// m01 = Evernight Wood (originals) · m02 = Higan re-skins (13.3) · m03 = Drowned City re-skins (13.5).
 
 import { makeCanvas, roundRectPath, poly } from './base.js';
 import { TAU } from '../utils/math.js';
@@ -437,6 +437,259 @@ function ryuFrame(frame) {
   });
 }
 
+// --- Map 03 "The Drowned City" skins (13.5) — same canvas footprints as the m01 slots ---
+
+function crabFrame() {
+  return canvasOf(30, 26, (g) => {
+    g.strokeStyle = '#a04832';
+    g.lineWidth = 1.5;
+    g.lineCap = 'round';
+    for (const [x0, x1] of [[8, 2], [13, 5], [18, 9], [22, 16], [25, 23]]) {
+      g.beginPath(); g.moveTo(x0, 19); g.quadraticCurveTo((x0 + x1) / 2, 22, x1, 24); g.stroke();
+    }
+    g.fillStyle = '#c86a3c';
+    g.beginPath(); g.ellipse(15, 14, 9.5, 7, 0, 0, TAU); g.fill();
+    g.fillStyle = '#b3543a';
+    g.beginPath(); g.ellipse(15, 12, 8, 4, 0, 0, TAU); g.fill();
+    // claws (forward = right)
+    g.fillStyle = '#d87848';
+    g.beginPath(); g.arc(24, 8, 3.4, 0, 0, TAU); g.fill();
+    g.beginPath(); g.arc(28, 12, 3.4, 0, 0, TAU); g.fill();
+    g.fillStyle = '#3a1f14';
+    g.beginPath(); g.arc(25, 7, 1.2, 0, 0, TAU); g.fill();
+    g.beginPath(); g.arc(29, 11, 1.2, 0, 0, TAU); g.fill();
+    // stalked eyes
+    g.strokeStyle = '#8a4a30';
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(12, 10); g.lineTo(11.5, 6); g.stroke();
+    g.beginPath(); g.moveTo(17, 10); g.lineTo(17.5, 5.5); g.stroke();
+    g.fillStyle = '#2a1a12';
+    g.beginPath(); g.arc(11.5, 5.5, 1.3, 0, 0, TAU); g.fill();
+    g.beginPath(); g.arc(17.5, 5, 1.3, 0, 0, TAU); g.fill();
+  });
+}
+
+function goldfishFrame(up) {
+  return canvasOf(34, 28, (g) => {
+    const fy = up ? -2 : 2;
+    g.fillStyle = '#d87a42';
+    poly(g, [[9, 14 + fy * 0.5], [2, 6 + fy], [5, 14], [2, 22 - fy]]);
+    g.fill();
+    g.fillStyle = '#e8935a';
+    g.beginPath(); g.ellipse(20, 14, 10, 6.5, 0, 0, TAU); g.fill();
+    g.fillStyle = '#f2b076';
+    g.beginPath(); g.ellipse(21, 16.5, 8, 3.5, 0, 0, TAU); g.fill();
+    g.fillStyle = '#d87a42';
+    poly(g, [[16, 8.5 + fy * 0.5], [19, 3 + fy], [22, 8.5 + fy * 0.5]]);
+    g.fill();
+    g.fillStyle = '#2a1a12';
+    g.beginPath(); g.arc(27, 12.5, 1.3, 0, 0, TAU); g.fill();
+  });
+}
+
+function mermanFrame(legL, legR) {
+  return canvasOf(30, 38, (g) => {
+    const sway = (legL + legR) * 0.5;
+    // fish tail (sways with the goblin leg cycle)
+    g.fillStyle = '#4a7a6e';
+    poly(g, [[11 + sway, 30], [8 + sway, 38], [15 + sway, 33], [21 + sway, 38], [18 + sway, 30]]);
+    g.fill();
+    roundRectPath(g, 8, 16, 15, 16, 4);
+    g.fillStyle = '#7aa894';
+    g.fill();
+    g.strokeStyle = '#9a6a3a';
+    g.lineWidth = 3;
+    g.lineCap = 'round';
+    g.beginPath(); g.moveTo(24, 20); g.lineTo(27, 8); g.stroke();
+    // coral club tip
+    g.strokeStyle = '#c86a3c';
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(27, 8); g.lineTo(26, 4); g.moveTo(27, 8); g.lineTo(29, 5); g.stroke();
+    g.fillStyle = '#6a9a8a';
+    g.beginPath(); g.arc(16, 10, 7, 0, 0, TAU); g.fill();
+    g.fillStyle = '#ffd24a';
+    g.beginPath(); g.arc(18.5, 9, 1.2, 0, 0, TAU); g.fill();
+    g.beginPath(); g.arc(22, 9.5, 1.1, 0, 0, TAU); g.fill();
+  });
+}
+
+function mermaidFrame(legL, legR) {
+  return canvasOf(30, 38, (g) => {
+    const sway = (legL + legR) * 0.5;
+    g.fillStyle = '#3a6a80';
+    poly(g, [[11 + sway, 30], [7 + sway, 38], [15 + sway, 32], [22 + sway, 38], [18 + sway, 30]]);
+    g.fill();
+    roundRectPath(g, 8, 16, 15, 16, 4);
+    g.fillStyle = '#8ab0a0';
+    g.fill();
+    // shell top + flowing hair
+    g.fillStyle = '#d87a8a';
+    poly(g, [[9, 18], [22, 18], [15.5, 23]]);
+    g.fill();
+    g.fillStyle = '#4a8a9a';
+    poly(g, [[9, 4], [4, 12], [9, 16]]);
+    g.fill();
+    poly(g, [[23, 4], [28, 12], [22, 16]]);
+    g.fill();
+    g.fillStyle = '#7aa894';
+    g.beginPath(); g.arc(16, 10, 7, 0, 0, TAU); g.fill();
+    g.fillStyle = '#ffd24a';
+    g.beginPath(); g.arc(18.5, 9, 1.2, 0, 0, TAU); g.fill();
+    g.beginPath(); g.arc(22, 9.5, 1.1, 0, 0, TAU); g.fill();
+  });
+}
+
+function stingrayFrame(l1, l2) {
+  return canvasOf(46, 32, (g) => {
+    g.save();
+    g.translate(0, (l1 - l2) * 0.15); // swim undulation on the wolf leg cycle
+    // whip tail
+    g.strokeStyle = '#3a6a80';
+    g.lineWidth = 2;
+    g.lineCap = 'round';
+    g.beginPath(); g.moveTo(8, 18); g.quadraticCurveTo(2, 14, 1, 22); g.stroke();
+    // pectoral disc + pointed snout
+    g.fillStyle = '#4a7a90';
+    poly(g, [[8, 16], [20, 9], [40, 12], [45, 16], [40, 20], [20, 24]]);
+    g.fill();
+    g.fillStyle = '#5a8aa0';
+    g.beginPath(); g.ellipse(22, 16.5, 11, 5, 0, 0, TAU); g.fill();
+    // eyes + mouth slits behind the snout
+    g.fillStyle = '#1a2a34';
+    g.beginPath(); g.arc(38, 14, 1.1, 0, 0, TAU); g.fill();
+    g.strokeStyle = '#2a4a5a';
+    g.lineWidth = 1;
+    for (const mx of [33, 35.5]) {
+      g.beginPath(); g.moveTo(mx, 19.5); g.lineTo(mx + 2.5, 20); g.stroke();
+    }
+    g.restore();
+  });
+}
+
+function orcaFrame(frame) {
+  return canvasOf(64, 60, (g) => {
+    g.save();
+    g.translate(0, frame ? -1.5 : 0);
+    const dy = frame ? 0.5 : 0;
+    // tail fluke
+    g.fillStyle = '#232c36';
+    poly(g, [[16, 30 + dy], [5, 18 + dy], [11, 30 + dy], [5, 42 + dy]]);
+    g.fill();
+    // body
+    g.fillStyle = '#2c3844';
+    g.beginPath(); g.ellipse(34, 30 + dy, 22, 14, 0, 0, TAU); g.fill();
+    // head + snout
+    g.fillStyle = '#324050';
+    g.beginPath(); g.ellipse(50, 32 + dy, 10, 9, 0, 0, TAU); g.fill();
+    poly(g, [[56, 28 + dy], [62, 33 + dy], [56, 37 + dy]]);
+    g.fill();
+    // white belly + eye patch
+    g.fillStyle = '#e8f2f5';
+    g.beginPath(); g.ellipse(34, 37 + dy, 17, 7, 0, 0, TAU); g.fill();
+    g.beginPath(); g.ellipse(50, 40 + dy, 8, 5, 0, 0, TAU); g.fill();
+    g.fillStyle = '#e8f2f5';
+    g.beginPath(); g.ellipse(52, 26 + dy, 3, 2, -0.3, 0, TAU); g.fill();
+    // dorsal fin
+    g.fillStyle = '#2c3844';
+    poly(g, [[28, 18 + dy], [36, 8 + dy], [42, 18 + dy]]);
+    g.fill();
+    // eye + jaw
+    g.fillStyle = '#10181f';
+    g.beginPath(); g.arc(53.5, 28.5 + dy, 1.2, 0, 0, TAU); g.fill();
+    g.strokeStyle = '#1c2630';
+    g.lineWidth = 1.5;
+    g.lineCap = 'round';
+    g.beginPath(); g.moveTo(50, 38 + dy); g.quadraticCurveTo(56, 40 + dy, 61, 37 + dy); g.stroke();
+    g.fillStyle = '#e8f2f5';
+    for (const tx of [52, 55, 58]) poly(g, [[tx, 38 + dy], [tx + 1.5, 40.5 + dy], [tx + 3, 38.5 + dy]]), g.fill();
+    g.restore();
+  });
+}
+
+function eelFrame(frame) {
+  return canvasOf(32, 46, (g) => {
+    g.save();
+    g.translate(0, frame ? -1.5 : 0);
+    const bow = frame ? 4 : 0; // body bows between frames
+    // serpentine body, head near the top (facing right)
+    g.strokeStyle = '#4a7a8a';
+    g.lineWidth = 6;
+    g.lineCap = 'round';
+    g.beginPath(); g.moveTo(15, 45); g.bezierCurveTo(9 + bow, 32, 23 - bow, 22, 17, 10); g.stroke();
+    g.strokeStyle = '#6a9aaa';
+    g.lineWidth = 2.5;
+    g.beginPath(); g.moveTo(15, 44); g.bezierCurveTo(10 + bow, 32, 22 - bow, 22, 17, 11); g.stroke();
+    // head + eye
+    g.fillStyle = '#5a8a9a';
+    g.beginPath(); g.arc(18, 9, 4.5, 0, 0, TAU); g.fill();
+    g.fillStyle = '#ffd24a';
+    g.beginPath(); g.arc(20.5, 8.5, 1, 0, 0, TAU); g.fill();
+    // jagged lightning zap where the cultist orb sits
+    const oz = frame ? 1 : -1;
+    const glow = g.createRadialGradient(27, 24, 0.5, 27, 24, 8);
+    glow.addColorStop(0, 'rgba(140,220,255,0.7)');
+    glow.addColorStop(1, 'rgba(140,220,255,0)');
+    g.fillStyle = glow;
+    g.beginPath(); g.arc(27, 24, 8, 0, 0, TAU); g.fill();
+    g.strokeStyle = '#bfe8ff';
+    g.lineWidth = 1.8;
+    g.lineJoin = 'miter';
+    g.beginPath(); g.moveTo(25, 15); g.lineTo(29, 21 + oz); g.lineTo(25.5, 22 + oz); g.lineTo(30, 28 + oz * 0.5); g.lineTo(26, 31); g.stroke();
+    g.restore();
+  });
+}
+
+function sharkFrame(frame) {
+  return canvasOf(96, 112, (g) => {
+    g.save();
+    g.translate(0, frame ? 2 : 0);
+    const dy = frame ? 0.5 : 0;
+    // tail fluke
+    g.fillStyle = '#3a4a58';
+    poly(g, [[20, 64 + dy], [8, 44 + dy], [15, 62 + dy], [8, 82 + dy]]);
+    g.fill();
+    // torpedo body (facing RIGHT)
+    g.fillStyle = '#4a5a66';
+    g.beginPath(); g.ellipse(54, 62 + dy, 34, 20, 0, 0, TAU); g.fill();
+    g.fillStyle = '#51606e';
+    g.beginPath(); g.ellipse(78, 58 + dy, 12, 12, 0, 0, TAU); g.fill();
+    poly(g, [[84, 50 + dy], [94, 58 + dy], [84, 66 + dy]]);
+    g.fill();
+    // belly (FLASHES bright on the frame-1 windup pose)
+    g.fillStyle = frame ? '#ffffff' : '#d8e8ec';
+    g.beginPath(); g.ellipse(54, 73 + dy, 29, 9, 0, 0, TAU); g.fill();
+    if (frame) {
+      const bf = g.createRadialGradient(54, 74 + dy, 2, 54, 74 + dy, 22);
+      bf.addColorStop(0, 'rgba(230,250,255,0.9)');
+      bf.addColorStop(1, 'rgba(230,250,255,0)');
+      g.fillStyle = bf;
+      g.beginPath(); g.ellipse(54, 73 + dy, 24, 11, 0, 0, TAU); g.fill();
+    }
+    // dorsal fin + pectoral
+    g.fillStyle = '#3a4a58';
+    poly(g, [[40, 45 + dy], [52, 28 + dy], [64, 44 + dy]]);
+    g.fill();
+    poly(g, [[60, 62 + dy], [70, 74 + dy], [64, 66 + dy]]);
+    g.fill();
+    // eye + jaw + teeth
+    g.fillStyle = '#1a242c';
+    g.beginPath(); g.arc(82, 55 + dy, 1.6, 0, 0, TAU); g.fill();
+    g.strokeStyle = '#38464f';
+    g.lineWidth = 1.5;
+    g.lineCap = 'round';
+    g.beginPath(); g.moveTo(88, 66 + dy); g.quadraticCurveTo(82, 70 + dy, 74, 69 + dy); g.stroke();
+    g.fillStyle = '#e8f2f5';
+    for (const tx of [76, 80, 84, 87.5]) poly(g, [[tx, 67.5 + dy], [tx + 1.3, 70 + dy], [tx + 2.6, 67.5 + dy]]), g.fill();
+    // gill slits
+    g.strokeStyle = '#38464f';
+    g.lineWidth = 1.2;
+    for (const gx of [68, 71.5, 75]) {
+      g.beginPath(); g.moveTo(gx, 54 + dy); g.lineTo(gx, 64 + dy); g.stroke();
+    }
+    g.restore();
+  });
+}
+
 function wraithFrame(frame) {
   return canvasOf(92, 112, (g) => {
     g.save();
@@ -490,6 +743,7 @@ export function buildCharacters(levelKey) {
     cultist: { w: 32, h: 46, shadowR: 9, frames: [cultistFrame(0), cultistFrame(1)] },
     wraith: { w: 92, h: 112, shadowR: 20, frames: [wraithFrame(0), wraithFrame(1)] },
     ryu: { w: 96, h: 112, shadowR: 20, frames: [ryuFrame(0), ryuFrame(1)] },
+    shark: { w: 96, h: 112, shadowR: 20, frames: [sharkFrame(0), sharkFrame(1)] },
   };
   if (levelKey === 'm02') {
     // Higan slot re-skins (A1) + Ryū boss (A5) — same footprints, mechanics unchanged
@@ -500,6 +754,22 @@ export function buildCharacters(levelKey) {
     out.brute = { w: 64, h: 60, shadowR: 14, frames: [oniFrame(0), oniFrame(1)] };
     out.cultist = { w: 32, h: 46, shadowR: 9, frames: [mikoFrame(0), mikoFrame(1)] };
     out.wraith = out.ryu; // boss key swap — the m02 boss IS Ryū
+  }
+  if (levelKey === 'm03') {
+    // Drowned City slot re-skins (A1/A2) + Great White boss — same footprints, mechanics unchanged
+    out.rat = { w: 30, h: 26, shadowR: 8, frames: [crabFrame()] };
+    out.bat = { w: 34, h: 28, shadowR: 8, frames: [goldfishFrame(true), goldfishFrame(false)] };
+    out.goblin = {
+      w: 30, h: 38, shadowR: 9,
+      frames: [mermanFrame(3, 0), mermaidFrame(0, 0), mermanFrame(-3, 0)], // merman + mermaid skins
+    };
+    out.wolf = {
+      w: 46, h: 32, shadowR: 11,
+      frames: [[5, 0], [0, 5], [0, 0], [-5, 0]].map(([l, r]) => stingrayFrame(l, r)),
+    };
+    out.brute = { w: 64, h: 60, shadowR: 14, frames: [orcaFrame(0), orcaFrame(1)] };
+    out.cultist = { w: 32, h: 46, shadowR: 9, frames: [eelFrame(0), eelFrame(1)] };
+    out.wraith = out.shark; // boss key swap — the m03 boss IS the Great White
   }
   return out;
 }

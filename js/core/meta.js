@@ -1,6 +1,7 @@
 // Meta progression: persistent Soulshards + between-run upgrades.
 // Pure/Node-safe: localStorage only inside try/catch (degrades to defaults).
 import { CFG } from '../config.js';
+import { LEVELS, LEVEL_ORDER } from '../world/levels.js';
 
 function num(v) {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
@@ -28,6 +29,41 @@ export function loadMeta(key) {
 
 export function saveMeta(key, meta) {
   try { localStorage.setItem(key, JSON.stringify(meta)); } catch { /* private mode */ }
+}
+
+// Per-level cumulative victory counts (13.6) — victory-only; level unlocks key off this.
+export function defaultWins() {
+  const wins = {};
+  for (const k of LEVEL_ORDER) wins[k] = 0;
+  return wins;
+}
+
+export function loadWins(key) {
+  const def = defaultWins();
+  try {
+    const raw = JSON.parse(localStorage.getItem(key) || 'null');
+    if (!raw || typeof raw !== 'object') return def;
+    for (const k of LEVEL_ORDER) def[k] = Math.floor(num(raw[k]));
+    return def;
+  } catch { return def; }
+}
+
+export function saveWins(key, wins) {
+  try { localStorage.setItem(key, JSON.stringify(wins)); } catch { /* private mode */ }
+}
+
+// Counts a victory (caller gates on victory — deaths don't count).
+export function recordWin(wins, levelKey) {
+  if (!LEVELS[levelKey]) return wins;
+  wins[levelKey] = (wins[levelKey] || 0) + 1;
+  return wins;
+}
+
+// Unlock rule (13.6): open once the prerequisite level has `unlock.wins` cumulative victories.
+export function isUnlocked(wins, levelKey) {
+  const lvl = LEVELS[levelKey];
+  if (!lvl || !lvl.unlock.level) return true;
+  return (wins[lvl.unlock.level] || 0) >= lvl.unlock.wins;
 }
 
 // Shards earned from a finished run's stats ({score, victory}).

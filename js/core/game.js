@@ -14,7 +14,7 @@ import { Pickups } from '../entities/pickups.js';
 import { Enemies } from '../entities/enemies.js';
 import { Combat } from '../entities/combat.js';
 import { Player, cardOffers, applyCard, recomputeStats } from '../entities/player.js';
-import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta } from './meta.js';
+import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin } from './meta.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../entities/spawner.js';
 import { getLevel } from '../world/levels.js';
 import { buildCharacters } from '../art/characters.js';
@@ -60,6 +60,7 @@ export class Game {
     this.combat.onBomb = () => this.camera.addShake(0.6);
 
     this.meta = loadMeta(CFG.meta.storageKey);
+    this.wins = loadWins(CFG.meta.winsKey); // per-level cumulative victories (13.6)
     this._phoenixKills = 0;
 
     this.minimapBase = null;
@@ -400,6 +401,10 @@ export class Game {
     const gain = shardsFor(st);
     this.meta.shards += gain;
     saveMeta(CFG.meta.storageKey, this.meta);
+    if (victory) {
+      recordWin(this.wins, this.levelKey || 'm01'); // victory-only (deaths don't count)
+      saveWins(CFG.meta.winsKey, this.wins);
+    }
     this.bus.emit('meta', this.meta);
     this.bus.emit('gameover', { ...st, shards: gain });
   }
