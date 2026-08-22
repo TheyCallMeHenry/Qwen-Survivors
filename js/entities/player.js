@@ -401,16 +401,22 @@ export function recomputeStats(p) {
   p.maxHp = CFG.player.maxHp + CFG.passives.hp.val * (p.passives.hp || 0) + (p.metaHp || 0);
 }
 
-// Up to 3 distinct upgrade candidates: weapon upgrades, new weapons (≤ maxWeapons),
+// Up to 3 distinct upgrade candidates: weapon upgrades, new weapons (≤ cap),
 // passives, and synergy cards (only once both synergizing weapons are max level).
-export function cardOffers(weapons, passives, synergies, rng) {
+// 11.5 co-op: `cap` = this player's standard-weapon slots (base maxWeapons − (N−1));
+// `exclude` = Set of weapon keys owned by ANOTHER player (first picker owns the
+// weapon + its upgrades for the run — never offered here). Passives are never
+// locked; synergy gating follows the PICKER's own weapons/passives (per-player dicts).
+export function cardOffers(weapons, passives, synergies, rng, cap = CFG.run.maxWeapons, exclude = null) {
   const pool = [];
   const ownedW = Object.keys(weapons).length;
+  const locked = exclude instanceof Set ? exclude : null;
   for (const k of Object.keys(CFG.weapons)) {
+    if (locked && locked.has(k)) continue;
     const lvl = weapons[k] || 0;
     const wpn = CFG.weapons[k];
     if (lvl > 0 && lvl < wpn.levels.length) pool.push({ kind: 'weapon', key: k, level: lvl + 1 });
-    else if (lvl === 0 && ownedW < CFG.run.maxWeapons) pool.push({ kind: 'weapon', key: k, level: 1 });
+    else if (lvl === 0 && ownedW < cap) pool.push({ kind: 'weapon', key: k, level: 1 });
   }
   for (const k of Object.keys(CFG.passives)) {
     const lvl = passives[k] || 0;

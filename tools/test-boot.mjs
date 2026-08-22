@@ -159,7 +159,8 @@ const { initScreens, saveScores } = await import('../js/ui/screens.js');
 const { aliveCap } = await import('../js/entities/spawner.js');
 const { getLevel } = await import('../js/world/levels.js');
 const { clamp } = await import('../js/utils/math.js');
-const { recomputeStats } = await import('../js/entities/player.js');
+const { recomputeStats, cardOffers } = await import('../js/entities/player.js');
+const { weaponCap } = await import('../js/net/coop.js');
 
 const canvas = byId['game'];
 const cvsEvt = (type, e) => (canvas._ls && canvas._ls[type] || []).slice().forEach((f) => f(e));
@@ -1079,6 +1080,39 @@ m03RunDone = true;
   }
   assert(leashed, '11.4: co-op leash — all pairwise player distances held ≤ CFG.coop.leashR after a 1.5R teleport');
 
+  // 11.5 level-up scoping + weapon exclusivity (live 3P run: per-player cap = 3).
+  if (hostG.state === 'LEVELUP') hostG.pickCard(0);
+  assert(weaponCap(hostG.players.length) === 3, '11.5: 3P equip cap = 3 standard weapons per player');
+  // Host (local) player picks a NEW weapon through the real pick path.
+  hostG.levelupQueue = 1;
+  hostG.state = 'LEVELUP';
+  hostG.cards = [{ kind: 'weapon', key: 'garlic', level: 1 }, { kind: 'passive', key: 'speed', level: 1 }];
+  hostG.pickCard(0);
+  assert(hostG.player.weapons.garlic === 1 && hostG.weaponOwner.garlic === hostG.player,
+    '11.5: first picker owns the weapon (host pick registered)');
+  assert(!hostG._ownerExclusion(hostG.player).has('garlic'), '11.5: owner keeps their own upgrades (no self-exclusion)');
+  const pl1 = hostG.players[1];
+  assert(pl1 && hostG._ownerExclusion(pl1).has('garlic'), '11.5: other players\' offers exclude the owned weapon');
+  // Per-picker isolation: the host\'s passive pick must not touch the remote\'s dicts.
+  const pl1Passives0 = { ...pl1.passives };
+  const pl1Before = JSON.stringify(pl1Passives0);
+  hostG.levelupQueue = 1;
+  hostG.state = 'LEVELUP';
+  hostG.cards = [{ kind: 'passive', key: 'dmg', level: 1 }];
+  hostG.pickCard(0);
+  assert(hostG.player.passives.dmg >= 1 && JSON.stringify(pl1.passives) === pl1Before,
+    '11.5: picks affect only the picker (remote passives untouched)');
+  // Remote auto-pick through the real path: passives maxed → no passive candidates; the
+  // host-owned garlic can never be offered; any new-weapon pick registers pl1 as owner.
+  pl1.passives = { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3 };
+  const pl1Owned0 = { ...pl1.weapons };
+  hostG._remoteLevelUps(pl1, 1);
+  const gained = Object.keys(pl1.weapons).filter((k) => (pl1.weapons[k] || 0) > (pl1Owned0[k] || 0));
+  assert(!gained.includes('garlic'), '11.5: owned weapon never auto-picked for a remote');
+  for (const k of gained) assert(hostG.weaponOwner[k] === pl1, `11.5: remote first-pick owns ${k}`);
+  pl1.passives = pl1Passives0; recomputeStats(pl1); // restore the live sim
+  for (const p of hostG.players) assert(Object.keys(p.weapons).length <= 3, '11.5: cap respected (≤3 standard weapons, 3P)');
+
   // Leave: c2 drops → roster reconciles on the host; run continues (host + c1 alive).
   rawC.w.close();
   const ro2 = await rawA.wait((m) => m.t === 'roster' && m.players.length === 2, 'host roster after c2 leave');
@@ -1112,5 +1146,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 120 at run start · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
   `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) · loop alive throughout`,
 );

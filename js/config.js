@@ -8,7 +8,7 @@ export const CFG = {
     bossAt: 240,        // wraith spawn time
     victoryBonus: 10000,
     timeScorePerSec: 15,
-    maxWeapons: 4,      // weapon slots for card offers
+    maxWeapons: 5,      // base standard-weapon slots per player (co-op cap = base − (N−1), 11.5)
     deathDelay: 1.8,    // slow-mo seconds before game over
     deathTimescale: 0.3,
   },

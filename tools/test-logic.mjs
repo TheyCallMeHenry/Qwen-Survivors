@@ -14,7 +14,7 @@ import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, record
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
-import { MSG, pack, unpack, profileFromMeta, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp } from '../js/net/coop.js';
+import { MSG, pack, unpack, profileFromMeta, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap } from '../js/net/coop.js';
 import { encodeFrame, consumeFrames, wsAcceptKey } from './serve.mjs';
 
 let pass = 0;
@@ -251,22 +251,64 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     const base = c.kind === 'weapon' ? (c.key === 'wand' ? 1 : 0) : 0;
     return c.level === base + 1;
   }), 'cardOffers: each card is a legal level+1 candidate');
-  const full = cardOffers({ wand: 1, garlic: 1, axe: 1, blades: 1 }, {}, {}, mulberry32(3));
-  ok(full.length === 3 && full.every((c) => !(c.kind === 'weapon' && c.level === 1)), 'cardOffers: maxWeapons → no new-weapon cards');
-  // Phase 9: pool is exactly {hp, dmg, regen, blight, tempest} — 4 maxed weapons + 2 passives max.
-  // No weapon cards at all (ownedW=4=max) yet blight/tempest are offered → synergies do NOT
+  const full = cardOffers({ wand: 1, garlic: 1, axe: 1, blades: 1, pistols: 1 }, {}, {}, mulberry32(3));
+  ok(full.length === 3 && full.every((c) => !(c.kind === 'weapon' && c.level === 1)), 'cardOffers: maxWeapons=5 → no new-weapon cards');
+  // Phase 9: pool is exactly {hp, dmg, regen, blight, tempest} — 5 maxed weapons + 2 passives max.
+  // No weapon cards at all (ownedW=5=cap) yet blight/tempest are offered → synergies do NOT
   // count against maxWeapons.
-  const maxed = cardOffers({ wand: 5, garlic: 5, axe: 5, blades: 5 }, { speed: 3, magnet: 3 }, {}, mulberry32(2));
+  const maxed = cardOffers({ wand: 5, garlic: 5, axe: 5, blades: 5, pistols: 5 }, { speed: 3, magnet: 3 }, {}, mulberry32(2));
   const legalKeys = new Set(['hp', 'dmg', 'regen', 'blight', 'tempest']);
   ok(maxed.length === 3 && maxed.every((c) => c.kind === 'passive' || c.kind === 'synergy')
     && maxed.every((c) => legalKeys.has(c.key)), 'cardOffers: exhausted pool → remaining passives + gated synergies only');
-  // Phase 9: deterministic 2-candidate pool. wand:5/axe:5 are the maxed dummies that push
-  // ownedW to maxWeapons without gating a third synergy (blight needs garlic, tempest needs
-  // blades); all passives maxed → the pool is exactly {inferno, phoenix} and the draw takes both.
-  const duo = cardOffers({ pistols: 5, flame: 5, wand: 5, axe: 5 }, { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3 }, {}, mulberry32(4));
-  ok(duo.length === 2 && duo.every((c) => c.kind === 'synergy')
-    && new Set(duo.map((c) => c.key)).size === 2
-    && duo.every((c) => c.key === 'inferno' || c.key === 'phoenix'), 'cardOffers: 2-candidate pool {inferno, phoenix}');
+  // Phase 9 (11.5: cap 4→5): deterministic pool. 5 maxed weapons push ownedW to the cap with
+  // no garlic (blight stays gated); all passives maxed → the pool is exactly {inferno, tempest,
+  // phoenix} and the draw takes all three.
+  const trio = cardOffers({ pistols: 5, flame: 5, wand: 5, axe: 5, blades: 5 }, { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3 }, {}, mulberry32(4));
+  ok(trio.length === 3 && trio.every((c) => c.kind === 'synergy')
+    && new Set(trio.map((c) => c.key)).size === 3
+    && trio.every((c) => c.key === 'inferno' || c.key === 'phoenix' || c.key === 'tempest'), 'cardOffers: 3-candidate pool {inferno, tempest, phoenix}');
+}
+
+// --- 11.5.1: base maxWeapons 4→5 + per-player co-op equip cap (pure) ---
+{
+  ok(CFG.run.maxWeapons === 5, '11.5.1: base maxWeapons raised 4→5');
+  ok(weaponCap(1) === 5 && weaponCap(2) === 4 && weaponCap(3) === 3 && weaponCap(4) === 2,
+    'weaponCap: 1P=5, 2P=4, 3P=3, 4P=2');
+  ok(weaponCap(0) === 5 && weaponCap(7) === 2, 'weaponCap: clamped at 1..maxPlayers');
+}
+
+// --- 11.5.2: per-player cardOffers (cap + ownership exclusivity, pure) ---
+{
+  const allPassMax = {};
+  for (const k of Object.keys(CFG.passives)) allPassMax[k] = CFG.passives[k].max;
+  // Deterministic narrow pool: all weapons except bombs/flame owned by ANOTHER player →
+  // pool = {bombs:1, flame:1, phoenix} (passives maxed gate phoenix) — the full 3 are drawn,
+  // and no excluded key can appear in any draw.
+  const exSet = new Set(Object.keys(CFG.weapons).filter((k) => k !== 'bombs' && k !== 'flame'));
+  const two = cardOffers({}, allPassMax, {}, mulberry32(3), 5, exSet);
+  ok(two.length === 3
+    && two.every((c) => !(c.kind === 'weapon' && exSet.has(c.key)))
+    && two.every((c) => c.kind !== 'weapon' || (c.key === 'bombs' || c.key === 'flame'))
+    && new Set(two.map((c) => c.kind + ':' + c.key)).size === 3,
+    '11.5.2: other-owned weapons never offered (pool = bombs/flame + phoenix only)');
+  // Cap drives the new-weapon slots. Owned weapons MAXED (no upgrade cards) with incomplete synergy
+  // pairs (no garlic/blades/flame → no weapon synergies); passives maxed (phoenix IS gated — the only
+  // 4th pool item). Cap 5: pool = {garlic:1, blades:1, flame:1, phoenix}. Cap 4 (2P): new-weapon
+  // slots closed → pool = {phoenix} only.
+  const w4 = { wand: 5, axe: 5, pistols: 5, bombs: 5 };
+  for (let seed = 1; seed <= 3; seed++) {
+    const draw = cardOffers(w4, allPassMax, {}, mulberry32(seed), 5);
+    ok(draw.length === 3 && draw.every((c) => (c.kind === 'weapon' && c.level === 1
+        && (c.key === 'garlic' || c.key === 'blades' || c.key === 'flame'))
+        || (c.kind === 'synergy' && c.key === 'phoenix')), `11.5.2: cap 5 → new-weapon slots open (seed ${seed})`);
+  }
+  const cap4 = cardOffers(w4, allPassMax, {}, mulberry32(1), 4);
+  ok(cap4.length === 1 && cap4[0].kind === 'synergy' && cap4[0].key === 'phoenix',
+    '11.5.2: cap 4 (2P) → no new-weapon cards (pool = phoenix only)');
+  // Passives are NEVER locked — offered even with every weapon excluded by other owners.
+  const passivesOnly = cardOffers({}, {}, {}, mulberry32(5), 2, new Set(Object.keys(CFG.weapons)));
+  ok(passivesOnly.length === 3 && passivesOnly.every((c) => c.kind === 'passive'),
+    '11.5.2: passives not locked (all weapons excluded → 3 passives drawn)');
 }
 
 // --- Phase 9: synergy table shape + gating ---

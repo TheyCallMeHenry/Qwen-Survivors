@@ -83,6 +83,14 @@ export function coopScale(n) {
   return 1 + p.perPlayer * (c - 1);
 }
 
+// 11.5 equip cap (A3/D42): max equipable STANDARD weapons per player =
+// base maxWeapons − (N−1) — 1P=5, 2P=4, 3P=3, 4P=2 (a 4P player can still
+// own 1 weapon pair → paired synergy achievable). Synergies never count.
+export function weaponCap(n) {
+  const c = Math.min(CFG.coop.maxPlayers, Math.max(1, Math.floor(n) || 1));
+  return CFG.run.maxWeapons - (c - 1);
+}
+
 // 11.4 leash (A2): every player stays within R of EVERY other player (all
 // pairwise distances ≤ R — every player sees every other). Project (x, y) into
 // the intersection of the radius-R disks around `others` (convex — iterative
