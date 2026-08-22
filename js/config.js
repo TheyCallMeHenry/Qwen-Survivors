@@ -262,6 +262,7 @@ export const CFG = {
   coop: {
     maxPlayers: 4,
     perPlayer: 0.33,  // 11.3: enemy HP/damage/spawn/boss ×(1 + perPlayer × added players)
+    interpLag: 0.1,  // 11.2: client render lag for snapshot interpolation (s)
   },
 
   scores: {

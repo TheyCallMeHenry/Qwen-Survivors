@@ -14,10 +14,7 @@ export class Combat {
     this.bombs = [];
     this.flames = [];
     this.explosions = [];
-    this.orbitT = 0;
-    this.garlicT = 0;
     this.t = 0;
-    this.player = null;
     this.enemies = null;
     this.boltImg = null;
     this.axeImg = null;
@@ -44,8 +41,6 @@ export class Combat {
     this.bombs.length = 0;
     this.flames.length = 0;
     this.explosions.length = 0;
-    this.orbitT = 0;
-    this.garlicT = 0;
     this.t = 0;
     this._orbCd.clear();
     this._axeCd.clear();
@@ -53,19 +48,21 @@ export class Combat {
     this._tempestT = 0;
   }
 
-  fireBolt(x, y, ang, dmg, pierce) {
+  // Synergy level tables ride the projectile (the shooter's, at fire time —
+  // co-op: each player's shots carry their own synergies, 11.2).
+  fireBolt(x, y, ang, dmg, pierce, blight = null, owner = null) {
     const C = CFG.combat;
     this.bolts.push({
       x, y,
       vx: Math.cos(ang) * C.boltSpeed,
       vy: Math.sin(ang) * C.boltSpeed,
-      rot: ang, dmg, pierce,
+      rot: ang, dmg, pierce, blight, owner,
       hit: new Set(),
       life: C.boltLife,
     });
   }
 
-  fireAxe(x, y, ang, dmg, size, count) {
+  fireAxe(x, y, ang, dmg, size, count, owner) {
     const C = CFG.combat;
     for (let i = 0; i < count; i++) {
       const a = ang + (TAU / count) * i;
@@ -73,37 +70,37 @@ export class Combat {
         x, y,
         vx: Math.cos(a) * C.axeSpeed,
         vy: Math.sin(a) * C.axeSpeed,
-        dmg, size, spin: rand(0, TAU),
+        dmg, size, spin: rand(0, TAU), owner,
         back: false,
         life: C.axeLife,
       });
     }
   }
 
-  fireBullet(x, y, ang, dmg) {
+  fireBullet(x, y, ang, dmg, inferno = null, owner = null) {
     const C = CFG.combat;
     this.bullets.push({
       x, y,
       vx: Math.cos(ang) * C.bulletSpeed,
       vy: Math.sin(ang) * C.bulletSpeed,
-      rot: ang, dmg,
+      rot: ang, dmg, inferno, owner,
       hit: new Set(),
       life: C.bulletLife,
     });
   }
 
-  fireBomb(x, y, ang, dist, dmg, radius, fuse) {
+  fireBomb(x, y, ang, dist, dmg, radius, fuse, napalm = null, owner = null) {
     const C = CFG.combat;
     const tx = x + Math.cos(ang) * dist;
     const ty = y + Math.sin(ang) * dist;
     this.bombs.push({
       x0: x, y0: y, tx, ty, x, y, h: 0,
       t: 0, fly: C.bombFly, fuse,
-      dmg, radius,
+      dmg, radius, napalm, owner,
     });
   }
 
-  emitFlame(x, y, ang, tick, dot, dotDur) {
+  emitFlame(x, y, ang, tick, dot, dotDur, owner = null) {
     const C = CFG.combat;
     const sp = C.flameSpeed + rand(-C.flameSpeedVar, C.flameSpeedVar);
     const a = ang + rand(-0.22, 0.22);
@@ -111,7 +108,7 @@ export class Combat {
       x, y,
       vx: Math.cos(a) * sp,
       vy: Math.sin(a) * sp,
-      tick, dot, dotDur,
+      tick, dot, dotDur, owner,
       age: 0,
       life: C.flameLife + rand(-C.flameLifeVar, C.flameLifeVar),
       seed: rand(0, 1),
@@ -119,18 +116,21 @@ export class Combat {
     });
   }
 
-  update(dt, player, enemies) {
-    this.player = player;
+  // players: live player array (solo = [player]) — garlic/blades run per
+  // player with per-player timers (co-op, 11.2).
+  update(dt, players, enemies) {
     this.enemies = enemies;
     this.t += dt;
     this._bolts(dt, enemies);
     this._bullets(dt, enemies);
-    this._axes(dt, player, enemies);
+    this._axes(dt, enemies);
     this._bombs(dt, enemies);
     this._flames(dt, enemies);
     this._dot(dt);
-    if (player.weapons.garlic) this._garlic(dt, player, enemies);
-    if (player.weapons.blades) this._orbiters(dt, player, enemies);
+    for (const p of players) {
+      if (p.weapons.garlic) this._garlic(dt, p, enemies);
+      if (p.weapons.blades) this._orbiters(dt, p, enemies);
+    }
     for (let i = this.explosions.length - 1; i >= 0; i--) {
       const x = this.explosions[i];
       x.t += dt;
@@ -153,11 +153,10 @@ export class Combat {
           const dx = e.x - b.x, dy = e.y - b.y;
           if (dx * dx + dy * dy >= rr * rr) continue;
           b.hit.add(e);
-          this.damageEnemy(e, b.dmg, b.vx / C.boltSpeed, b.vy / C.boltSpeed, C.boltKb);
-          if (this._syn('blight')) {
-            const S = CFG.synergies.blight.levels[0];
-            e.blightT = Math.max(e.blightT || 0, S.dur);
-            e.blightDps = Math.max(e.blightDps || 0, S.dps);
+          this.damageEnemy(e, b.dmg, b.vx / C.boltSpeed, b.vy / C.boltSpeed, C.boltKb, b.owner);
+          if (b.blight) {
+            e.blightT = Math.max(e.blightT || 0, b.blight.dur);
+            e.blightDps = Math.max(e.blightDps || 0, b.blight.dps);
           }
           if (b.hit.size > b.pierce) { gone = true; break; }
         }
@@ -166,10 +165,11 @@ export class Combat {
     }
   }
 
-  _axes(dt, player, enemies) {
+  _axes(dt, enemies) {
     const C = CFG.combat;
     for (let i = this.axes.length - 1; i >= 0; i--) {
       const a = this.axes[i];
+      const player = a.owner; // return target (co-op: the thrower)
       a.life -= dt;
       a.spin += dt * 9;
       if (!a.back) {
@@ -193,16 +193,16 @@ export class Combat {
         if (dx * dx + dy * dy >= rr * rr) continue;
         this._axeCd.set(e, this.t);
         const sp = Math.hypot(a.vx, a.vy) || 1;
-        this.damageEnemy(e, a.dmg, a.vx / sp, a.vy / sp, C.axeKb);
+        this.damageEnemy(e, a.dmg, a.vx / sp, a.vy / sp, C.axeKb, a.owner);
       }
     }
   }
 
   _garlic(dt, player, enemies) {
     const C = CFG.combat;
-    this.garlicT += dt;
-    if (this.garlicT < C.garlicTick) return;
-    this.garlicT = 0;
+    player._garlicT += dt; // per-player pulse timer (co-op)
+    if (player._garlicT < C.garlicTick) return;
+    player._garlicT = 0;
     const S = CFG.weapons.garlic.levels[player.weapons.garlic - 1];
     const R = S.r + player.r + 8; // query radius (cell superset)
     for (const e of enemies.grid.range(player.x, player.y, R)) {
@@ -210,22 +210,22 @@ export class Combat {
       const rr = S.r + e.r;
       const dx = e.x - player.x, dy = e.y - player.y;
       if (dx * dx + dy * dy >= rr * rr) continue;
-      this.damageEnemy(e, S.dmg * player.dmgMul, 0, 0, 0);
+      this.damageEnemy(e, S.dmg * player.dmgMul, 0, 0, 0, player);
     }
   }
 
   _orbiters(dt, player, enemies) {
     const C = CFG.combat;
-    this.orbitT += dt * C.orbitSpeed;
+    player._orbitT += dt * C.orbitSpeed; // per-player orbit angle (co-op)
     const S = CFG.weapons.blades.levels[player.weapons.blades - 1];
     let tempestS = null, fireT = false;
-    if (this._syn('tempest')) {
+    if ((player.synergies.tempest || 0) > 0) {
       tempestS = CFG.synergies.tempest.levels[0];
-      this._tempestT += dt;
-      if (this._tempestT >= tempestS.rate) { this._tempestT = 0; fireT = true; }
+      player._tempestT += dt;
+      if (player._tempestT >= tempestS.rate) { player._tempestT = 0; fireT = true; }
     }
     for (let i = 0; i < S.n; i++) {
-      const a = this.orbitT + (TAU / S.n) * i;
+      const a = player._orbitT + (TAU / S.n) * i;
       const bx = player.x + Math.cos(a) * S.rad;
       const by = player.y + Math.sin(a) * S.rad;
       for (const e of enemies.grid.near(bx, by)) {
@@ -237,7 +237,7 @@ export class Combat {
         this._orbCd.set(e, this.t);
         const kx = e.x - player.x, ky = e.y - player.y;
         const kd = Math.hypot(kx, ky) || 1;
-        this.damageEnemy(e, S.dmg * player.dmgMul, kx / kd, ky / kd, C.orbitKb);
+        this.damageEnemy(e, S.dmg * player.dmgMul, kx / kd, ky / kd, C.orbitKb, player);
       }
       if (fireT) this.fireBolt(bx, by, a + TAU / 4, tempestS.dmg * player.dmgMul, 0);
     }
@@ -260,11 +260,10 @@ export class Combat {
           const dx = e.x - b.x, dy = e.y - b.y;
           if (dx * dx + dy * dy >= rr * rr) continue;
           b.hit.add(e);
-          this.damageEnemy(e, b.dmg, b.vx / C.bulletSpeed, b.vy / C.bulletSpeed, C.bulletKb);
-          if (this._syn('inferno')) {
-            const S = CFG.synergies.inferno.levels[0];
-            e.burnT = Math.max(e.burnT || 0, S.dur);
-            e.burnDps = Math.max(e.burnDps || 0, S.dps);
+          this.damageEnemy(e, b.dmg, b.vx / C.bulletSpeed, b.vy / C.bulletSpeed, C.bulletKb, b.owner);
+          if (b.inferno) {
+            e.burnT = Math.max(e.burnT || 0, b.inferno.dur);
+            e.burnDps = Math.max(e.burnDps || 0, b.inferno.dps);
           }
           gone = true; // rounds do not pierce
           break;
@@ -302,11 +301,10 @@ export class Combat {
       const dx = e.x - b.x, dy = e.y - b.y;
       const d = Math.hypot(dx, dy) || 1;
       if (d > b.radius + e.r) continue;
-      this.damageEnemy(e, b.dmg, dx / d, dy / d, C.bombKb);
-      if (this._syn('napalm')) {
-        const S = CFG.synergies.napalm.levels[0];
-        e.burnT = Math.max(e.burnT || 0, S.dur);
-        e.burnDps = Math.max(e.burnDps || 0, S.dps);
+      this.damageEnemy(e, b.dmg, dx / d, dy / d, C.bombKb, b.owner);
+      if (b.napalm) {
+        e.burnT = Math.max(e.burnT || 0, b.napalm.dur);
+        e.burnDps = Math.max(e.burnDps || 0, b.napalm.dps);
       }
     }
     if (this.pulse) this.pulse('boom');
@@ -333,7 +331,7 @@ export class Combat {
         const dx = e.x - f.x, dy = e.y - f.y;
         if (dx * dx + dy * dy >= rr * rr) continue;
         this._flameCd.set(e, this.t);
-        this.damageEnemy(e, f.tick, 0, 0, 0);
+        this.damageEnemy(e, f.tick, 0, 0, 0, f.owner);
         e.burnT = Math.max(e.burnT || 0, f.dotDur);
         e.burnDps = Math.max(e.burnDps || 0, f.dot);
       }
@@ -357,29 +355,27 @@ export class Combat {
   }
 
   // DoT damage: no hit-flash, no knockback (a per-frame white flicker is wrong).
+  // Killer = last direct attacker (e._killer) — DoT inherits their credit.
   dpsTick(e, dmg) {
     if (e.dead) return;
     e.hp -= dmg;
     if (e.hp <= 0) {
       e.dead = true;
-      if (this.onKill) this.onKill(e);
+      if (this.onKill) this.onKill(e, e._killer);
     }
   }
 
-  _syn(key) {
-    const p = this.player;
-    return !!(p && p.synergies && (p.synergies[key] || 0) > 0);
-  }
-
   // Damage pipeline. kx/ky = unit knockback direction, kb = strength.
-  damageEnemy(e, dmg, kx, ky, kb) {
+  // owner = the player who dealt this hit (co-op kill credit, 11.2).
+  damageEnemy(e, dmg, kx, ky, kb, owner = null) {
     if (e.dead) return;
+    e._killer = owner || e._killer;
     e.hp -= dmg;
     e.flash = 0.14;
     if (kb > 0) { e.vx += kx * kb; e.vy += ky * kb; }
     if (e.hp <= 0) {
       e.dead = true;
-      if (this.onKill) this.onKill(e);
+      if (this.onKill) this.onKill(e, owner);
     }
   }
 
@@ -392,11 +388,11 @@ export class Combat {
     const d = Math.hypot(dx, dy) || 1;
     player.vx += (dx / d) * CFG.player.knockback;
     player.vy += (dy / d) * CFG.player.knockback;
-    if (this.onHurt) this.onHurt(dmg);
+    if (this.onHurt) this.onHurt(dmg, player);
     if (player.hp <= 0) {
       player.hp = 0;
       player.dead = true;
-      if (this.onDeath) this.onDeath();
+      if (this.onDeath) this.onDeath(player);
     }
     return true;
   }

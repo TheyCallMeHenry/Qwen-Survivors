@@ -64,6 +64,9 @@ export function initScreens(game, { icons }) {
   const metaShards = $('meta-shards');
   const metaList = $('meta-list');
   const levelSelect = $('level-select');
+  const coopBtn = $('btn-coop');
+  const coopStatus = $('coop-status');
+  const coopLeave = $('btn-coop-leave');
   const { max } = CFG.scores;
 
   let cur = '';
@@ -71,6 +74,7 @@ export function initScreens(game, { icons }) {
   let hurtTimer = null;
   let bannerQueue = [];
   let bannerAt = 0;
+  let coopText = '\u0000'; // sentinel: force the first status write
 
   const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
 
@@ -136,6 +140,31 @@ export function initScreens(game, { icons }) {
     }
   }
 
+  // Co-op status (11.2): poll the net state, write the menu button + status
+  // line only on change (per-frame safe).
+  function coopUI() {
+    let text = '';
+    if (!game.net) {
+      coopBtn.textContent = 'Co-op: Join';
+    } else if (game.netMyId === null) {
+      coopBtn.textContent = 'Co-op…';
+      text = 'Joining room…';
+    } else if (game.netRole === 'host') {
+      coopBtn.textContent = 'Co-op: Host · Leave';
+      text = `Co-op host — ${game.netRoster.length}/${CFG.coop.maxPlayers} in room (share this address)`;
+    } else {
+      const seat = game._seat();
+      coopBtn.textContent = 'Co-op: Guest · Leave';
+      text = `Co-op guest — seat ${seat >= 0 ? seat + 1 : '?'} · pause is host-only`;
+    }
+    coopLeave.classList.toggle('hidden', !game.net);
+    if (text !== coopText) {
+      coopText = text;
+      coopStatus.hidden = !text;
+      coopStatus.textContent = text;
+    }
+  }
+
   const update = () => {
     const st = game.state;
     let name;
@@ -146,6 +175,7 @@ export function initScreens(game, { icons }) {
     else if (st === 'GAMEOVER') name = 'gameover';
     else name = 'none';
     if (name !== cur) { cur = name; show(name); if (name === 'menu') renderLevels(); }
+    coopUI();
     // Banner queue (13.10): a queued banner (e.g. NEW MAP UNLOCKED after DAWN BREAKS)
     // takes over once the current one holds for CFG.ui.bannerMs.
     if (bannerQueue.length && performance.now() - bannerAt >= CFG.ui.bannerMs) {
@@ -339,6 +369,8 @@ export function initScreens(game, { icons }) {
   on('btn-retry', () => game.startRun());
   on('btn-go-menu', () => game.toMenu());
   on('btn-quit-ack', attemptClose);
+  on('btn-coop', () => { if (game.net) game.detachNet(); else game.attachNet(); });
+  on('btn-coop-leave', () => game.detachNet());
 
   update();
   return { update };

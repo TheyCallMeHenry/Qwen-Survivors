@@ -920,6 +920,134 @@ m03RunDone = true;
   await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });
 }
 
+// 11.2 — host-authoritative sync E2E: real serve.mjs relay + three Game
+// instances (host + 2 clients) over native WS. The host runs the 60 Hz sim
+// for all players; clients render host snapshots (no local sim).
+{
+  const { createGameServer, attachCoopRoom } = await import('../tools/serve.mjs');
+  const { profileFromMeta } = await import('../js/net/coop.js');
+  const srv = createGameServer();
+  attachCoopRoom(srv);
+  await new Promise((res) => srv.listen(0, '127.0.0.1', res));
+  const url = `ws://127.0.0.1:${srv.address().port}`;
+  const raws = [];
+  const mkRaw = () => {
+    const c = { w: new WebSocket(url), msgs: [] };
+    c.opened = new Promise((res) => { c.w.addEventListener('open', res); c.w.addEventListener('error', () => res()); });
+    c.w.addEventListener('message', (ev) => c.msgs.push(JSON.parse(String(ev.data))));
+    c.wait = (pred, what, ms = 4000) => new Promise((res, rej) => {
+      const t0 = Date.now();
+      const to = setInterval(() => {
+        const i = c.msgs.findIndex(pred);
+        if (i !== -1) { clearInterval(to); res(c.msgs.splice(i, 1)[0]); }
+        else if (Date.now() - t0 > ms) { clearInterval(to); rej(new Error('11.2 E2E timeout: ' + what)); }
+      }, 5);
+    });
+    c.send = (m) => c.w.send(JSON.stringify(m));
+    raws.push(c);
+    return c;
+  };
+  const rawA = mkRaw(), rawB = mkRaw(), rawC = mkRaw();
+  await Promise.all([rawA, rawB, rawC].map((c) => c.opened));
+
+  const dummyLoop = { timescale: 1, hitStop() {} };
+  const mkGame = () => {
+    const g = new Game({
+      input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
+      loop: dummyLoop, ctx: makeCtx(), mctx, characters, items,
+    });
+    g.resize(1280, 800);
+    return g;
+  };
+  const hostG = mkGame(), c1G = mkGame(), c2G = mkGame();
+  // Mirror of CoopConn over a raw socket (attachNet is browser-only: location + native WS).
+  const wire = (g, raw) => {
+    const conn = {
+      onMessage: null,
+      send: (o) => raw.send(o),
+      close: () => raw.w.close(),
+      sendInput: (mx, my, dash) => raw.send({ t: 'input', mx, my, dash }),
+      sendState: (id, body) => raw.send(Object.assign({ t: 'state' }, body, { id })),
+      sendRunStart: (id, seed, levelKey) => raw.send({ t: 'runstart', id, seed, levelKey }),
+      sendClosed: (reason) => raw.send({ t: 'closed', reason }),
+    };
+    raw.w.addEventListener('message', (ev) => { const m = JSON.parse(String(ev.data)); conn.onMessage && conn.onMessage(m); });
+    g.net = conn;
+    g.net.onMessage = (m) => g._netMsg(m);
+  };
+  wire(hostG, rawA); wire(c1G, rawB); wire(c2G, rawC);
+
+  rawA.send({ t: 'hello', levelKey: 'm01', profile: profileFromMeta(hostG.meta) });
+  const jA = await rawA.wait((m) => m.t === 'joined', 'host joined');
+  assert(jA.seat === 0, '11.2: first joiner is host seat 0');
+  rawB.send({ t: 'hello', levelKey: 'm01', profile: profileFromMeta(c1G.meta) });
+  await rawB.wait((m) => m.t === 'joined', 'c1 joined');
+  rawC.send({ t: 'hello', levelKey: 'm01', profile: profileFromMeta(c2G.meta) });
+  await rawC.wait((m) => m.t === 'joined', 'c2 joined');
+  const ro = await rawA.wait((m) => m.t === 'roster' && m.players.length === 3, 'host roster 3');
+  assert(ro.ids.length === 3, '11.2: roster carries ids + per-seat profiles');
+
+  hostG.startRun('m01');
+  assert(hostG.netRole === 'host' && hostG.players.length === 3, '11.2: host sim owns all 3 players');
+  const rs1 = await rawB.wait((m) => m.t === 'runstart', 'c1 runstart');
+  const rs2 = await rawC.wait((m) => m.t === 'runstart', 'c2 runstart');
+  assert(rs1.seed === rs2.seed && typeof rs1.seed === 'number' && rs1.levelKey === 'm01',
+    '11.2: runstart carries the shared seed + level key');
+  const DT = 1 / 60;
+  const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+  // Pump before the state wait: the host only broadcasts state inside
+  // update(); yield to the event loop so the WS round trip completes.
+  for (let i = 0; i < 30; i++) {
+    hostG.update(DT); c1G.update(DT); c2G.update(DT);
+    if (i % 10 === 9) await tick();
+  }
+  await rawB.wait((m) => m.t === 'state' && m.players.length === 3, 'c1 first state');
+  assert(c1G.state === 'PLAYING' && c2G.state === 'PLAYING', '11.2: clients enter the run without local sim');
+  assert(c1G.world.W === hostG.world.W && c1G.world.H === hostG.world.H && c1G.remote.length === 2,
+    '11.2: shared seed → same world; client holds 2 remote render players');
+
+  // Pump 25 s of sim: spawns kick in, state flows, client tracks the host.
+  // Yield to the event loop periodically: a sync pump blocks the WS round-trip.
+  let lastSt = null, enemySeen = 0;
+  const stWatch = (m) => { if (m.t === 'state') { lastSt = m; enemySeen = Math.max(enemySeen, m.enemies.length); } };
+  rawB.w.addEventListener('message', (ev) => stWatch(JSON.parse(String(ev.data))));
+  for (let i = 0; i < 1500; i++) {
+    hostG.update(DT);
+    c1G.update(DT);
+    c2G.update(DT);
+    if (i % 30 === 29) await tick();
+  }
+  await tick();
+  assert(enemySeen > 0, '11.2: no enemies in the host state after 25 s of sim');
+  assert(lastSt.v === 1 && lastSt.step > 100 && lastSt.score >= 0,
+    '11.2: state relayed with v/step fields (relay passthrough)');
+  assert(c1G.enemies.list.length > 0, '11.2: client applied enemy snapshots');
+  const seat1 = hostG.players[1]; // c1G is seat 1 (join order)
+  assert(Math.abs(c1G.player.x - seat1.x) < 0.6 && Math.abs(c1G.player.y - seat1.y) < 0.6,
+    '11.2: client-local position tracks the host within r1 + interp');
+  const hpx = hostG.players[1].x;
+  // Real input path: keydown (no keyup) reaches every Input on the window —
+  // client B's _clientUpdate sends axes(1,0) to the host each step.
+  (winListeners.keydown || []).forEach((f) => f({ code: 'KeyD', repeat: false, preventDefault() {} }));
+  for (let i = 0; i < 90; i++) {
+    hostG.update(DT); c1G.update(DT); c2G.update(DT);
+    if (i % 30 === 29) await tick();
+  }
+  (winListeners.keyup || []).forEach((f) => f({ code: 'KeyD', repeat: false, preventDefault() {} }));
+  await tick();
+  assert(hostG.players[1].x > hpx + 1, '11.2: client input drives the host remote player');
+
+  // Leave: c2 drops → roster reconciles on the host; run continues (host + c1 alive).
+  rawC.w.close();
+  const ro2 = await rawA.wait((m) => m.t === 'roster' && m.players.length === 2, 'host roster after c2 leave');
+  assert(ro2.players.length === 2, '11.2: roster shrinks after leave');
+  await new Promise((res) => setTimeout(res, 60));
+  assert(hostG.players.length === 2 && hostG.players[2] === undefined, '11.2: host drops the leaver from the sim');
+  assert(hostG.state === 'PLAYING' && c1G.state === 'PLAYING', '11.2: run continues after a leaver');
+  for (const c of raws) c.w.close();
+  await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });
+}
+
 // self-verification: every one-shot path above must have actually fired
 assert(keyPickDone, 'keyboard card pick never exercised');
 assert(heartDone && heartAsserted, 'heart pickup path never exercised');

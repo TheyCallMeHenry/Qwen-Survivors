@@ -12,6 +12,7 @@ export class Enemies {
     this.list = [];
     this.orbs = [];
     this.grid = new HashGrid(CFG.ai.gridCell);
+    this.seq = 0;          // stable enemy ids (co-op snapshots, 11.2)
     this.defs = null;      // buildCharacters() output (browser)
     this.diff = 1;         // per-level difficulty scalar (A4) — hp/dmg at spawn
     this.orbImg = null;
@@ -33,13 +34,14 @@ export class Enemies {
     this.list.length = 0;
     this.orbs.length = 0;
     this.grid.clear();
+    this.seq = 0;
   }
 
   spawn(type, x, y) {
     const s = CFG.enemies[type];
     const hp = s.hp * this.diff, dmg = s.dmg * this.diff;
     const e = {
-      type, x, y, vx: 0, vy: 0,
+      type, x, y, vx: 0, vy: 0, sid: ++this.seq,
       hp, maxHp: hp, r: s.r,
       speed: rand(s.speed[0], s.speed[1]),
       dmg, xp: s.xp, score: s.score,
@@ -60,11 +62,13 @@ export class Enemies {
     return s;
   }
 
-  update(dt, player, world, combat) {
+  // players: live player array (solo = [player]) — each enemy targets the
+  // nearest live player (co-op, 11.2).
+  update(dt, players, world, combat) {
     this.grid.clear();
     for (const e of this.list) if (!e.dead) this.grid.add(e.x, e.y, e);
-    for (const e of this.list) if (!e.dead) this._ai(e, dt, player, world, combat);
-    this._orbs(dt, player, combat);
+    for (const e of this.list) if (!e.dead) this._ai(e, dt, players, world, combat);
+    this._orbs(dt, players, combat);
     if (this.list.some((e) => e.dead)) {
       // In-place compaction: the grid above already holds exactly the alive
       // (dead were skipped on add), so no grid rebuild is needed here.
@@ -77,9 +81,10 @@ export class Enemies {
     }
   }
 
-  _ai(e, dt, player, world, combat) {
+  _ai(e, dt, players, world, combat) {
     const A = CFG.ai;
     if (e.flash > 0) e.flash -= dt;
+    const player = nearestPlayer(e, players); // nearest LIVE player (solo: the only one)
     const dx = player.x - e.x, dy = player.y - e.y;
     const d = Math.hypot(dx, dy) || 1;
     const ux = dx / d, uy = dy / d;
@@ -166,11 +171,12 @@ export class Enemies {
     e.x = clamp(e.x, CFG.world.margin, CFG.world.w - CFG.world.margin);
     e.y = clamp(e.y, CFG.world.margin, CFG.world.h - CFG.world.margin);
 
-    // contact damage
-    if (!player.dead) {
-      const ddx = player.x - e.x, ddy = player.y - e.y;
-      const rr = e.r + player.r;
-      if (ddx * ddx + ddy * ddy < rr * rr) combat.damagePlayer(player, e.dmg, e.x, e.y);
+    // contact damage (any live player)
+    for (const p of players) {
+      if (p.dead) continue;
+      const ddx = p.x - e.x, ddy = p.y - e.y;
+      const rr = e.r + p.r;
+      if (ddx * ddx + ddy * ddy < rr * rr) combat.damagePlayer(p, e.dmg, e.x, e.y);
     }
 
     // animation (frame index only; draw picks the canvas)
@@ -184,19 +190,23 @@ export class Enemies {
     if (Math.abs(e.vx) > 12) e.flip = e.vx < 0;
   }
 
-  _orbs(dt, player, combat) {
+  _orbs(dt, players, combat) {
     for (let i = this.orbs.length - 1; i >= 0; i--) {
       const o = this.orbs[i];
       o.x += o.vx * dt;
       o.y += o.vy * dt;
       o.life -= dt;
       let gone = o.life <= 0 || o.x < 0 || o.x > CFG.world.w || o.y < 0 || o.y > CFG.world.h;
-      if (!gone && !player.dead) {
-        const dx = player.x - o.x, dy = player.y - o.y;
-        const rr = player.r + o.r;
-        if (dx * dx + dy * dy < rr * rr) {
-          combat.damagePlayer(player, CFG.enemies.cultist.dmg, o.x, o.y);
-          gone = true;
+      if (!gone) {
+        for (const p of players) {
+          if (p.dead) continue;
+          const dx = p.x - o.x, dy = p.y - o.y;
+          const rr = p.r + o.r;
+          if (dx * dx + dy * dy < rr * rr) {
+            combat.damagePlayer(p, CFG.enemies.cultist.dmg, o.x, o.y);
+            gone = true;
+            break;
+          }
         }
       }
       if (gone) this.orbs.splice(i, 1);
@@ -253,4 +263,16 @@ export class Enemies {
       ctx.drawImage(this.orbImg, o.x - s / 2, o.y - s / 2, s, s);
     }
   }
+}
+
+// Nearest LIVE player for enemy targeting (solo passes a 1-element array).
+function nearestPlayer(e, players) {
+  let best = null, bd = Infinity;
+  for (const p of players) {
+    if (p.dead) continue;
+    const dx = p.x - e.x, dy = p.y - e.y;
+    const d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best || players[0];
 }

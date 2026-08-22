@@ -121,7 +121,10 @@ export function attachCoopRoom(server) {
 
   const send = (c, obj) => { try { c.sock.write(encodeFrame(OP_TEXT, pack(obj))); } catch { /* closing */ } };
   const broadcast = (obj) => { for (const v of conns.values()) send(v, obj); };
-  const rosterMsg = (r) => ({ t: MSG.roster, ids: r.players.map((p) => p.id), levelKey: r.levelKey });
+  const arr = (v, n) => (Array.isArray(v) ? v.slice(0, n) : []);
+  // Roster carries per-seat profiles: the host builds remote Players from them
+  // (D53: sim input only — meta itself never leaves a client).
+  const rosterMsg = (r) => ({ t: MSG.roster, ids: r.players.map((p) => p.id), levelKey: r.levelKey, players: r.players.map((p) => ({ id: p.id, seat: p.seat, profile: p.profile })) });
 
   server.on('upgrade', (req, sock) => {
     const key = req.headers['sec-websocket-key'];
@@ -166,8 +169,8 @@ export function attachCoopRoom(server) {
             const msg = m.t === MSG.input
               ? { t: MSG.input, id: from.id, mx: num(m.mx), my: num(m.my), dash: !!m.dash }
               : m.t === MSG.state
-                ? { t: MSG.state, id: from.id, step: num(m.step), tick: num(m.tick), players: Array.isArray(m.players) ? m.players : [], score: num(m.score), kills: num(m.kills) }
-                : { t: MSG.runstart, id: from.id, seed: num(m.seed) };
+                ? { t: MSG.state, id: from.id, v: num(m.v), step: num(m.step), time: num(m.time), score: num(m.score), kills: num(m.kills), players: arr(m.players, 4), enemies: arr(m.enemies, 512), pickups: arr(m.pickups, 512) }
+                : { t: MSG.runstart, id: from.id, seed: num(m.seed), levelKey: typeof m.levelKey === 'string' ? m.levelKey.slice(0, 16) : 'm01' };
             for (const v of conns.values()) if (v.id !== c.id) send(v, msg);
           } else if (m.t === MSG.closed) {
             // host ends the room explicitly (run over / quit)

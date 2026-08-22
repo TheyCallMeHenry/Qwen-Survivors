@@ -22,6 +22,9 @@ import { gemHeartFor } from '../art/items.js';
 import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
 import { buildMinimapBase, drawMinimapLive } from '../world/minimap.js';
+import { playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState, ENEMY_KEYS } from '../net/sync.js';
+import { MSG, profileFromMeta } from '../net/coop.js';
+import { CoopConn } from '../net/conn.js';
 
 export class Game {
   constructor({ input, loop, ctx, mctx, characters, items }) {
@@ -47,10 +50,20 @@ export class Game {
     this.player = new Player(characters.player);
     this.player.flashes = [characters.player.idle.map(flashCopy), characters.player.run.map(flashCopy)];
     this.playerShadow = shadowSprite(characters.player.shadowR, characters.player.shadowR, 0.35);
+    this.players = [this.player]; // live player array (co-op: host sim + remote inputs, 11.2)
+    this.remote = [];             // remote Player instances (host sim / client render)
+    this.net = null;              // CoopConn (solo: never set → all co-op paths skip)
+    this.netRole = 'solo';        // 'solo' | 'host' | 'client'
+    this.netRoster = [];          // [{id, seat, profile}] seat order
+    this.netMyId = null;
+    this._enemySid = new Map();   // stable sid → enemy object (client render set)
+    this._snapBuf = [];           // last 2 host states (client interpolation)
+    this._step = 0;               // host snapshot step counter
+    this._coopSeed = null;        // seed of the run the host is simulating
 
-    this.combat.onKill = (e) => this._onKill(e);
-    this.combat.onHurt = () => this._onHurt();
-    this.combat.onDeath = () => this._onDeath();
+    this.combat.onKill = (e, killer) => this._onKill(e, killer);
+    this.combat.onHurt = (dmg, pl) => this._onHurt(dmg, pl);
+    this.combat.onDeath = (pl) => this._onDeath(pl);
     this.combat.bulletImg = items.bullet;
     this.combat.bombImg = items.bomb;
     this.combat.flameImg = items.flame;
@@ -72,7 +85,6 @@ export class Game {
     this.zoom = loadZoom(CFG.zoom.key, document.body.classList.contains('touch'));
     this.cw = 0;
     this.ch = 0;
-    this._phoenixKills = 0;
 
     this.minimapBase = null;
     this.vignette = null;
@@ -159,12 +171,13 @@ export class Game {
     this.deathT = 0;
     this.bossSpawned = false;
     this._ghostT = 0;
-    this._phoenixKills = 0;
     this.loop.timescale = 1;
     this.state = 'PLAYING';
     this.input.gesture = true; // menu Start is a DOM tap: count it as the audio-unlock gesture
     this.input.clearTransient();
+    this._coopSeed = seed;
     this.bus.emit('runstart', seed);
+    if (this.net && this.netRole === 'host') this._coopStartRun(seed); // 11.2
   }
 
   // Regenerate the menu backdrop for the current level (fixed menuSeed — A5 preview).
@@ -204,7 +217,7 @@ export class Game {
   }
 
   pause() {
-    if (this.state !== 'PLAYING') return;
+    if (this.state !== 'PLAYING' || this.netRole === 'client') return; // co-op: the host owns the sim
     this.state = 'PAUSED';
     this.input.clearTransient();
     this.bus.emit('pause', true);
@@ -255,6 +268,7 @@ export class Game {
 
   update(dt) {
     if (this.input.consumeMute()) this.bus.emit('mute');
+    if (this.netRole === 'client' && this.state === 'PLAYING') { this._clientUpdate(dt); return; } // co-op: render path only
     switch (this.state) {
       case 'MENU':
         this._menuUpdate(dt);
@@ -297,36 +311,47 @@ export class Game {
     if (inp.consumePause()) { this.pause(); return; }
     const p = this.player;
     const ax = inp.axes();
-    if (inp.consumeDash() && p.tryDash(ax.x, ax.y)) this.bus.emit('dash');
+    if (p.dead) {
+      // co-op: local death is a spectator state while the run continues (11.2)
+      inp.consumeDash();
+    } else {
+      if (inp.consumeDash() && p.tryDash(ax.x, ax.y)) this.bus.emit('dash');
+      p.update(dt, ax, this.combat, this.enemies, this.world);
+      // dash ghost trail
+      if (p.dashT > 0) {
+        this._ghostT -= dt;
+        if (this._ghostT <= 0) {
+          this._ghostT = CFG.player.ghostEvery;
+          const def = p.def;
+          this.particles.ghost((p.moving ? def.run : def.idle)[p.frameIdx], p.x, p.y, p.flip);
+        }
+      } else this._ghostT = 0;
+    }
     this.t += dt;
-    p.update(dt, ax, this.combat, this.enemies, this.world);
-
-    // dash ghost trail
-    if (p.dashT > 0) {
-      this._ghostT -= dt;
-      if (this._ghostT <= 0) {
-        this._ghostT = CFG.player.ghostEvery;
-        const def = p.def;
-        this.particles.ghost((p.moving ? def.run : def.idle)[p.frameIdx], p.x, p.y, p.flip);
-      }
-    } else this._ghostT = 0;
+    for (const r of this.remote) if (!r.dead) this._remoteStep(dt, r); // co-op host
 
     this._spawns(dt);
-    this.enemies.update(dt, p, this.world, this.combat);
+    this.enemies.update(dt, this.players, this.world, this.combat);
     if (this.state !== 'PLAYING') return; // died to contact
-    this.combat.update(dt, p, this.enemies);
-    const got = this.pickups.update(dt, p);
-    if (got.heal > 0) p.heal(got.heal);
-    if (got.xp > 0) {
-      this.bus.emit('gem');
-      this.levelupQueue += p.gainXp(got.xp);
-      if (this.levelupQueue > 0) this.bus.emit('levelup');
+    this.combat.update(dt, this.players, this.enemies);
+    for (const pl of this.players) {
+      const got = this.pickups.update(dt, pl);
+      if (got.heal > 0) pl.heal(got.heal);
+      if (got.xp > 0) {
+        this.bus.emit('gem');
+        const ups = pl.gainXp(got.xp);
+        if (pl === p) {
+          this.levelupQueue += ups;
+          if (this.levelupQueue > 0) this.bus.emit('levelup');
+        } else this._remoteLevelUps(pl, ups); // host: auto-pick for the remote
+      }
     }
     if (!p.dead && this.levelupQueue > 0) { this._startLevelUp(); return; }
     this.particles.update(dt);
     this.snow.update(dt);
     this.camera.update(dt, p.x, p.y, p.vx, p.vy);
     if (this.t >= CFG.run.time) this._gameOver(true);
+    if (this.state === 'PLAYING') this._coopBroadcast(); // host: per-step snapshot
   }
 
   _levelUpInput() {
@@ -340,8 +365,8 @@ export class Game {
   _dyingUpdate(dt) {
     this.deathT += dt;
     const p = this.player;
-    this.enemies.update(dt, p, this.world, this.combat);
-    this.combat.update(dt, p, this.enemies);
+    this.enemies.update(dt, this.players, this.world, this.combat);
+    this.combat.update(dt, this.players, this.enemies);
     this.particles.update(dt);
     this.snow.update(dt);
     this.camera.update(dt, p.x, p.y, p.vx, p.vy);
@@ -408,15 +433,15 @@ export class Game {
 
   // --- combat callbacks (wired in constructor) ---
 
-  _onKill(e) {
+  _onKill(e, killer) {
     this.kills++;
     this.score += e.score;
-    const p = this.player;
+    const p = killer || this.player; // solo: killer always falls back to the local player
     this.pickups.gem(e.x, e.y, e.xp);
     if (p.synergies && p.synergies.phoenix) {
-      this._phoenixKills++;
+      p._phoenixKills = (p._phoenixKills || 0) + 1;
       const S = CFG.synergies.phoenix.levels[0];
-      if (this._phoenixKills % S.every === 0) p.heal(S.heal);
+      if (p._phoenixKills % S.every === 0) p.heal(S.heal);
     }
     const lowHp = p.hp / p.maxHp < CFG.gems.lowHpFrac;
     if (Math.random() < (lowHp ? CFG.gems.heartChanceLowHp : CFG.gems.heartChance)) this.pickups.heart(e.x, e.y);
@@ -429,14 +454,19 @@ export class Game {
     this.bus.emit('kill');
   }
 
-  _onHurt() {
+  _onHurt(dmg, pl) {
+    if (pl && pl !== this.player) return; // co-op: the local client only shakes for itself
     this.camera.addShake(0.45);
     this.loop.hitStop(CFG.combat.hitStopHurt);
     this.bus.emit('hurt');
   }
 
-  _onDeath() {
+  _onDeath(pl) {
     if (this.state !== 'PLAYING') return;
+    if (this.netRole === 'host' && pl !== this.player) {
+      // co-op: the run continues while any player is alive (11.2)
+      if (this.players.some((q) => !q.dead)) return;
+    }
     this.state = 'DYING';
     this.deathT = 0;
     this.loop.timescale = CFG.run.deathTimescale;
@@ -465,6 +495,291 @@ export class Game {
     }
     this.bus.emit('meta', this.meta);
     this.bus.emit('gameover', { ...st, shards: gain });
+    if (this.net && this.netRole === 'host') this.net.sendClosed('run-end'); // co-op: end the room
+  }
+
+  // --- co-op (11.2): host-authoritative sync ---
+  // Solo invariance (11.11): every path below is inert when this.net is null.
+
+  attachNet() {
+    if (this.net) return;
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    this.net = new CoopConn(`${proto}://${location.host}/`);
+    this.net.onMessage = (m) => this._netMsg(m);
+    this.net.connect();
+    this.net.sendHello(this.levelKey, profileFromMeta(this.meta));
+  }
+
+  detachNet() {
+    if (!this.net) return;
+    this.net.sendClosed('leave');
+    this.net.close();
+    this.net = null;
+    this.netRole = 'solo';
+    this.netRoster = [];
+    this.netMyId = null;
+    this.remote.length = 0;
+    this.players = [this.player];
+    if (this.state === 'PLAYING') this.toMenu();
+  }
+
+  _netMsg(m) {
+    if (!m || typeof m.t !== 'string') return;
+    switch (m.t) {
+      case MSG.joined:
+        this.netMyId = m.id;
+        this.netRole = m.seat === 0 ? 'host' : 'client';
+        break;
+      case MSG.full: // room full — back to solo
+        this.net = null;
+        break;
+      case MSG.roster: this._netRoster(m); break;
+      case MSG.runstart: if (this.netRole !== 'host') this._startClientRun(m.seed, m.levelKey); break;
+      case MSG.input: this._netInput(m); break;
+      case MSG.state: if (this.netRole === 'client') this._netState(m); break;
+      case MSG.left: break; // roster covers it
+      case MSG.closed: this._netClosed(); break;
+      case 'netclosed': this._netClosed(); break; // WS dropped
+    }
+  }
+
+  _netRoster(m) {
+    if (!Array.isArray(m.players)) return;
+    this.netRoster = m.players;
+    if (this.netRole !== 'host' || this.state !== 'PLAYING') return;
+    const seen = new Set(this.remote.map((r) => r.id));
+    let grew = false;
+    for (const e of m.players) {
+      if (e.id === this.netMyId || seen.has(e.id)) continue;
+      this.remote.push(this._remotePlayer(e.profile));
+      grew = true;
+    }
+    for (let i = this.remote.length - 1; i >= 0; i--) {
+      if (!m.players.some((q) => q.id === this.remote[i].id)) {
+        this.remote[i].dead = true;
+        this.remote.splice(i, 1);
+      }
+    }
+    this.players = [this.player, ...this.remote];
+    if (grew) this.net.sendRunStart(this.netMyId, this._coopSeed, this.levelKey); // mid-run joiner gets the seed
+  }
+
+  _remotePlayer(profile) {
+    const def = this.player.def;
+    const pl = new Player(def);
+    pl.flashes = [def.idle.map(flashCopy), def.run.map(flashCopy)];
+    pl.reset(this.world.playerStart.x, this.world.playerStart.y);
+    if (profile && typeof profile === 'object') {
+      // D53 stat profile → the player's meta fields (exact inverse of profileFromMeta).
+      pl.metaHp = profile.maxHpBonus || 0;
+      pl.metaDmg = (profile.dmgMult || 1) - 1;
+      pl.metaSpeed = (profile.speedMult || 1) - 1;
+      pl.xpMul = profile.xpMult || 1;
+      pl.dashCdMul = profile.dashCdMult || 1;
+      recomputeStats(pl);
+      pl.hp = pl.maxHp;
+    }
+    pl._mx = 0; pl._my = 0; pl._dash = false;
+    pl._phoenixKills = 0;
+    return pl;
+  }
+
+  _netInput(m) {
+    if (this.netRole !== 'host') return;
+    const r = this.remote.find((q) => q.id === m.id);
+    if (!r) return;
+    r._mx = typeof m.mx === 'number' ? m.mx : 0;
+    r._my = typeof m.my === 'number' ? m.my : 0;
+    if (m.dash) r._dash = true;
+  }
+
+  _coopStartRun(seed) {
+    const s = this.world.playerStart;
+    this.remote = this.netRoster.filter((e) => e.id !== this.netMyId)
+      .map((e) => { const pl = this._remotePlayer(e.profile); pl.id = e.id; return pl; });
+    this.players = [this.player, ...this.remote];
+    this._snapBuf = [];
+    this._step = 0;
+    this._coopSeed = seed;
+    this.net.sendRunStart(this.netMyId, seed, this.levelKey);
+  }
+
+  _remoteStep(dt, r) {
+    const ax = { x: r._mx || 0, y: r._my || 0 };
+    if (r._dash) { r._dash = false; if (r.tryDash(ax.x, ax.y)) this.bus.emit('dash'); }
+    r.update(dt, ax, this.combat, this.enemies, this.world);
+  }
+
+  _remoteLevelUps(pl, ups) {
+    for (let i = 0; i < ups; i++) {
+      const offers = cardOffers(pl.weapons, pl.passives, pl.synergies, this.rng);
+      if (!offers.length) break;
+      applyCard(pl, offers[0]); // host auto-picks; the client sees it via snapshots
+    }
+    this.bus.emit('levelup');
+  }
+
+  _coopBroadcast() {
+    if (!this.net || this.netRole !== 'host' || this.state !== 'PLAYING') return;
+    const body = stateMsg(
+      this._step++, this.t, this.score, this.kills,
+      this.players.map(playerSnap),
+      this.enemies.list.map(enemySnap),
+      pickupSnaps(this.pickups),
+    );
+    this.net.sendState(this.netMyId, body);
+  }
+
+  // --- co-op client: no local sim — apply host snapshots + interpolate ---
+
+  _startClientRun(seed, levelKey) {
+    this.levelKey = levelKey || this.levelKey || 'm01';
+    this.level = getLevel(this.levelKey);
+    this._reskinPickups();
+    this.rng = mulberry32(seed ^ 0x9e3779b9); // same world-seed mix as the host
+    this.world.generate(seed, this.levelKey);
+    this.minimapBase = buildMinimapBase(this.world);
+    const s = this.world.playerStart;
+    this.player.reset(s.x, s.y);
+    applyMeta(this.player, this.meta);
+    recomputeStats(this.player);
+    this.player.hp = this.player.maxHp;
+    this.enemies.reset();
+    this.enemies.setDefs(buildCharacters(this.levelKey));
+    this.enemies.diff = this.level.diff;
+    this.combat.reset();
+    this.pickups.reset();
+    this.particles.reset();
+    this.snow.reset(undefined, this.level.foreground);
+    this.camera.snap(s.x, s.y);
+    this.t = 0; this.score = 0; this.kills = 0;
+    this.bossSpawned = false;
+    this.victory = false;
+    this.levelupQueue = 0;
+    this.cards = null;
+    this.deathT = 0;
+    this._ghostT = 0;
+    this._snapBuf = [];
+    this._enemySid = new Map();
+    this.remote.length = 0;
+    this.players = [this.player];
+    this.netRole = 'client';
+    this.input.gesture = true;
+    this.input.clearTransient();
+    this.state = 'PLAYING';
+    this.bus.emit('runstart', seed);
+  }
+
+  _clientUpdate(dt) {
+    // Local controller → host (the client never simulates; the host applies
+    // this to the remote Player each step).
+    const ax = this.input.axes();
+    if (this.net) this.net.sendInput(ax.x, ax.y, this.input.consumeDash());
+    this._interp();
+    this.camera.update(dt, this.player.x, this.player.y, this.player.vx, this.player.vy);
+    this.snow.update(dt);
+  }
+
+  _interp() {
+    const buf = this._snapBuf;
+    const a = buf[0], b = buf[1];
+    const now = performance.now();
+    const lerpP = (i, j) => {
+      if (a && b && j < a.players.length && j < b.players.length && b.arr - a.arr > 1) {
+        const t = (now - CFG.coop.interpLag - a.arr) / (b.arr - a.arr);
+        if (t > 0 && t < 1) {
+          const A = a.players[j], B = b.players[j];
+          return { x: A[0] + (B[0] - A[0]) * t, y: A[1] + (B[1] - A[1]) * t };
+        }
+      }
+      const p = b ? b.players[j] : a ? a.players[j] : null;
+      return p ? { x: p[0], y: p[1] } : null;
+    };
+    const seat = this._seat();
+    for (let j = 0; j < this.players.length; j++) {
+      const pl = j === seat ? this.player : this.remote[j < seat ? j : j - 1];
+      const pos = lerpP(j);
+      if (pos) { pl.x = pos.x; pl.y = pos.y; }
+    }
+    const lb = b ? b.enemies : a ? a.enemies : [];
+    const la = a ? a.enemies : [];
+    for (const s of lb) {
+      const e = this._enemySid.get(s[0]);
+      if (!e) continue;
+      const pa = la.find((q) => q[0] === s[0]);
+      if (pa && b.arr - a.arr > 1) {
+        const t = (now - CFG.coop.interpLag - a.arr) / (b.arr - a.arr);
+        if (t > 0 && t < 1) { e.x = pa[2] + (s[2] - pa[2]) * t; e.y = pa[3] + (s[3] - pa[3]) * t; continue; }
+      }
+      e.x = s[2]; e.y = s[3];
+    }
+  }
+
+  _reconcileRemote(n) {
+    for (let i = this.remote.length; i < n - 1; i++) {
+      const def = this.player.def;
+      const pl = new Player(def);
+      pl.flashes = [def.idle.map(flashCopy), def.run.map(flashCopy)];
+      pl.reset(this.world.playerStart.x, this.world.playerStart.y);
+      this.remote.push(pl);
+    }
+    if (this.remote.length > n - 1) this.remote.length = n - 1;
+    this.players = [this.player, ...this.remote];
+  }
+
+  _netState(m) {
+    const st = unpackState(m);
+    if (!st) return;
+    this.t = st.time; this.score = st.score; this.kills = st.kills;
+    this._reconcileRemote(st.players.length);
+    const now = performance.now();
+    this._snapBuf.push({ arr: now, players: st.players, enemies: st.enemies });
+    if (this._snapBuf.length > 2) this._snapBuf.shift();
+    const seat = this._seat();
+    for (let j = 0; j < st.players.length; j++) {
+      applyPlayerSnap(j === seat ? this.player : this.remote[j < seat ? j : j - 1], st.players[j]);
+    }
+    const live = new Set();
+    for (const s of st.enemies) {
+      live.add(s[0]);
+      let e = this._enemySid.get(s[0]);
+      if (!e) {
+        e = this.enemies.spawn(ENEMY_KEYS[s[1]], s[2], s[3]);
+        e.sid = s[0];
+        this._enemySid.set(s[0], e);
+      }
+      applyEnemySnap(e, s);
+    }
+    if (this._enemySid.size !== live.size) {
+      for (const [sid, e] of this._enemySid) {
+        if (!live.has(sid)) { e.dead = true; this._enemySid.delete(sid); }
+      }
+      let w = 0;
+      for (let i = 0; i < this.enemies.list.length; i++) {
+        const e = this.enemies.list[i];
+        if (!e.dead) this.enemies.list[w++] = e;
+      }
+      this.enemies.list.length = w;
+    }
+    applyPickupSnaps(this.pickups, st.pickups);
+    this._interp();
+  }
+
+  _seat() {
+    return this.netRoster.findIndex((e) => e.id === this.netMyId);
+  }
+
+  _netClosed() {
+    // Run over (host) or transport gone: back to the menu, solo again.
+    if (this.net) { this.net.close(); }
+    this.net = null;
+    this.netRole = 'solo';
+    this.netRoster = [];
+    this.netMyId = null;
+    this.remote.length = 0;
+    this.players = [this.player];
+    if (this.state === 'GAMEOVER') return; // host: keep the results screen
+    this.toMenu();
   }
 
   // --- render (every rAF; raw dt, camera shake offsets included in view) ---
@@ -474,6 +789,7 @@ export class Game {
     const p = this.player;
     const lights = this.world.lights.slice();
     lights.push({ x: p.x, y: p.y, r: L.playerR, rgb: L.playerRgb, flicker: L.playerFlicker });
+    for (const r of this.remote) if (!r.dead) lights.push({ x: r.x, y: r.y, r: L.playerR, rgb: L.playerRgb, flicker: L.playerFlicker });
     for (const e of this.enemies.list) {
       if (e.boss && !e.dead) {
         lights.push({ x: e.x, y: e.y, r: L.bossR, rgb: L.bossRgb, flicker: L.bossFlicker });
@@ -513,7 +829,7 @@ export class Game {
     this.pickups.draw(ctx, t, x0, y0, x1, y1);
     const p = this.player;
     const sr = p.def.shadowR;
-    ctx.drawImage(this.playerShadow, p.x - sr, p.y - sr * 0.5, sr * 2, sr);
+    for (const pl of this.players) ctx.drawImage(this.playerShadow, pl.x - sr, pl.y - sr * 0.5, sr * 2, sr);
     this.enemies.drawShadows(ctx, x0, y0, x1, y1);
     const items = [];
     for (const d of this.world.decor) {
@@ -525,9 +841,10 @@ export class Game {
       items.push(e);
     }
     items.push(p);
+    for (const r of this.remote) if (!r.dead) items.push(r);
     items.sort((a, b) => a.y - b.y);
     for (const it of items) {
-      if (it === p) p.draw(ctx);
+      if (it === p || it.flashes) it.draw(ctx); // player instances (local + remote)
       else if (it.img) ctx.drawImage(it.img, it.x - (it.w * it.s) / 2, it.y - it.h * it.s);
       else this.enemies.drawOne(ctx, it, t);
     }

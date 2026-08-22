@@ -7,7 +7,9 @@ import { LEVELS, LEVEL_ORDER, getLevel } from '../js/world/levels.js';
 import { HashGrid } from '../js/utils/grid.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../js/entities/spawner.js';
 import { Enemies } from '../js/entities/enemies.js';
-import { cardOffers, applyCard, recomputeStats, cardEffectText } from '../js/entities/player.js';
+import { Player, cardOffers, applyCard, recomputeStats, cardEffectText } from '../js/entities/player.js';
+import { Combat } from '../js/entities/combat.js';
+import { SNAP_V, WEAPON_KEYS, PASSIVE_KEYS, SYNERGY_KEYS, ENEMY_KEYS, E_FLAG_FLASH, E_FLAG_BURN, E_FLAG_BLIGHT, E_FLAG_BOSS, E_FLAG_FLIP, playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState } from '../js/net/sync.js';
 import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom } from '../js/core/meta.js';
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
@@ -784,6 +786,77 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const rb = consumeFrames(Buffer.concat([Buffer.from([0x81]), bigLen, bigMask, bigP]), () => {});
   ok(rb.error === 'max-payload', '11.1: oversized frame → max-payload');
   ok(wsAcceptKey('dGhlIHNhbXBsZSBub25jZQ==') === 's3pPLMBiTxaQ9kYGzzhZRbK+xOo=', '11.1: RFC 6455 accept key');
+}
+
+// --- 11.2 host-authoritative sync: snapshot codec + per-player ownership ---
+{
+  ok(WEAPON_KEYS.length === 7 && PASSIVE_KEYS.length === 5 && SYNERGY_KEYS.length === 5 && ENEMY_KEYS.length === 9,
+    '11.2: key tables follow CFG order/counts');
+
+  const p = new Player({});
+  p.reset(10, 20);
+  applyCard(p, { kind: 'weapon', key: 'axe', level: 2 });
+  applyCard(p, { kind: 'passive', key: 'dmg', level: 1 });
+  applyCard(p, { kind: 'synergy', key: 'blight', level: 1 });
+  p.xp = 12.345; p.hp = 55.55; p.dashT = 0.333; p.dashCd = 1.666; p.flip = true;
+  const ps = playerSnap(p);
+  ok(ps.length === 26, '11.2: playerSnap is 26 slots');
+  const p2 = new Player({});
+  p2.reset(0, 0);
+  applyPlayerSnap(p2, ps);
+  ok(near(p2.x, 10) && near(p2.y, 20) && near(p2.hp, 55.6) && p2.maxHp === p.maxHp && near(p2.xp, 12.3)
+    && p2.level === p.level && p2.flip === true && near(p2.dashT, 0.3) && near(p2.dashCd, 1.7),
+    '11.2: playerSnap/apply round-trip (r1 rounding)');
+  ok(Object.keys(p2.weapons).length === Object.keys(p.weapons).length && p2.weapons.axe === p.weapons.axe
+    && p2.passives.dmg === 1 && p2.synergies.blight === 1,
+    '11.2: applyPlayerSnap rebuilds weapon/passive/synergy maps');
+
+  const es = enemySnap({ sid: 3, type: ENEMY_KEYS[1], x: 100.04, y: 200.06, hp: 7.4, maxHp: 10, frame: 2, flash: 0.2, burnT: 1, blightT: 0, boss: true, flip: true });
+  ok(es[0] === 3 && es[1] === 1 && near(es[2], 100) && near(es[3], 200.1) && es[4] === 7 && es[5] === 10 && es[6] === 2
+    && es[7] === (E_FLAG_FLASH | E_FLAG_BURN | E_FLAG_BOSS | E_FLAG_FLIP),
+    '11.2: enemySnap [sid,typeIdx,x,y,hp,maxHp,frame,flags]');
+  const e2 = {};
+  applyEnemySnap(e2, es);
+  ok(near(e2.x, 100) && near(e2.y, 200.1) && e2.hp === 7 && e2.frame === 2 && e2.flip === true && e2.flash > 0 && e2.burnT > 0 && e2.blightT === 0,
+    '11.2: applyEnemySnap (flags → flash/burn/blight/flip)');
+
+  const pk = { gems: [{ on: true, x: 1.25, y: 2.5 }, { on: false }], hearts: [{ on: false }, { on: true, x: 3.4, y: 4.6 }] };
+  const snaps = pickupSnaps(pk);
+  ok(snaps.length === 2 && snaps[0][0] === 0 && snaps[0][1] === 0 && near(snaps[0][2], 1.3) && near(snaps[0][3], 2.5)
+    && snaps[1][0] === 1 && snaps[1][1] === 1,
+    '11.2: pickupSnaps [kind,poolSlot,x,y] stable slots, alive only');
+  const pk2 = { gems: [{ on: false }, { on: false }], hearts: [{ on: false }, { on: false }] };
+  applyPickupSnaps(pk2, snaps);
+  ok(pk2.gems[0].on === true && pk2.gems[1].on === false && pk2.hearts[1].on === true && typeof pk2.gems[0].ph === 'number',
+    '11.2: applyPickupSnaps toggles by pool slot + recomputes ph');
+
+  const st = stateMsg(5, 12.345, 100, 7, [ps], [es], [[0, 0, 1, 1]]);
+  ok(st.v === SNAP_V && st.step === 5 && near(st.time, 12.35) && st.score === 100 && st.kills === 7, '11.2: stateMsg fields (time r2)');
+  ok(unpackState(st) === st, '11.2: unpackState accepts valid');
+  ok(unpackState({ ...st, v: 99 }) === null, '11.2: wrong version → null');
+  ok(unpackState({ ...st, step: 2.5 }) === null, '11.2: non-integer step → null');
+  ok(unpackState({ ...st, players: [ps, [1, 2]] }) === null, '11.2: short player snap → null');
+  ok(unpackState({ ...st, enemies: [[1, 0, 1, 1, 1, 1, 0]] }) === null, '11.2: short enemy snap → null');
+  ok(unpackState({ ...st, pickups: [[0, 0, 1]] }) === null, '11.2: short pickup snap → null');
+  ok(unpackState(null) === null, '11.2: null → null');
+
+  // Per-player ownership: synergies ride the projectile; kills credit the shooter.
+  const c = new Combat();
+  const A = { id: 'A' }, B = { id: 'B' };
+  c.fireBolt(0, 0, 0, 10, 0, 2, A);
+  ok(c.bolts[0].blight === 2 && c.bolts[0].owner === A, '11.2: fireBolt carries blight level + owner');
+  c.fireBullet(0, 0, 0, 5, null, B);
+  ok(c.bullets[0].inferno === null && c.bullets[0].owner === B, '11.2: fireBullet carries owner (no inferno)');
+  c.fireBomb(0, 0, 0, 30, 8, 20, 0.5, null, A);
+  ok(c.bombs[0].napalm === null && c.bombs[0].owner === A, '11.2: fireBomb carries owner');
+  c.emitFlame(0, 0, 0, 1, 2, 1.5, B);
+  ok(c.flames[0].owner === B, '11.2: emitFlame carries owner');
+  c.fireAxe(0, 0, 0, 6, 10, 3, A);
+  ok(c.axes.length === 3 && c.axes.every((a) => a.owner === A), '11.2: fireAxe stamps every throw');
+  let killed = null;
+  c.onKill = (e, killer) => { killed = killer; };
+  c.damageEnemy({ hp: 10, maxHp: 10, flash: 0 }, 10, 0, 0, 0, B);
+  ok(killed === B, '11.2: damageEnemy → onKill(e, owner)');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);
