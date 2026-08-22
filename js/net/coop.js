@@ -95,6 +95,62 @@ export function weaponCap(n) {
 // pairwise distances ≤ R — every player sees every other). Project (x, y) into
 // the intersection of the radius-R disks around `others` (convex — iterative
 // projection converges; the host re-clamps to the world margin afterwards).
+// 11.6.3 ghost fallback (D59): sanitize a per-seat unlocked-char list. Same
+// semantics as meta.loadChars (playable keys only, starter always present)
+// but pure — no LS. The join profile carries each seat's own list (D53).
+export function sanitizeChars(chars) {
+  const order = CFG.characters.order;
+  const list = Array.isArray(chars) ? order.filter((k) => chars.includes(k)) : [];
+  return list.includes(order[0]) ? list : [order[0], ...list];
+}
+
+// D59 (binding): ALL co-op players become the ghost when EVERY lobby member has
+// ONLY the starter character unlocked. `seats` = per-seat entries in seat order
+// (roster entries {profile:{chars}} or raw char lists); solo (1 seat) never ghosts.
+export function allStarterLobby(seats) {
+  if (!Array.isArray(seats) || seats.length < 2) return false;
+  const starter = CFG.characters.order[0];
+  return seats.every((s) => {
+    const raw = Array.isArray(s) ? s : s && s.profile && Array.isArray(s.profile.chars) ? s.profile.chars : null;
+    const c = sanitizeChars(raw);
+    return c.length === 1 && c[0] === starter;
+  });
+}
+
+// D62: per-seat Pac-Man ghost tint (seat 0→3 = Blinky/Pinky/Inky/Clyde).
+export function ghostColor(seat) {
+  const G = CFG.ghostColors;
+  return G[Math.max(0, Math.floor(seat) || 0) % G.length];
+}
+
+// D59: 2 UNIQUE starting-weapon offers per ghosted player, never duplicated
+// across players. Seeded shuffle of the weapon roster, dealt 2 per seat in seat
+// order. Roster 7 < 4P×2 → the last seat gets the remainder (1); Phase 12's
+// roster 10 restores 2 per seat for all N ≤ 4 (D37).
+export function allocateGhostOffers(n, rng) {
+  const pool = Object.keys(CFG.weapons).slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = (rng() * (i + 1)) | 0;
+    const t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+  }
+  const out = [];
+  const c = Math.min(Math.max(0, Math.floor(n) || 0), CFG.coop.maxPlayers);
+  for (let s = 0; s < c; s++) out.push(pool.slice(s * 2, s * 2 + 2));
+  return out;
+}
+
+// D53 (11.6.3): join profile = the meta stat profile + this seat's unlocked
+// characters (player-specific sim input — ghost-fallback detection, D59).
+export function joinProfile(meta, chars) {
+  const p = profileFromMeta(meta);
+  p.chars = sanitizeChars(chars);
+  return p;
+}
+
+// 11.4 leash (A2): every player stays within R of EVERY other player (all
+// pairwise distances ≤ R — every player sees every other). Project (x, y) into
+// the intersection of the radius-R disks around `others` (convex — iterative
+// projection converges; the host re-clamps to the world margin afterwards).
 export function leashClamp(x, y, others, R) {
   for (let i = 0; i < 8; i++) {
     let moved = false;

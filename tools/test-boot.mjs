@@ -987,7 +987,7 @@ m03RunDone = true;
 // for all players; clients render host snapshots (no local sim).
 {
   const { createGameServer, attachCoopRoom } = await import('../tools/serve.mjs');
-  const { profileFromMeta } = await import('../js/net/coop.js');
+  const { joinProfile } = await import('../js/net/coop.js');
   const srv = createGameServer();
   attachCoopRoom(srv);
   await new Promise((res) => srv.listen(0, '127.0.0.1', res));
@@ -1039,12 +1039,12 @@ m03RunDone = true;
   };
   wire(hostG, rawA); wire(c1G, rawB); wire(c2G, rawC);
 
-  rawA.send({ t: 'hello', levelKey: 'm01', profile: profileFromMeta(hostG.meta) });
+  rawA.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(hostG.meta, hostG.chars) });
   const jA = await rawA.wait((m) => m.t === 'joined', 'host joined');
   assert(jA.seat === 0, '11.2: first joiner is host seat 0');
-  rawB.send({ t: 'hello', levelKey: 'm01', profile: profileFromMeta(c1G.meta) });
+  rawB.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(c1G.meta, c1G.chars) });
   await rawB.wait((m) => m.t === 'joined', 'c1 joined');
-  rawC.send({ t: 'hello', levelKey: 'm01', profile: profileFromMeta(c2G.meta) });
+  rawC.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(c2G.meta, c2G.chars) });
   await rawC.wait((m) => m.t === 'joined', 'c2 joined');
   const ro = await rawA.wait((m) => m.t === 'roster' && m.players.length === 3, 'host roster 3');
   assert(ro.ids.length === 3, '11.2: roster carries ids + per-seat profiles');
@@ -1058,6 +1058,11 @@ m03RunDone = true;
     '11.2: runstart carries the shared seed + level key');
   const DT = 1 / 60;
   const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+  // 11.6.3: these profiles carry chars=[starter] (fresh LS) → all-starter lobby →
+  // the host opens on the ghost entry pick; consume it so the sim broadcasts state.
+  assert(hostG._ghost && hostG.state === 'LEVELUP' && hostG.cards.length === 2,
+    '11.6.3 (via 11.2): all-starter lobby opens on the 2-card ghost entry pick');
+  hostG.pickCard(0);
   // Pump before the state wait: the host only broadcasts state inside
   // update(); yield to the event loop so the WS round trip completes.
   for (let i = 0; i < 30; i++) {
@@ -1189,6 +1194,158 @@ m03RunDone = true;
   await new Promise((res) => setTimeout(res, 60));
   assert(hostG.players.length === 2 && hostG.players[2] === undefined, '11.2: host drops the leaver from the sim');
   assert(hostG.state === 'PLAYING' && c1G.state === 'PLAYING', '11.2: run continues after a leaver');
+  for (const c of raws) c.w.close();
+  await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });
+}
+
+// 11.6.3 — ghost fallback E2E (D59/D62): real relay + Game instances.
+// (a) all-starter 3P → every seat ghosts: the host opens on exactly its 2-card
+// starting pair, remotes auto-receive ghost sheets + disjoint pairs, a mid-run
+// 4th joiner ghosts in with a pair disjoint from all three. (b) mixed lobby
+// (one seat has a non-starter unlocked) → NO ghosting.
+{
+  const { createGameServer, attachCoopRoom } = await import('../tools/serve.mjs');
+  const { joinProfile } = await import('../js/net/coop.js');
+  const srv = createGameServer();
+  attachCoopRoom(srv);
+  await new Promise((res) => srv.listen(0, '127.0.0.1', res));
+  const url = `ws://127.0.0.1:${srv.address().port}`;
+  const raws = [];
+  const mkRaw = () => {
+    const c = { w: new WebSocket(url), msgs: [] };
+    c.opened = new Promise((res) => { c.w.addEventListener('open', res); c.w.addEventListener('error', () => res()); });
+    c.w.addEventListener('message', (ev) => c.msgs.push(JSON.parse(String(ev.data))));
+    c.wait = (pred, what, ms = 4000) => new Promise((res, rej) => {
+      const t0 = Date.now();
+      const to = setInterval(() => {
+        const i = c.msgs.findIndex(pred);
+        if (i !== -1) { clearInterval(to); res(c.msgs.splice(i, 1)[0]); }
+        else if (Date.now() - t0 > ms) { clearInterval(to); rej(new Error('11.6.3 E2E timeout: ' + what)); }
+      }, 5);
+    });
+    c.send = (m) => c.w.send(JSON.stringify(m));
+    raws.push(c);
+    return c;
+  };
+  const dummyLoop = { timescale: 1, hitStop() {} };
+  const mkGame = () => {
+    const g = new Game({
+      input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
+      loop: dummyLoop, ctx: makeCtx(), mctx, characters, items,
+    });
+    g.resize(1280, 800);
+    return g;
+  };
+  const wire = (g, raw) => {
+    const conn = {
+      onMessage: null,
+      send: (o) => raw.send(o),
+      close: () => raw.w.close(),
+      sendInput: (mx, my, dash) => raw.send({ t: 'input', mx, my, dash }),
+      sendState: (id, body) => raw.send(Object.assign({ t: 'state' }, body, { id })),
+      sendRunStart: (id, seed, levelKey) => raw.send({ t: 'runstart', id, seed, levelKey }),
+      sendClosed: (reason) => raw.send({ t: 'closed', reason }),
+    };
+    raw.w.addEventListener('message', (ev) => { const m = JSON.parse(String(ev.data)); conn.onMessage && conn.onMessage(m); });
+    g.net = conn;
+    g.net.onMessage = (m) => g._netMsg(m);
+  };
+  const DT = 1 / 60;
+  const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+  const keepAlive = (g) => {
+    for (const p of g.players) if (p.dead || p.hp < p.maxHp * 0.5) { p.dead = false; p.hp = p.maxHp; p.iframes = 5; }
+  };
+
+  // --- (a) all-starter lobby → ghost run ---
+  const hostG = mkGame(), c1G = mkGame(), c2G = mkGame(), c3G = mkGame();
+  const rawA = mkRaw(), rawB = mkRaw(), rawC = mkRaw(), rawD = mkRaw();
+  await Promise.all([rawA, rawB, rawC, rawD].map((c) => c.opened));
+  wire(hostG, rawA); wire(c1G, rawB); wire(c2G, rawC);
+  rawA.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(hostG.meta, hostG.chars) });
+  await rawA.wait((m) => m.t === 'joined', 'host joined');
+  rawB.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(c1G.meta, c1G.chars) });
+  await rawB.wait((m) => m.t === 'joined', 'c1 joined');
+  rawC.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(c2G.meta, c2G.chars) });
+  await rawC.wait((m) => m.t === 'joined', 'c2 joined');
+
+  hostG.startRun('m01');
+  assert(hostG._ghost, '11.6.3: all-starter lobby → ghost run (D59)');
+  assert(hostG.state === 'LEVELUP' && hostG.cards.length === 2
+    && hostG.cards.every((c) => c.kind === 'weapon' && c.level === 1)
+    && hostG.player.charKey === 'ghost' && hostG.player.maxHp === CFG.characters.ghost.hp + hostG.player.metaHp,
+    '11.6.3: host seat opens on its 2-card starting pair (ghost: baseline 100 HP + meta, no starting weapon)');
+  const hostPair = hostG.cards.map((c) => c.key);
+  const pl1 = hostG.players[1], pl2 = hostG.players[2];
+  assert(pl1.charKey === 'ghost' && pl2.charKey === 'ghost', '11.6.3: remote seats ghosted');
+  const w1 = Object.keys(pl1.weapons), w2 = Object.keys(pl2.weapons);
+  assert(w1.length === 1 && w2.length === 1,
+    `11.6.3: remotes auto-received their starting weapon (${w1}/${w2})`);
+  const allFlat = [...hostPair, ...w1, ...w2];
+  assert(new Set(allFlat).size === allFlat.length && allFlat.every((k) => CFG.weapons[k]),
+    '11.6.3: host pair + both remote picks — never duplicated across players (D59)');
+  assert(pl1._ghostOffers.length === 2 && pl2._ghostOffers.length === 2,
+    '11.6.3: remotes keep the remainder of their pair for their first level-up');
+  hostG.pickCard(0); // consume the entry pick
+  assert(Object.keys(hostG.player.weapons).length === 1 && hostG.state === 'PLAYING',
+    '11.6.3: entry pick applied → run continues');
+
+  const rs1 = await rawB.wait((m) => m.t === 'runstart', 'c1 runstart');
+  const rs2 = await rawC.wait((m) => m.t === 'runstart', 'c2 runstart');
+  assert(rs1.seed === rs2.seed, '11.6.3: shared seed relayed');
+  for (let i = 0; i < 60; i++) {
+    keepAlive(hostG); keepAlive(c1G); keepAlive(c2G);
+    hostG.update(DT); c1G.update(DT); c2G.update(DT);
+    if (i % 20 === 19) await tick();
+  }
+  await rawB.wait((m) => m.t === 'state' && m.players.length === 3, 'c1 first state');
+  assert(c1G.state === 'PLAYING' && c1G._ghost && c1G.player.charKey === 'ghost',
+    '11.6.3: client (seat 1) renders its own ghost seat from the roster profiles');
+
+  // Mid-run 4th joiner: the lobby is STILL all-starter → it ghosts in too, with a
+  // pair disjoint from the three existing ones.
+  wire(c3G, rawD);
+  rawD.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(c3G.meta, c3G.chars) });
+  const jD = await rawD.wait((m) => m.t === 'joined', 'c3 joined');
+  assert(jD.seat === 3, '11.6.3: joiner takes seat 3');
+  const roD = await rawA.wait((m) => m.t === 'roster' && m.players.length === 4, 'host roster 4');
+  assert(roD.players[3].profile.chars.length === 1, '11.6.3: roster carries the joiner char state');
+  await tick(60);
+  const pl3 = hostG.players[3];
+  assert(pl3 && pl3.charKey === 'ghost', '11.6.3: mid-run joiner ghosted (D59 all-starter still holds)');
+  const w3 = Object.keys(pl3.weapons);
+  assert(w3.length === 1 && !allFlat.includes(w3[0]),
+    `11.6.3: joiner auto-picked a 4th unique starting weapon (${w3})`);
+  assert(Object.keys(hostG.weaponOwner).length === 4
+    && new Set(Object.values(hostG.weaponOwner)).size === 4,
+    '11.6.3: every ghost pick registered a distinct first-picker owner (11.5)');
+  for (let i = 0; i < 30; i++) {
+    keepAlive(hostG); keepAlive(c1G); keepAlive(c2G); keepAlive(c3G);
+    hostG.update(DT); c1G.update(DT); c2G.update(DT); c3G.update(DT);
+    if (i % 20 === 19) await tick();
+  }
+
+  // --- (b) mixed lobby → no ghosting (fresh room: host-leave closes (a)'s) ---
+  rawA.w.close();
+  await rawB.wait((m) => m.t === 'closed' && m.reason === 'host-leave', 'room closed (host leave)');
+  const h2 = mkGame(), m1 = mkGame(), m2 = mkGame();
+  const rA = mkRaw(), rB = mkRaw(), rC = mkRaw();
+  await Promise.all([rA, rB, rC].map((c) => c.opened));
+  wire(h2, rA); wire(m1, rB); wire(m2, rC);
+  const rangerChars = ['mage', 'ranger'];
+  rA.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(h2.meta, rangerChars) });
+  await rA.wait((m) => m.t === 'joined', 'mixed host joined');
+  rB.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(m1.meta, m1.chars) });
+  await rB.wait((m) => m.t === 'joined', 'mixed c1 joined');
+  rC.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(m2.meta, m2.chars) });
+  await rC.wait((m) => m.t === 'joined', 'mixed c2 joined');
+  h2.startRun('m01');
+  assert(!h2._ghost && h2.state === 'PLAYING' && h2.player.charKey === 'mage',
+    '11.6.3: mixed lobby (one non-starter unlocked) → NO ghosting');
+  assert(Object.keys(h2.player.weapons).length === 1 && h2.player.weapons.wand === 1,
+    '11.6.3: non-ghost host keeps its starter starting weapon');
+  assert(h2.players[1].charKey !== 'ghost' && h2.players[2].charKey !== 'ghost',
+    '11.6.3: non-ghost remotes keep their selected character');
+
   for (const c of raws) c.w.close();
   await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });
 }

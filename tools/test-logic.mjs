@@ -14,7 +14,7 @@ import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, record
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
-import { MSG, pack, unpack, profileFromMeta, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap } from '../js/net/coop.js';
+import { MSG, pack, unpack, profileFromMeta, joinProfile, sanitizeChars, allStarterLobby, ghostColor, allocateGhostOffers, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap } from '../js/net/coop.js';
 import { encodeFrame, consumeFrames, wsAcceptKey } from './serve.mjs';
 
 let pass = 0;
@@ -1030,6 +1030,64 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   saveSelectedChar(CKEY, 'nope');
   ok(loadSelectedChar(CKEY) === 'swash', '11.6.2: saveSelectedChar rejects unknown keys');
   delete globalThis.localStorage;
+}
+
+// --- 11.6.3 ghost fallback: all-starter detection + unique 2-offer allocation (D59/D62) ---
+{
+  const starter = CFG.characters.order[0];
+  ok(sanitizeChars(['ranger', 'mage', 'ghost', 'nope']).join() === 'mage,ranger',
+    '11.6.3: sanitizeChars keeps playable keys, drops ghost/unknown, keeps the starter');
+  ok(sanitizeChars(null).join() === starter && sanitizeChars(['swash']).join() === 'mage,swash',
+    '11.6.3: sanitizeChars null/missing-starter → starter present (fresh seat)');
+
+  const rosterOf = (perSeat) => perSeat.map((c) => ({ id: 'x', seat: 0, profile: { chars: c } }));
+  ok(allStarterLobby(rosterOf([[starter], [starter]])), '11.6.3: 2P all-starter lobby → ghost');
+  ok(allStarterLobby(rosterOf([[starter], [starter], [starter], [starter]])), '11.6.3: 4P all-starter lobby → ghost');
+  ok(allStarterLobby([null, { profile: {} }]), '11.6.3: legacy profiles (no chars) normalize to starter → ghost');
+  ok(!allStarterLobby([starter]), '11.6.3: solo (1 seat) never ghosts');
+  ok(!allStarterLobby(null) && !allStarterLobby([]), '11.6.3: null/empty roster → false');
+  ok(!allStarterLobby(rosterOf([[starter], ['mage', 'ranger']])),
+    '11.6.3: any seat with a non-starter unlocked → no ghost');
+  ok(!allStarterLobby(rosterOf([['mage', 'warden'], [starter]])), '11.6.3: symmetric — any seat breaks it');
+
+  ok(ghostColor(0) === CFG.ghostColors[0] && ghostColor(3) === CFG.ghostColors[3]
+    && ghostColor(4) === CFG.ghostColors[0] && ghostColor(-1) === CFG.ghostColors[0],
+    '11.6.3: ghostColor seat 0→3 = the 4 tints, wraps (D62)');
+
+  const nRoster = Object.keys(CFG.weapons).length;
+  const mkDeal = (n, seed) => allocateGhostOffers(n, mulberry32(seed));
+  for (const n of [1, 2, 3]) {
+    const d = mkDeal(n, 1234);
+    ok(d.length === n, `11.6.3: allocateGhostOffers(${n}) → n pairs`);
+    ok(d.every((pair) => pair.length === 2 && new Set(pair).size === 2 && pair.every((k) => CFG.weapons[k])),
+      `11.6.3: ${n}P — 2 valid, unique weapons per player`);
+    ok(new Set(d.flat()).size === d.flat().length, `11.6.3: ${n}P — never duplicated across players`);
+    ok(JSON.stringify(mkDeal(n, 1234)) === JSON.stringify(d), `11.6.3: ${n}P — seeded determinism`);
+  }
+  const d4 = mkDeal(4, 99);
+  ok(d4.length === 4 && d4[0].length === 2 && d4[1].length === 2 && d4[2].length === 2 && d4[3].length === 1,
+    `11.6.3: 4P × 2 = 8 > roster ${nRoster} → 2/2/2/1 (last seat gets the remainder)`);
+  ok(new Set(d4.flat()).size === d4.flat().length, '11.6.3: 4P — still never duplicated across players');
+  ok(JSON.stringify(mkDeal(4, 100)) !== JSON.stringify(mkDeal(4, 99)), '11.6.3: seed varies the deal');
+
+  // Ghost routing through cardOffers (D59): the pair replaces the offer pool,
+  // already-held pair weapons are filtered, and applyCard clears the pair.
+  const empty = { weapons: {}, passives: {}, synergies: {} };
+  const pair = ['wand', 'bombs'];
+  const g = cardOffers(empty.weapons, empty.passives, empty.synergies, mulberry32(7), 5, null, pair);
+  ok(g.length === 2 && g.every((c) => c.kind === 'weapon' && c.level === 1) && g[0].key === 'wand' && g[1].key === 'bombs',
+    '11.6.3: ghost first level-up offers exactly the assigned pair');
+  const g2 = cardOffers(empty.weapons, empty.passives, empty.synergies, mulberry32(7), 5, null, pair.slice(1));
+  ok(g2.length === 1 && g2[0].key === 'bombs', '11.6.3: held pair weapon filtered (second draw = remainder only)');
+  applyCard(empty, g[0]);
+  ok(empty._ghostOffers === null && empty.weapons.wand === 1, '11.6.3: applying a level-1 weapon clears _ghostOffers');
+  const g3 = cardOffers({ wand: 1 }, {}, {}, mulberry32(7), 5, null, null);
+  ok(g3.length === 3 && g3.every((c) => !(c.kind === 'weapon' && c.key === 'wand') || c.level === 2),
+    '11.6.3: pair cleared → normal offer pool resumes');
+  const exSet = new Set(['garlic']);
+  const g4 = cardOffers({}, {}, {}, mulberry32(7), 5, exSet, ['garlic', 'axe']);
+  ok(g4.length === 2 && g4[0].key === 'garlic' && g4[1].key === 'axe',
+    "11.6.3: the pair is the seat's own contract — supersedes the 11.5 exclusion pool (allocation keeps pairs disjoint)");
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

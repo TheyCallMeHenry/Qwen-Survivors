@@ -423,7 +423,14 @@ export function recomputeStats(p) {
 // `exclude` = Set of weapon keys owned by ANOTHER player (first picker owns the
 // weapon + its upgrades for the run — never offered here). Passives are never
 // locked; synergy gating follows the PICKER's own weapons/passives (per-player dicts).
-export function cardOffers(weapons, passives, synergies, rng, cap = CFG.run.maxWeapons, exclude = null) {
+// 11.6.3 ghost: `ghostOffers` = the player's UNIQUE starting-weapon pair (D59) —
+// while set (the ghost's first level-up only) the offers are exactly that pair;
+// it is cleared after the first pick (applyCard) and the flow resumes normally.
+export function cardOffers(weapons, passives, synergies, rng, cap = CFG.run.maxWeapons, exclude = null, ghostOffers = null) {
+  if (Array.isArray(ghostOffers) && ghostOffers.length) {
+    const avail = ghostOffers.filter((k) => CFG.weapons[k] && !(weapons[k] || 0));
+    if (avail.length) return avail.map((k) => ({ kind: 'weapon', key: k, level: 1 }));
+  }
   const pool = [];
   const ownedW = Object.keys(weapons).length;
   const locked = exclude instanceof Set ? exclude : null;
@@ -463,6 +470,7 @@ function reqAtMax(weapons, passives, key) {
 }
 
 export function applyCard(target, card) {
+  if (card.kind === 'weapon' && card.level === 1) target._ghostOffers = null; // 11.6.3: ghost spent its starting pair
   if (card.kind === 'weapon') {
     target.weapons[card.key] = Math.max(target.weapons[card.key] || 0, card.level);
   } else if (card.kind === 'synergy') {

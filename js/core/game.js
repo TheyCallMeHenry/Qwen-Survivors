@@ -23,7 +23,7 @@ import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
 import { buildMinimapBase, drawMinimapLive } from '../world/minimap.js';
 import { playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState, ENEMY_KEYS } from '../net/sync.js';
-import { MSG, profileFromMeta, coopScale, leashClamp, weaponCap } from '../net/coop.js';
+import { MSG, profileFromMeta, joinProfile, allStarterLobby, ghostColor, allocateGhostOffers, coopScale, leashClamp, weaponCap } from '../net/coop.js';
 import { CoopConn } from '../net/conn.js';
 
 export class Game {
@@ -68,6 +68,7 @@ export class Game {
     this._snapBuf = [];           // last 2 host states (client interpolation)
     this._step = 0;               // host snapshot step counter
     this._coopSeed = null;        // seed of the run the host is simulating
+    this._ghost = false;          // 11.6.3: this run ghosted the local seat (D59 fallback)
     this.weaponOwner = {};        // 11.5: weaponKey → first picker (player object) — excludes the weapon from others' offers
 
     this.combat.onKill = (e, killer) => this._onKill(e, killer);
@@ -180,6 +181,7 @@ export class Game {
     this.deathT = 0;
     this.bossSpawned = false;
     this._ghostT = 0;
+    this._ghost = false; // 11.6.3: co-op startRun re-arms it via the ghost flow (D59)
     this.loop.timescale = 1;
     this.state = 'PLAYING';
     this.input.gesture = true; // menu Start is a DOM tap: count it as the audio-unlock gesture
@@ -424,7 +426,7 @@ export class Game {
   }
 
   _startLevelUp() {
-    const offers = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(this.player));
+    const offers = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(this.player), this.player._ghostOffers);
     if (!offers.length) { this.levelupQueue = 0; return; } // every card owned — grant silently
     this.state = 'LEVELUP';
     this.cards = offers;
@@ -556,7 +558,7 @@ export class Game {
     this.net = new CoopConn(`${proto}://${location.host}/`);
     this.net.onMessage = (m) => this._netMsg(m);
     this.net.connect();
-    this.net.sendHello(this.levelKey, profileFromMeta(this.meta));
+    this.net.sendHello(this.levelKey, joinProfile(this.meta, this.chars)); // 11.6.3: profile carries this seat's char unlocks (D53/D59)
   }
 
   detachNet() {
@@ -569,6 +571,8 @@ export class Game {
     this.netMyId = null;
     this.remote.length = 0;
     this.players = [this.player];
+    this._ghost = false; // 11.6.3: ghost is a co-op-run state — restore the selected character
+    if (this.player.charKey === 'ghost') this.setCharacter(this.charKey);
     if (this.state === 'PLAYING') this.toMenu();
   }
 
@@ -600,7 +604,9 @@ export class Game {
     let grew = false;
     for (const e of m.players) {
       if (e.id === this.netMyId || seen.has(e.id)) continue;
-      this.remote.push(this._remotePlayer(e.profile));
+      const pl = this._remotePlayer(e.profile);
+      pl.id = e.id; // join-order seat identity (mirrors _coopStartRun — input reachability)
+      this.remote.push(pl);
       grew = true;
     }
     for (let i = this.remote.length - 1; i >= 0; i--) {
@@ -612,6 +618,58 @@ export class Game {
     this.players = [this.player, ...this.remote];
     this.enemies.coopS = coopScale(this.players.length); // 11.3: live ramp on mid-run join/leave
     if (grew) this.net.sendRunStart(this.netMyId, this._coopSeed, this.levelKey); // mid-run joiner gets the seed
+    if (this.state === 'PLAYING') this._applyGhostFlow(); // 11.6.3: roster changed mid-run — (re)evaluate the D59 fallback
+  }
+
+  // 11.6.3 (D59/D62, host): all-starter lobby → EVERY seat plays the ghost —
+  // faceless sheet tinted per seat, baseline stats, no starting weapon, each with
+  // a UNIQUE starting-weapon pair (never duplicated across players). The host's
+  // own seat gets the entry LEVELUP; remotes are auto-assigned offers[0].
+  // Re-evaluated on mid-run roster changes (leaves can break the all-starter
+  // condition; a re-ghosted seat's starting pair is re-dealt).
+  _applyGhostFlow() {
+    if (!this.net || this.netRole !== 'host') return;
+    const roster = this.netRoster;
+    const ghosting = allStarterLobby(roster); // helper takes roster entries ({profile:{chars}}) or raw lists
+    const prevGhost = this._ghost;
+    this._ghost = ghosting;
+    if (!ghosting) return;
+    const offers = allocateGhostOffers(roster.length, mulberry32((this._coopSeed ^ 0x51ed2701) | 0));
+    roster.forEach((e, i) => {
+      if (e.id === this.netMyId) return; // host: local player below
+      const pl = this.remote.find((r) => r.id === e.id);
+      if (!pl || pl.charKey === 'ghost') return; // late joiner handled at its own start
+      const sheet = this.roster['ghost'];
+      pl.setCharacter('ghost');
+      pl.def = sheet;
+      pl.flashes = [sheet.idle.map(flashCopy), sheet.run.map(flashCopy)];
+      pl.weapons = {}; // D59: the ghost has no starting weapon — drop the starter's
+      recomputeStats(pl); // ghost baseline (100/×1.0/265) replaces the starter's
+      pl._ghostOffers = offers[i];
+      applyCard(pl, { kind: 'weapon', key: offers[i][0], level: 1 }); // auto-pick: the starting weapon
+      pl._ghostOffers = offers[i]; // re-arm: the pair is the contract — the next level-up offers the held remainder
+      pl.hp = pl.maxHp; // ghost base changed maxHp after _remotePlayer refilled
+      if (!this.weaponOwner[offers[i][0]]) this.weaponOwner[offers[i][0]] = pl;
+    });
+    const me = this.players[0];
+    if (me.charKey !== 'ghost') {
+      // first-time ghosting this run — arm the entry pair (a consumed pair stays
+      // spent: charKey 'ghost' + _ghostOffers null)
+      const sheet = this.roster['ghost'];
+      me.setCharacter('ghost');
+      me.def = sheet;
+      me.flashes = [sheet.idle.map(flashCopy), sheet.run.map(flashCopy)];
+      me.weapons = {}; // D59: no starting weapon
+      recomputeStats(me); // ghost baseline (100/×1.0/265)
+      me.hp = me.maxHp;
+      me._ghostOffers = offers[0];
+    }
+    if (!prevGhost) {
+      this.levelupQueue = 1;
+      this.cards = null;
+      this.state = 'LEVELUP';
+      this._startLevelUp(); // D59 entry pick: exactly the local seat's starting pair
+    }
   }
 
   _remotePlayer(profile) {
@@ -653,6 +711,7 @@ export class Game {
     this._coopSeed = seed;
     this.weaponOwner = {}; // 11.5: ownership resets each run
     this.net.sendRunStart(this.netMyId, seed, this.levelKey);
+    this._applyGhostFlow(); // 11.6.3 (D59): all-starter lobby → ghost fallback
   }
 
   _remoteStep(dt, r) {
@@ -677,7 +736,7 @@ export class Game {
 
   _remoteLevelUps(pl, ups) {
     for (let i = 0; i < ups; i++) {
-      const offers = cardOffers(pl.weapons, pl.passives, pl.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(pl));
+      const offers = cardOffers(pl.weapons, pl.passives, pl.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(pl), pl._ghostOffers);
       if (!offers.length) break;
       applyCard(pl, offers[0]); // host auto-picks; the client sees it via snapshots
       if (offers[0].kind === 'weapon' && offers[0].level === 1) this.weaponOwner[offers[0].key] = pl; // 11.5: first picker owns
@@ -730,6 +789,16 @@ export class Game {
     this.remote.length = 0;
     this.players = [this.player];
     this.netRole = 'client';
+    this._ghost = allStarterLobby(this.netRoster); // 11.6.3: client renders its own ghost seat (helper: entries or raw lists)
+    if (this._ghost) {
+      const sheet = buildRoster(ghostColor(this._seat()))['ghost'];
+      this.player.setCharacter('ghost');
+      this.player.def = sheet;
+      this.player.flashes = [sheet.idle.map(flashCopy), sheet.run.map(flashCopy)];
+      this.player.weapons = {}; // D59: no starting weapon (host snapshots override from the first frame)
+      recomputeStats(this.player); // ghost baseline (100/×1.0/265)
+      this.player.hp = this.player.maxHp;
+    }
     this.input.gesture = true;
     this.input.clearTransient();
     this.state = 'PLAYING';
@@ -844,6 +913,8 @@ export class Game {
     this.netMyId = null;
     this.remote.length = 0;
     this.players = [this.player];
+    this._ghost = false; // 11.6.3: ghost is a co-op-run state — restore the selected character
+    if (this.player.charKey === 'ghost') this.setCharacter(this.charKey);
     if (this.state === 'GAMEOVER') return; // host: keep the results screen
     this.toMenu();
   }
