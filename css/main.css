@@ -170,13 +170,23 @@ html, body {
     radial-gradient(circle, var(--char-soft, rgba(94, 234, 212, 0.16)) 0 58%, transparent 60%),
     conic-gradient(rgba(2, 8, 16, 0.72) calc(var(--cd, 0) * 1turn), transparent 0);
 }
-/* 11.7 — co-op: minimap moves to bottom-center (it would collide with the seat-1 TR
-   panel at 2P); pause/dash buttons stay top-right above the seat-1 panel.
-   (11.9 later: ~66% size + pause beside the minimap; mute stays in Pause Settings, 13.8/D72.) */
+/* 11.7 + 11.9 — co-op: minimap moves to bottom-center at ~66% of the solo size (it
+   would collide with the seat-1 TR panel at 2P); PAUSE relocates beside it (req 6a);
+   the DASH button stays top-right with the seat panels (local input, 11.7);
+   mute stays in Pause-menu Settings (13.8/D72 — no mute move). */
+#hud.coop {
+  --coop-mm: clamp(91px, 16.5vmin, 157px);
+}
 #hud.coop #minimap-frame {
   position: fixed; top: auto; bottom: calc(16px + var(--safe-b));
   left: 50%; transform: translateX(-50%);
-  width: clamp(137.5px, 25vmin, 237.5px);
+  width: var(--coop-mm);
+}
+#hud.coop #btn-pause {
+  position: fixed;
+  bottom: calc(16px + var(--safe-b));
+  left: calc(50% - var(--coop-mm) / 2 - 80px);
+  transform: translateX(-100%);
 }
 
 /* ============ touch UI (shown only when body.touch is set by main.js) ============ */

@@ -16,6 +16,8 @@ import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
 import { MSG, pack, unpack, profileFromMeta, joinProfile, sanitizeChars, allStarterLobby, ghostColor, charAccent, allocateGhostOffers, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap, selChar, assignChars, resolveChars } from '../js/net/coop.js';
 import { encodeFrame, consumeFrames, wsAcceptKey } from './serve.mjs';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 let pass = 0;
 const fails = [];
@@ -1196,6 +1198,24 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(Math.abs(C.flameSpeedVar / C.flameSpeed - 80 / 260) < 0.005, '16.3: speed spread keeps the pre-16.3 ±ratio');
   ok(Math.abs(C.flameLifeVar / C.flameLife - 0.15 / 0.65) < 0.01, '16.3: life spread keeps the pre-16.3 ±ratio');
   ok(C.flameMomentum > 0 && C.flameMomentum < 1, '16.3: flameMomentum inherits a proper share of the owner velocity (LEAD-while-moving)');
+}
+
+// --- 11.9 co-op minimap + buttons (CSS-only change; content asserts on main.css) ---
+{
+  const css = readFileSync(fileURLToPath(new URL('../css/main.css', import.meta.url)), 'utf8');
+  const solo = css.match(/#minimap-frame \{\s*width: clamp\(([\d.]+)px, ([\d.]+)vmin, ([\d.]+)px\)/);
+  ok(solo && solo[1] === '137.5' && solo[2] === '25' && solo[3] === '237.5',
+    '11.9: solo minimap width unchanged (137.5px/25vmin/237.5px — solo invariance)');
+  const mm = css.match(/--coop-mm: clamp\(([\d.]+)px, ([\d.]+)vmin, ([\d.]+)px\)/);
+  ok(mm, '11.9: co-op minimap width --coop-mm present');
+  ok(!!(solo && mm) && [0, 1, 2].every((i) => Math.abs(+mm[i + 1] / +solo[i + 1] - 0.66) <= 0.01),
+    '11.9: co-op minimap = ~66% of the solo size at every clamp stop (req 6a)');
+  ok(/#hud\.coop #minimap-frame \{[^}]*bottom: calc\(16px \+ var\(--safe-b\)\)[^}]*width: var\(--coop-mm\)/.test(css),
+    '11.9: co-op minimap bottom-center at the --coop-mm width');
+  ok(/#hud\.coop #btn-pause \{[^}]*position: fixed[^}]*bottom: calc\(16px \+ var\(--safe-b\)\)[^}]*--coop-mm/.test(css),
+    '11.9: PAUSE fixed beside the co-op minimap (offset tracks --coop-mm, req 6a)');
+  ok(!/#hud\.coop[^{]*#btn-dash/.test(css) && !/#hud\.coop[^{]*#btn-mute/.test(css),
+    '11.9: DASH stays top-right (11.7) and mute is not moved (Pause-menu Settings, 13.8/D72)');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);
