@@ -13,6 +13,17 @@
 
 ## Entries (newest first)
 
+### 2026-08-22 — Tailscale-on-NAS (DS124) chosen for multiplayer hosting
+
+**Received:** 2026-08-22 (no time in message; date only)
+**Classification:** design decision
+**Context:** Selects Tailscale on the user's Synology DS124 as the hosting solution for multiplayer sessions.
+**Verbatim input:**
+
+```
+I just downloaded and connected to my Tailscale network on my Synology DS124 NAS. Please document that I want to use that solution for hosting multiplayer sessions of this game.
+```
+
 ### 2026-08-22 — 11.6.1 O stat values approved with 3 revisions
 
 **Received:** 2026-08-22 (no time in message; date only)
