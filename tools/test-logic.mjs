@@ -1184,6 +1184,20 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(pB._spawnY() === 200 - 66 * f && pB._spawnY() < pA._spawnY(), '16.2: taller sprite (warden 66) → higher origin');
 }
 
+// --- 16.3 Pyre Lance flame: +33% stream length, 2x flow/extension, momentum LEAD ---
+{
+  const C = CFG.combat;
+  const reach = (v0, k, L) => (v0 / k) * (1 - Math.exp(-k * L)); // drag-only mean reach
+  const BASE = 94.6; // pre-16.3 mean reach (v0 260, drag 2.0, life 0.65) = the "current build" the user measured +33% against
+  ok(reach(C.flameSpeed, C.flameDrag, C.flameLife) > BASE * 1.32 && reach(C.flameSpeed, C.flameDrag, C.flameLife) < BASE * 1.34,
+    '16.3: mean stream reach ~+33% vs the pre-16.3 build (94.6 px)');
+  ok(C.flameSpeed === 520 && C.flameSpeedVar === 160, '16.3: emission speed exactly 2x the pre-16.3 build (260/80) -> flow/extension 2x faster');
+  ok(C.flameDrag === 2.0, '16.3: drag unchanged (the 2x front speed IS the flow fix)');
+  ok(Math.abs(C.flameSpeedVar / C.flameSpeed - 80 / 260) < 0.005, '16.3: speed spread keeps the pre-16.3 ±ratio');
+  ok(Math.abs(C.flameLifeVar / C.flameLife - 0.15 / 0.65) < 0.01, '16.3: life spread keeps the pre-16.3 ±ratio');
+  ok(C.flameMomentum > 0 && C.flameMomentum < 1, '16.3: flameMomentum inherits a proper share of the owner velocity (LEAD-while-moving)');
+}
+
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);
 for (const f of fails) console.error(`  FAIL ${f}`);
 process.exit(fails.length ? 1 : 0);

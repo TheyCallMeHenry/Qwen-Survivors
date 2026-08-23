@@ -158,7 +158,7 @@ const { initHud } = await import('../js/ui/hud.js');
 const { initScreens, saveScores } = await import('../js/ui/screens.js');
 const { aliveCap } = await import('../js/entities/spawner.js');
 const { getLevel } = await import('../js/world/levels.js');
-const { clamp } = await import('../js/utils/math.js');
+const { clamp, rand, mulberry32 } = await import('../js/utils/math.js');
 const { recomputeStats, cardOffers } = await import('../js/entities/player.js');
 const { weaponCap } = await import('../js/net/coop.js');
 
@@ -1020,6 +1020,62 @@ m03RunDone = true;
   g2.combat.draw(g2.ctx, g2.t, g2.players);
   assert(drawOps.drawImage - d0 >= CFG.weapons.blades.levels[0].n, '16.2: combat.draw drew the blade sprites (per-player loop live)');
   assert(drawOps.arc - ar0 === 1, '16.2: combat.draw drew the garlic pulse ring (feet-centered, live phase)');
+}
+
+// 16.3 — Pyre Lance flame: +33% stream length, 2x flow/extension, LEAD-while-moving.
+// Controlled m01 game; Math.random SEEDED with mulberry32(163) — math.js's `rand`
+// is a const wrapper around Math.random, and combat.js imports it live, so the
+// stub makes the flame's per-flame speed/life/spray deterministic (restored after).
+// The player's velocity is fixed, so the momentum term is known exactly (vx0 −
+// v_player × flameMomentum = the pure emission velocity). Wobble is a draw-only
+// offset — positions are exact.
+{
+  const g3 = new Game({
+    input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
+    loop: { timescale: 1, hitStop() {} }, ctx: makeCtx(), mctx, characters, items,
+  });
+  g3.resize(1280, 800);
+  g3.startRun('m01');
+  const p3 = g3.player;
+  const C3 = CFG.combat;
+  const realRandom = Math.random;
+  p3.vx = 300; p3.vy = 0; // moving east, toward the target
+  Math.random = mulberry32(163);
+  g3.combat.emitFlame(p3.x, p3.y, 0, 6, 4, 2.5, p3); // flame A: the moving player's shot
+  Math.random = mulberry32(163); // same seed → identical sp/spray/life (A/B pair)
+  p3.vx = 0; p3.vy = 0; // parked player = the stationary control; rise only bends vy, x stays drag-only
+  g3.combat.emitFlame(p3.x, p3.y, 0, 6, 4, 2.5, p3); // flame B: stationary control shot
+  const fA = g3.combat.flames[g3.combat.flames.length - 2];
+  const fB = g3.combat.flames[g3.combat.flames.length - 1];
+  const vx0 = fA.vx, Lf = fA.life;
+  const spA = Math.hypot(vx0 - 300 * C3.flameMomentum, fA.vy); // pure emission speed
+  assert(Math.abs(spA - C3.flameSpeed) <= C3.flameSpeedVar, '16.3: emission speed in the 2x band (520 ± 160)');
+  assert(fA.life === fB.life && fA.vy === fB.vy, '16.3: A/B pair identical except momentum (same seed)');
+  let moved = 0;
+  for (let i = 0; i < 240; i++) {
+    const x0 = fA.x;
+    g3.combat.update(1 / 60, g3.players, g3.enemies); // flames removed at age ≥ Lf (pass enemies, no early kill)
+    if (fA.x !== x0) moved++;
+  }
+  Math.random = realRandom; // restore for any later sections (all RNG above deterministic)
+  // x travel = the engine's own recurrence (vx *= dr; x += vx·dt), replayed
+  // bit-exact over the N ticks the flame actually moved (age < Lf each tick).
+  const dt3 = 1 / 60, dr3 = Math.exp(-C3.flameDrag * dt3);
+  let ev = vx0, kx = p3.x; // same starting point as f.x (float add is non-associative)
+  for (let j = 0; j < moved; j++) { ev *= dr3; kx += ev * dt3; }
+  assert(fA.x === kx, `16.3: flame x-travel = bit-exact drag integral (got ${fA.x.toFixed(3)}, want ${kx.toFixed(3)})`);
+  const reachA = (C3.flameSpeed / C3.flameDrag) * (1 - Math.exp(-C3.flameDrag * C3.flameLife));
+  const reachBase = (260 / 2.0) * (1 - Math.exp(-2.0 * 0.65)); // pre-16.3 build (260/80/2.0/0.65)
+  assert(reachA > reachBase * 1.32 && reachA < reachBase * 1.34,
+    `16.3: stream length ~+33% vs the pre-16.3 build (${reachA.toFixed(1)} vs ${reachBase.toFixed(1)})`);
+  // LEAD-while-moving (D70 directional-momentum hypothesis): identical-emission A/B —
+  // the moving shot's x must lead the stationary control's x by the closed-form
+  // momentum integral (v_player × flameMomentum / drag × (1 − e^(−drag·life))).
+  const lead = fA.x - fB.x;
+  const momX = (300 * C3.flameMomentum) / C3.flameDrag * (1 - Math.exp(-C3.flameDrag * Lf));
+  assert(Math.abs(lead - momX) / momX < 0.05,
+    `16.3: moving shot leads the stationary control by the momentum integral (got ${lead.toFixed(1)}, want ${momX.toFixed(1)} px)`);
+  assert(lead > 30, `16.3: momentum adds lead travel (${lead.toFixed(1)} px > 30 px) — the jet does not trail the player`);
 }
 
 // 11.1 — co-op transport E2E: the real serve.mjs (WS upgrade + frame codec +

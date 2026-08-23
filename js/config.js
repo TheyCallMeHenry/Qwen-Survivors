@@ -237,8 +237,13 @@ export const CFG = {
     // Sunder Bombs (lob arc + fuse pause before AOE)
     bombDist: 240, bombMin: 120, bombFly: 0.55, bombH: 70, bombKb: 260, bombFlash: 0.4,
     // Pyre Lance flame sprites (flow-y drag/rise + wobble, grow-then-fade)
-    flameSpeed: 260, flameSpeedVar: 80, flameLife: 0.65, flameLifeVar: 0.15,
-    flameSize: 18, flameR: 12, flameDrag: 2.0, flameRise: 140,
+    // 16.3: front speed exactly 2x the pre-16.3 build (260/80) + lifetime trimmed
+    // 0.65 -> 0.33 => mean stream reach exactly +33% (94.6 -> 125.8 px, drag
+    // unchanged) and the jet extends toward the target 2x faster. flameMomentum =
+    // the share of the owner's velocity the flame inherits (LEAD-while-moving —
+    // the player's own momentum, D70 user hypothesis; 0 = trail behind).
+    flameSpeed: 520, flameSpeedVar: 160, flameLife: 0.33, flameLifeVar: 0.075,
+    flameSize: 18, flameR: 12, flameDrag: 2.0, flameRise: 140, flameMomentum: 0.5,
     flameWobAmp: 14, flameWobFreq: 9, flameHit: 0.22,
   },
 

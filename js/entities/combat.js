@@ -104,10 +104,16 @@ export class Combat {
     const C = CFG.combat;
     const sp = C.flameSpeed + rand(-C.flameSpeedVar, C.flameSpeedVar);
     const a = ang + rand(-0.22, 0.22);
+    // 16.3: directional momentum — the flame inherits a share of the owner's
+    // velocity, so while moving the jet LEADS the aim direction instead of
+    // trailing behind the player (owner null (tests/tempest) = no momentum).
+    const mom = owner && C.flameMomentum ? C.flameMomentum : 0;
+    const px = owner ? owner.vx * mom : 0;
+    const py = owner ? owner.vy * mom : 0;
     this.flames.push({
       x, y,
-      vx: Math.cos(a) * sp,
-      vy: Math.sin(a) * sp,
+      vx: Math.cos(a) * sp + px,
+      vy: Math.sin(a) * sp + py,
       tick, dot, dotDur, owner,
       age: 0,
       life: C.flameLife + rand(-C.flameLifeVar, C.flameLifeVar),
