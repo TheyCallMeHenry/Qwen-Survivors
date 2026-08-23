@@ -103,7 +103,7 @@ Lazy `AudioContext` (created/resumed on first user gesture — required for mobi
 
 `localStorage` key `qsurv.hiscores.v1` — top 10 `{score, time, kills, level, date}` (Phase 13: one list per level — `v1` = Map 01). Mute in `qsurv.mute`. Meta progression in `qsurv.meta.v1` — `{shards, upgrades}` (Soulshards + between-run upgrade levels). **Run-duration selection (Phase 17, 2026-08-22)** persists per level key (13.9 `scoreKeyFor` pattern; default 5:00); **level-up action uses (Phase 18)** are per-player unlock/upgrade levels in the meta store (Soulshard economy, meta.js pattern) — run-only USE counters are in-run state, never persisted.
 
-### 3.8 Multiplayer & co-op (Phase 11 — spec 2026-08-21; design notes, NOT yet implemented)
+### 3.8 Multiplayer & co-op (Phase 11 — spec 2026-08-21; 11.1–11.8 implemented 2026-08-22; 11.9–11.13 pending — see `docs/PROGRESS.md`)
 
 **Transport:** zero-dep WebSocket upgrade in `tools/serve.mjs` — port **47893 only**, bind 0.0.0.0, LAN-reachable (existing rules); no new ports, no npm deps, no external services/CDNs. One room = one run; 1–4 clients; join/leave semantics defined in the protocol.
 
@@ -128,7 +128,7 @@ Lazy `AudioContext` (created/resumed on first user gesture — required for mobi
 - **Q7 (boss clones) — resolved 2026-08-21:** N players = N bosses of the current level (1P=1 … 4P=4; per-level boss per Phase 13); boss stats get the same +33%/player ramp. **No open spec questions remain.**
 - **11.13 web play (A4; Q4-followup):** LAN play confirmed. Internet play **cannot** go through the GitHub Pages page — Pages is static hosting (no Node/WebSocket room possible there). **Binding research protocol (2026-08-21, non-negotiable):** (1) BEFORE any web search/research: verify **today's real-world actual date** — standalone step, CANNOT be batched with the research steps; (2) then research the most current, evidence-based, data/outcomes-driven, **sources-cited** best practices for **self-hosted, fully game-state synchronized** web-game multiplayer / multiplayer servers; (3) **100% cost-free solutions only** (no paid SaaS/hosts/CDN); (4) cite sources (title + URL) in the docs update. Candidate directions: self-hosted relay (VPS/tunnel running the same zero-dep room — keeps all rules) vs WebRTC P2P (needs external signaling → conflicts with no-external-services unless free signaling is found). Decide after LAN co-op is green.
 
-### 3.9 Multi-level expansion + level select + mobile view zoom (Phase 13 — spec 2026-08-21; **A1–A8 answered 2026-08-21**; 13.1–13.4 done 2026-08-21; 13.5+ pending)
+### 3.9 Multi-level expansion + level select + mobile view zoom (Phase 13 — **COMPLETE 2026-08-22, 13.1–13.13**; A1–A8 answered 2026-08-21)
 
 **Level model (binding structure):** new pure-data module `js/world/levels.js` — one def per level: key/name, world W/H, menu backdrop seed, palette tokens (sky/ground/lighting/foreground), `generateWorld(seed, levelKey)` layout hook (the existing layout becomes the Map 01 hook — identical output), per-slot enemy roster (skin + stat table), spawner weights, boss slot def + boss time (stays 240 s), foreground particle kind, audio variation token. **Slot-based roster:** the 6 roles (small chaser / fast flyer / medium chaser / fast chaser / large brute / ranged) + boss keep their mechanics (fly/weave/ranged/boss flags) across all levels; each level re-skins + re-stats per slot — AI/spawner/combat/test surface unchanged. All tuning in `config.js` + `levels.js` (no scattered magic numbers).
 
