@@ -120,7 +120,7 @@ Lazy `AudioContext` (created/resumed on first user gesture — required for mobi
 - **Meta progression is PLAYER-SPECIFIC (2026-08-21):** Soulshards + between-run Upgrades (`qsurv.meta.v1`) are each player's own (their own device/localStorage) — **never carried over to, shared with, or applied to other players during co-op sessions**; each client applies its own local meta to its own character at run start, and run shard earnings are **unified per run (Phase 14, D54):** all active participants receive the **same** amount — host sim computes one run-level total, each client accrues it in full to its own local LS. Sync implication (host-authoritative): the host simulates every player, so each client uploads its meta-derived **stat profile** in the join handshake — sim input for THAT player only, never a shared resource; no meta state appears in per-step snapshots or is broadcast.
 
 **Co-op-only UI (req 6; solo run unchanged):**
-- Minimap → bottom-center of the window at ~66% of its single-player size; pause + mute buttons repositioned near the minimap.
+- Minimap → bottom-center of the window at ~66% of its single-player size; the PAUSE button repositioned near the minimap (mute stays in the Pause-menu Settings — 13.8/D48; user rescope 2026-08-23, D72).
 - HP bar fill + dash icon/button/cooldown indicator colored per the player's selected character palette.
 - Player panels (health bar, character level, dash cooldown, all other character-specific UI) placed in the screen corners by player count: 1P = TL; 2P = TL + TR; 3P = TL + TR + BL; 4P = all four corners (corner → player assignment = **join order** — A5).
 

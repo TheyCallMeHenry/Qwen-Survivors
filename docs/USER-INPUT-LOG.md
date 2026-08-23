@@ -13,6 +13,17 @@
 
 ## Entries (newest first)
 
+### 2026-08-23 — 11.9 rescope: mute reposition dropped (mute lives in Pause Settings)
+
+**Received:** 2026-08-23 (no time in message; date only)
+**Classification:** `design decision`
+**Context:** Co-op minimap task rescope — mute already moved to Pause-menu Settings (13.8/D48), so only the pause button moves near the minimap.
+**Verbatim input:**
+
+```
+since the mute button is now in the settings menu disregard the original request to move it for multiplayer as this no longer applies
+```
+
 ### 2026-08-22 — Unsupervised overnight development mandate
 
 **Received:** 2026-08-22 (no time in message; date only)

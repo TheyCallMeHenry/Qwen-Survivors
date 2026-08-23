@@ -172,7 +172,7 @@ html, body {
 }
 /* 11.7 — co-op: minimap moves to bottom-center (it would collide with the seat-1 TR
    panel at 2P); pause/dash buttons stay top-right above the seat-1 panel.
-   (11.9 later: ~66% size + pause/mute beside the minimap.) */
+   (11.9 later: ~66% size + pause beside the minimap; mute stays in Pause Settings, 13.8/D72.) */
 #hud.coop #minimap-frame {
   position: fixed; top: auto; bottom: calc(16px + var(--safe-b));
   left: 50%; transform: translateX(-50%);
