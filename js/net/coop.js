@@ -123,6 +123,14 @@ export function ghostColor(seat) {
   return G[Math.max(0, Math.floor(seat) || 0) % G.length];
 }
 
+// 11.8 — per-player UI theming color (D62 channel): roster characters use their
+// CFG accent, ghosts use the per-seat Pac-Man tint. Unknown key → starter accent.
+export function charAccent(key, seat = 0) {
+  const def = CFG.characters[key];
+  if (!def) return CFG.characters[CFG.characters.order[0]].accent;
+  return def.accent || ghostColor(seat);
+}
+
 // D59: 2 UNIQUE starting-weapon offers per ghosted player, never duplicated
 // across players. Seeded shuffle of the weapon roster, dealt 2 per seat in seat
 // order. Roster 7 < 4P×2 → the last seat gets the remainder (1); Phase 12's

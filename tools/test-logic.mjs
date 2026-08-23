@@ -14,7 +14,7 @@ import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, record
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
-import { MSG, pack, unpack, profileFromMeta, joinProfile, sanitizeChars, allStarterLobby, ghostColor, allocateGhostOffers, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap, selChar, assignChars, resolveChars } from '../js/net/coop.js';
+import { MSG, pack, unpack, profileFromMeta, joinProfile, sanitizeChars, allStarterLobby, ghostColor, charAccent, allocateGhostOffers, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap, selChar, assignChars, resolveChars } from '../js/net/coop.js';
 import { encodeFrame, consumeFrames, wsAcceptKey } from './serve.mjs';
 
 let pass = 0;
@@ -1150,6 +1150,25 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     '11.6.4: all-starter lobby → EVERY seat ghosts (D59 wins over the unique assignment)');
   ok(resolveChars([seat(['mage', 'ranger'], starter), seat(['mage', 'warden'], 'warden')]).join() === 'mage,warden',
     '11.6.4: mixed lobby → the D56 assignment stands (no D59)');
+}
+
+// --- 11.8 per-char UI theming: charAccent (D62 channel) + roster accent data ---
+{
+  const acc = CFG.characters;
+  ok(acc.order.every((k) => /^#[0-9a-f]{6}$/.test(acc[k].accent)),
+    '11.8: every playable character has a hex accent');
+  ok(new Set(acc.order.map((k) => acc[k].accent)).size === acc.order.length,
+    '11.8: roster accents are pairwise distinct (quick visual tracking)');
+  ok(acc.ghost.accent === null, '11.8: ghost accent = null (per-seat tint instead, D62)');
+  ok(charAccent('mage') === acc.mage.accent && charAccent('warden', 3) === acc.warden.accent
+    && charAccent('ranger') === acc.ranger.accent && charAccent('swash') === acc.swash.accent,
+    '11.8: roster char → its CFG accent (seat irrelevant for roster chars)');
+  ok(CFG.ghostColors.every((c, s) => charAccent('ghost', s) === c),
+    '11.8: ghost → the per-seat Pac-Man tint (D62)');
+  ok(charAccent('ghost', 7) === CFG.ghostColors[7 % CFG.ghostColors.length],
+    '11.8: ghost tint wraps past seat 3');
+  ok(charAccent('nope') === acc[acc.order[0]].accent && charAccent(null) === acc[acc.order[0]].accent,
+    '11.8: unknown/missing key → starter accent fallback');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

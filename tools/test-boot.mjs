@@ -1296,6 +1296,15 @@ m03RunDone = true;
   hostG.pickCard(0); // consume the entry pick
   assert(Object.keys(hostG.player.weapons).length === 1 && hostG.state === 'PLAYING',
     '11.6.3: entry pick applied → run continues');
+  // 11.8 — per-player theming (D62): every ghosted seat is themed by its UNIQUE Pac-Man tint
+  const hudG = initHud(hostG);
+  assert(byId['hud'].style._props['--char'] === CFG.ghostColors[0]
+    && byId['touch-ui'].style._props['--char'] === CFG.ghostColors[0]
+    && byId['hud'].style._props['--char-line'] === 'rgba(255,75,75,0.65)',
+    '11.8: local theming roots not themed by the seat-0 ghost tint (Blinky)');
+  assert(hudG.panels[0].root.style._props['--char'] === CFG.ghostColors[1]
+    && hudG.panels[1].root.style._props['--char'] === CFG.ghostColors[2],
+    '11.8: seat-1/seat-2 panels not themed by their per-seat ghost tints (Pinky/Inky)');
 
   const rs1 = await rawB.wait((m) => m.t === 'runstart', 'c1 runstart');
   const rs2 = await rawC.wait((m) => m.t === 'runstart', 'c2 runstart');
@@ -1500,6 +1509,15 @@ m03RunDone = true;
   assert(byId['hp-label'].textContent === `${Math.max(0, Math.ceil(hostG.player.hp))} / ${hostG.player.maxHp}`
     && byId['lvl-badge'].textContent === `LV ${hostG.player.level}`,
     '11.7: TL panel not driven by seat-0 (host) data');
+  // 11.8 — per-char theming (D62 channel): local/seat-0 roots = Mage accent, seat panels themed per char
+  assert(byId['hud'].style._props['--char'] === CFG.characters.mage.accent
+    && byId['touch-ui'].style._props['--char'] === CFG.characters.mage.accent
+    && byId['hud'].style._props['--char-grad'] === `linear-gradient(90deg, ${CFG.characters.mage.accent}, rgb(197,241,255))`,
+    '11.8: local theming roots not themed by the seat-0 (Mage) accent');
+  assert(pan1.root.style._props['--char'] === CFG.characters.warden.accent
+    && pan1.root.style._props['--char-soft'] === 'rgba(255,180,84,0.16)'
+    && pan2.root.style._props['--char'] === CFG.characters.ranger.accent,
+    '11.8: seat-1/seat-2 panels not themed by the Warden/Ranger accents');
   assert(!pan1.root.classList.contains('off') && pan1.name.textContent === 'Warden',
     '11.7: seat-1 (TR) panel not visible with the assigned char name at 3P');
   pl1.hp = 40;
@@ -1546,6 +1564,8 @@ m03RunDone = true;
   hudHost.update(); // render-hook equivalent — panels track the live player count
   assert(!pan3.root.classList.contains('off') && pan3.name.textContent === 'Swashbuckler',
     '11.7: seat-3 (BR) panel did not appear for the 4th joiner');
+  assert(pan3.root.style._props['--char'] === CFG.characters.swash.accent,
+    '11.8: seat-3 panel not themed by the late joiner’s (Swashbuckler) accent');
   rawD.w.close();
   await tick(80);
   for (let i = 0; i < 20; i++) {

@@ -30,17 +30,18 @@ export const CFG = {
 
   // Playable character roster (11.6, D28/D34/D56–D62). Data-driven (D60): adding a
   // character = one entry here + one frame builder in art/characters.js.
-  // `hp`/`speed` are absolute bases (replace CFG.player when selected), `dmg` is a weapon-
+  // `hp`/`speed` are absolute bases (replace CFG.player when selected), `dmg` = weapon-
   // damage multiplier, `weapon` = pre-owned starting weapon (null = none → ghost gets 2
-  // offers, D59), `cost` = Soulshard unlock price (D58; 0 = default/starter).
+  // offers, D59), `cost` = Soulshard unlock price (D58; 0 = default/starter), `accent` =
+  // UI theming color (11.8; ghost = null → per-seat Pac-Man tint, D62 channel).
   // STAT VALUES (O) user-approved 2026-08-22 (revisions: mage 60hp/275sp, ranger 110hp/320sp, warden 230sp).
   characters: {
     order: ['mage', 'warden', 'ranger', 'swash'],
-    mage:    { name: 'Mage',         weapon: 'wand',   cost: 0,    hp: 60,  dmg: 1.35, speed: 275, desc: 'Glass cannon — +35% weapon damage, low max HP. Starts with the Moonbolt Wand.' },
-    warden:  { name: 'Warden',       weapon: 'garlic', cost: 3500, hp: 150, dmg: 0.85, speed: 230, desc: 'Tanky, slowest move speed, lower-medium damage. Starts with the Wraith Garlic aura.' },
-    ranger:  { name: 'Ranger',       weapon: 'blades', cost: 1500, hp: 110, dmg: 1.0,  speed: 320, desc: 'Fast and balanced. Starts with the Aegis Blades orbiters.' },
-    swash:   { name: 'Swashbuckler', weapon: 'flame',  cost: 7500, hp: 90,  dmg: 1.15, speed: 300, desc: 'Agile, upper-medium damage. Starts with the Pyre Lance stream.' },
-    ghost:   { name: 'Ghost',        weapon: null,     cost: 0,    hp: 100, dmg: 1.0,  speed: 265, desc: 'Faceless fallback — baseline stats, no starting weapon.' },
+    mage:    { name: 'Mage',         weapon: 'wand',   cost: 0,    hp: 60,  dmg: 1.35, speed: 275, accent: '#9fe8ff', desc: 'Glass cannon — +35% weapon damage, low max HP. Starts with the Moonbolt Wand.' },
+    warden:  { name: 'Warden',       weapon: 'garlic', cost: 3500, hp: 150, dmg: 0.85, speed: 230, accent: '#ffb454', desc: 'Tanky, slowest move speed, lower-medium damage. Starts with the Wraith Garlic aura.' },
+    ranger:  { name: 'Ranger',       weapon: 'blades', cost: 1500, hp: 110, dmg: 1.0,  speed: 320, accent: '#a4ffc9', desc: 'Fast and balanced. Starts with the Aegis Blades orbiters.' },
+    swash:   { name: 'Swashbuckler', weapon: 'flame',  cost: 7500, hp: 90,  dmg: 1.15, speed: 300, accent: '#e8b45a', desc: 'Agile, upper-medium damage. Starts with the Pyre Lance stream.' },
+    ghost:   { name: 'Ghost',        weapon: null,     cost: 0,    hp: 100, dmg: 1.0,  speed: 265, accent: null, desc: 'Faceless fallback — baseline stats, no starting weapon.' },
   },
 
   // Ghost per-player tints (D62): seat 0→3, Pac-Man ghost colors (Blinky/Pinky/Inky/Clyde).
