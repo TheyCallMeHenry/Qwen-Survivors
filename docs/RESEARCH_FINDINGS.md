@@ -1,6 +1,8 @@
-# RESEARCH_FINDINGS.md — Real-time multiplayer web games (2026-08-22)
+# RESEARCH_FINDINGS.md — durable research record
 
-**Purpose:** Durable record for task **11.13 (web/internet play)** — research on the most effective, robust, optimized approach for this game's real-time multiplayer, per the binding protocol (PLAN.md §3.8 / Decision 36). **Read on demand only** (task 11.13 implementation or net-architecture questions). NOT loaded into PROGRESS.md status — keep it that way.
+**Purpose:** read-on-demand research records (NOT loaded into PROGRESS.md status — keep it that way):
+- **§1–§6: task 11.13 (web/internet play)** — most effective, robust, optimized approach for this game's real-time multiplayer, per the binding protocol (PLAN.md §3.8 / Decision 36).
+- **§7: level-up screen SKIP / REROLL / BANISH (Vampire Survivors model)** — research for the new meta-progression level-up actions (PLAN §3.11; Phase 18; user spec 2026-08-22).
 
 **Protocol compliance:** Real-world date verified FIRST via terminal `date` before any web research: **Sat, Aug 22, 2026** (unix 1787442171). All sources below fetched that day; doc "Last updated" dates 2026-07-07 → 2026-08-12. Constraint honored: **100% cost-free solutions only**.
 
@@ -104,3 +106,41 @@ Verified facts (fetched 2026-08-22):
 - If option B: confirm DO free-plan WebSocket Hibernation behaves with long-lived room sockets in a spike before committing; implement input coalescing in `CoopConn` (send axes at ≤20 Hz + dash on-change) and re-run 11.2 E2E + solo-invariance gate.
 - If A2 (DS124) chosen: on-device pre-checks — Node.js package offered for `rtd1619B` in Package Center; Tailscale app install + tailnet join; DSM Task Scheduler boot task for `node tools/serve.mjs`; (optional) public-IP/CGNAT check only if port-forward path is wanted instead.
 - Keep 11.13 deliverable = docs update (PLAN §3.8) + chosen transport task line; implementation after 11.12 per checklist order.
+
+---
+
+## 7. Level-up screen: SKIP / REROLL / BANISH (Vampire Survivors) — research 2026-08-22
+
+**Trigger:** user request (2026-08-22) — “Perform web research into how similar 'bullet-heaven'-style games incorporate these SKIP, BANISH, and RE-ROLL features for additional insight/context into their functionalities” (full verbatim spec: `USER-INPUT-LOG.md` entry “Batch design input…” item 5; correction entry “VS DOES have skip/reroll/banish…”). **User correction honored:** these are NOT level-up card choices in VS — they are added features on the level-up screen. Date: 2026-08-22 (session date; no separate terminal verification needed — this research is not under the D36 binding protocol).
+
+### 7.1 Sources (title + URL, fetched 2026-08-22)
+
+1. *Skip — Vampire Survivors Wiki*: https://vampire.survivors.wiki/w/Skip
+2. *Banish — Vampire Survivors Wiki*: https://vampire.survivors.wiki/w/Banish
+3. *Reroll — Vampire Survivors Wiki*: https://vampire.survivors.wiki/w/Reroll
+4. *How Banish Works in Vampire Survivors — Explained (Prima Games)*: https://primagames.com/tips/how-banish-works-in-vampire-survivors-explained
+5. Steam discussion — “Extra skips/Banish/re-roll”: https://steamcommunity.com/app/1794680/discussions/0/3473981814937594925/ (Golden Eggs stack on top of PowerUp ranks)
+6. Reddit r/VampireSurvivors — “when do you use Skip?”: https://www.reddit.com/r/VampireSurvivors/comments/11i7nsz/ (player heuristic: spend Banish → Skip → Reroll in that order when faced with unwanted offers)
+7. User-provided (log entry, 2026-08-22): skip grants **~66% EXP towards the next level-up**; reroll rerolls the card options; banish removes a card from that run's options.
+
+### 7.2 VS model (evidence from sources 1–3)
+
+- **All three are player STATS (a “PowerUp” family), not cards/items** — the level-up screen shows three buttons (Skip / Reroll / Banish), each spending 1 use of that stat. No upper limit on the stat itself; uses are granted by: PowerUp ranks, character base values, Golden Eggs (permanent +0.1–0.2 per character), Arcana (XX Silent Old Sanctuary = +3 of each).
+- **Skip** (source 1): “allows you to skip level up choices and get Experience instead” — the level-up is consumed (the level IS granted), and the player receives experience toward the next level instead of a card choice. User-reported ratio (source 7): **~66% of the next level's XP**. Wiki tip (source 1): spend Reroll/Banish BEFORE Skip because each use “provide[s] 20% of the experience to the next level” — using them later (when the next level costs more XP) is more efficient.
+- **Reroll** (source 3): “allows you to get different choices when leveling up” — the current 3-card set is discarded and a fresh set is drawn. **Discarded items cannot appear in the new set, but are NOT removed from the pool** — later rerolls in the same level-up can offer them again.
+- **Banish** (source 2): “allows you to remove an item from level up choices, for the rest of the run” — a banished item is never offered again as a level-up choice in that run. A banished item the player ALREADY OWNS stays at its current rank and “can no longer be offered upon level ups or upgraded by Treasure Chests” (Limit-Break upgrades excepted). **Pool-shrink strategy** (wiki tip): banishing common items you don't plan to pick raises the odds of being offered the item you want.
+- **PowerUp scaling (sources 1–3):** each PowerUp = 5 ranks × **+2 uses per rank** (max +10); ranks cost currency (Reroll initial cost 1,000; Skip/Banish 100) + per-rank achievement unlocks. So a fully-upgraded player has up to 10 of each + character bases + Golden Eggs — VS deliberately leaves totals open-ended; **our spec caps at 5 uses/run/feature (user decision — binding, D68).**
+
+### 7.3 Mapping to our design (our deltas from VS — all user spec, binding)
+
+| Aspect | VS | Ours (user spec 2026-08-22) |
+| --- | --- | --- |
+| Where the feature lives | Level-up screen buttons (stats) | Level-up screen buttons (meta-progression unlocks) |
+| How you get uses | PowerUp ranks + achievements + character bases + Golden Eggs | **Meta-progression store in the Main Menu** (Soulshard economy): one-time unlock per feature, then upgrades = +uses, **max 5 uses/run/feature** |
+| Equippable / selectable / level-up cards? | No (stats only) | **NO — explicitly NOT equippable items, NOT selectable cards, NOT level-able mid-run** (user emphasis) |
+| Skip semantics | Skip choice → gain XP instead (~66% next level per user; 20% per Reroll/Banish use per wiki tip) | O — ratio TBD at Phase 18 (candidates: no-XP “free pass” vs partial-XP) |
+| Reroll semantics | Redraw 3; discarded set excluded from redraw only | O — same shape; confirm pool-exclusion behavior at 18 |
+| Banish semantics | Item removed from level-up offers for rest of run; owned items frozen (no further upgrades) | O — our analog: item removed from the picker's offer pool for the rest of the run (per-picker, co-op-safe); owned-item freeze = O at 18 |
+| Co-op | n/a (VS is solo) | **Player-scoped (D32 pattern):** each player has their own uses (host sim tracks per-picker counters); a banished key is excluded from the BANNING picker's offers only (mirrors 11.5/11.6b `weaponOwner`/`exclude` plumbing) |
+
+**Implementation notes (for Phase 18, not binding until spec'd there):** the three buttons are level-up-screen actions, not cards → they never enter `cardOffers` pool/cap/exclusion logic as offers; uses are per-player run state (host-authoritative in co-op → per-step snapshot fields, same channel as dash state); UI = 3 action buttons on the level-up screen (≥72 px, change-detected use-count labels), hidden/locked-state per meta unlock; exact card-text rule (10.2) extends to the button tooltips (state the exact effect of each use).

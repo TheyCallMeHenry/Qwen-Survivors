@@ -13,6 +13,88 @@
 
 ## Entries (newest first)
 
+### 2026-08-22 — Unsupervised overnight development mandate
+
+**Received:** 2026-08-22 (no time in message; date only)
+**Classification:** `process rule`
+**Context:** User going to bed; agent develops overnight unsupervised with backup/branch/commit cadence.
+**Verbatim input:**
+
+```
+I - the human user - am going to be going to bed for tonight. I need you - the Zed IDE AI agent - to perform ongoing development according to / following the existing plan documentation throughout the night without any supervision and/or approval required from me.
+**YOU MUST IMMEDIATELY CREATE A CATASTROPHY-PROOF FULL-PROJECT BACKUP AND ZIP IT BEFORE PERFORMING ANY FURTHER DEVELOPMENT/IMPLEMENTATION WORK. DO THIS RIGHT NOW.**
+
+#1 ONGOING PRIORITY: **ALWAYS** update documentation **BEFORE** considering **ANY** task as complete. This will be your greatest defense against context-drift / context-compressions.
+
+**When in doubt, refer to the following (listed in order of reliability):**
+1. This project's existing documentation and/or the verbatim user notes.
+2. Web searches/research into whatever topic you're uncertain about.
+3. Your own judgement.
+
+If you encounter a situation that would require my input in order to complete the task(s) and/or proceed simply implement placeholder and flag it for future user review/revision.
+
+Create a new working branch for this project **IMMEDIATELY AFTER CREATING THE LOCALLY SAVED FULL-PROJECT RECOVERY BACKUP ZIP**. Upon completion of each task+documentation update, proceed to stage, commit, and push your updates to this new branch. **DO NOT OVERWRITE, EDIT, UPDATE, OR OTHERWISE MAKE CHANGES TO THE MAIN BRANCH FROM THIS POINT ON UNTIL I - the human user - REJOIN YOU / CHECK-IN WITH YOU TOMORROW.**
+```
+
+### 2026-08-22 — VS DOES have skip/reroll/banish on the level-up screen (user correction)
+
+**Received:** 2026-08-22 (no time in message; date only)
+**Classification:** feedback
+**Context:** Corrects my research assumption: VS has skip/reroll/banish on the level-up screen, not as level-up cards.
+**Verbatim input:**
+
+```
+As someone who has played literal hundreds of hours of Vampire Survivors, I can tell you with 100% certainty that VS **DOES** have "Reroll", "Banish", "Skip" features.
+The Banish, Reroll, and Skips are **NOT LEVEL-UP SELECTIONS THEMSELVES** they are added features present on the level-up screen which enable the player to skip the current level-up (and gain ~66% EXP towards the next level-up), reroll their level-up card options, or banish a select level-up card to ensure it does not reappear in the level-up card options for the remainder of that run.
+```
+
+### 2026-08-22 — Batch design input: gameplay/weapon/item/character ideas + 3 bug reports (document only)
+
+**Received:** 2026-08-22 (no time in message; date only)
+**Classification:** `feature request` / `bug report`
+**Context:** Batch of design input to be folded into planning docs only (no implementation this round) + three in-game bugs.
+**Verbatim input:**
+
+```
+**DOCUMENT THE FOLLOWING *ONLY* - DO NOT BEGIN DEVELOPMENT/IMPLEMENTATION THIS ROUND. INCORPORATE THESE INTO PLANNING DOCUMENTATION BASED ON MODERN DEVELOPMENT BEST PRACTICES AND SENSIBLE FEATURE CLUSTERING.** Additional specifics can/will be determined/decided upon at a later time - document as-is for now.
+**Additional Gameplay Ideas:**
+1. Display currently equipped weapon and item icons beneath character XP bar. Include a number next to each weapon's icon which displays that weapon's current level at all times throughout the run.
+2. Display Pyre Lance ammo/fuel beneath the player character (currently appears above the player character).
+3. Passive items should **NOT** default to level 1 for the player upon starting a new run. The player should need to select them from the level-up offerings. This also ensures multiplayer sessions do not encounter issues with overlapping passives/items.
+4. Incorporate selectable run durations: 5 mins (default), 10 mins, 15 mins, 20 mins (max set-time duration), and "ENDLESS" (play "forever" until the player dies). Depending on the selected run duration the player(s) should encounter a boss event at 4:00, 9:00, 14:00, 19:00, and every 5 minutes during ENDLESS runs. To ensure I'm explaining this sufficiently clearly - based on this approach, players would experience 3 boss events during a 15 minute run - one at 4:00, one at 9:00, and one at 14:00. The same pattern applies to all of the listed potentially selectable run durations.
+5. "SKIP", "BANISH", and "RE-ROLL" options available on level-up screen (after each has been initially unlocked via the meta-progression store in the Main Menu). Can also be upgraded within the meta-progression store to grant additional uses during runs (maximum of 5 uses per run *each*). **THESE ARE *NOT* EQUIPPABLE ITEMS** and are **NOT SELECTABLE CARDS** during level-ups and **CANNOT BE LEVELED-UP** mid-run/during level-up screens. Perform web research into how similar "bullet-heaven"-style games incorporate these SKIP, BANISH, and RE-ROLL features for additional insight/context into their functionalities.
+ 
+**Additional Weapon Ideas:**
+1. Tank Cannon - straight-line explosive shell weapon with big-damage but small AoE; pierces through 1st targeted enemy it hits then terminates with small AoE explosive blast upon contact with a 2nd enemy.
+2. Continuous laser beam - medium-range continuous beam; damages all enemies that contact the continuous beam; has a long cool-down between shots.
+3. Wolf "summon"/companion (counts as a weapon slot) - **MUST** stay within 3 character-spans distance from the player character that summoned it (*selected it in the level-up cards*) at all times; autonomously dashes/pounces on the nearest enemy; cannot pounce more frequently than once every 2 seconds; high single-target damage; causes DoT "bleed" effect for 3 seconds on pounced enemy.
+4. Rolling Boulder - spherical boulder (limitation: can only roll in cardinal directions) - long cool-down between releases; automatic instant kill on the smallest sized enemies when they're hit by the boulder; rolls in a straight line and damages all enemies hit, but does less and less damage to each subsequent enemy hit after the first; max enemies hit before projectile terminates: 6; has a "crumble" effect upon projectile termination; no more than 1 boulder on-screen at a time (even if the cooldown has ended, if the previously released boulder projectile is still present on-screen then must wait until it terminates before the next boulder can be released).
+5. Web-slingers - (*Spider-man influenced*) shoot strands of web which burst into a small AoE web and briefly hold in-place enemies hit by the burst of web.
+6. Gatling Gun - *very* high rate-of-fire but *very* low damage per bullet weapon with moderate "reload" time (3 second long reload); fires 40 bullets per reload.
+7. Baseball Bat - very close-range (melee) weapon; very brief pause between swings; has very high knock-back effect on enemies; has a 1-in-500 chance to perform a "Homerun" hit which 1-hit-KO's any single enemy other than level bosses; "Homerun" hit causes aesthetic-/visual-only (no damage) firework to pop up and burst over the player character's head.
+8. Frog Tongue - lashes out at enemies, latching onto them and dragging them close to the player character; imparts a very small DoT "poison" effect; enemies killed by the initial damage from getting hit by the tongue are eaten/consumed by the player character and this restores an amount of HP determined by the size/max health of the consumed enemy.
+9. Cannonball - the player's character quickly tucks into a ball-esque shape, then is propelled very rapidly at the nearest enemy. The player's character's position becomes wherever they impacted the enemy. Can only "fire" once every 10 seconds. Each level of upgrade to the Cannonball attack enables the player's character to bounce/ricochet to an additional nearby enemy, doing very slightly less and less damage to each subsequent enemy hit after the first; max enemies hit before projectile terminates: 6. The player's character is invulnerable during the Cannonball attack/animation(s).
+
+
+**Additional Run-Equip-able Item Ideas:**
+1. Mirror Shield: (ricochets enemy projectiles back at them - maximum blocked/ricocheted projectiles = 3-projectiles-every-5-seconds.
+2. Ice Skates: player's movement becomes "slippery" similar to older games like the original DOOM and others where the player continues to "slide"/move a short distance after releasing the movement direction key(s). Positive effect of the Ice Skates: Increased player character movement speed (and increased inertia/sliding of the player character based on the level of the Ice Skates). If/when the player's character slides into an enemy while the Ice Skates are equipped, both the enemy and the player take a small amount of damage proportionate to the current level of the Ice Skates - maximum impact damage for the player and enemy = 6 HP (at max-level Ice Skates).
+
+
+**Additional Playable Character Ideas:**
+1. Werewolf - default weapon: Wolf summon
+2. Stone Golem - default weapon: Rolling Boulder
+3. Baseball Player - default weapon: Baseball Bat
+4. Giant Toad - default weapon: Frog Tongue
+5. Wild West Gunslinger - default weapon: Twin Fangs
+
+
+**Errors, Issues, Bugs, etc.:**
+1. I'm not seeing the falling snow effect in Map01 anymore.
+2. Player weapon projectiles appear to originate from the player character's feet - they should originate from a higher point somewhere closer to the mid-torso region of the player's character.
+3. Pyre Lance's flame length needs to be extended by approximately +33%. Additionally, when the player character is moving while the Pyre Lance is firing the flame ends up appearing as though it's a trail behind (opposite the current movement direction) the player's character - I'm uncertain what the best method to improve/resolve this would be; perhaps imparting directional momentum/inertia upon the flame based on the player's character's direction? I don't know - you would likely know better than I would how to effectively improve/resolve this. Additionally, the flame needs to extend out/flow toward enemies at least 2-times as fast as it currently does - currently it often barely appears before it has killed the enemy it was flowing towards.
+```
+
 ### 2026-08-22 — Tailscale-on-NAS (DS124) chosen for multiplayer hosting
 
 **Received:** 2026-08-22 (no time in message; date only)
