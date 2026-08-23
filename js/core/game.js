@@ -13,17 +13,17 @@ import { Particles, Snow } from '../entities/particles.js';
 import { Pickups } from '../entities/pickups.js';
 import { Enemies } from '../entities/enemies.js';
 import { Combat } from '../entities/combat.js';
-import { Player, cardOffers, applyCard, recomputeStats } from '../entities/player.js';
+import { Player, cardOffers, applyCard, recomputeStats, charDef } from '../entities/player.js';
 import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, loadSelectedLevel, isUnlocked, loadZoom, saveZoom, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar } from './meta.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../entities/spawner.js';
 import { getLevel, LEVEL_ORDER } from '../world/levels.js';
-import { buildCharacters, buildRoster } from '../art/characters.js';
+import { buildCharacters, buildRoster, buildGhost } from '../art/characters.js';
 import { gemHeartFor } from '../art/items.js';
 import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
 import { buildMinimapBase, drawMinimapLive } from '../world/minimap.js';
 import { playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState, ENEMY_KEYS } from '../net/sync.js';
-import { MSG, profileFromMeta, joinProfile, allStarterLobby, ghostColor, allocateGhostOffers, coopScale, leashClamp, weaponCap } from '../net/coop.js';
+import { MSG, profileFromMeta, joinProfile, ghostColor, allocateGhostOffers, coopScale, leashClamp, weaponCap, resolveChars, selChar } from '../net/coop.js';
 import { CoopConn } from '../net/conn.js';
 
 export class Game {
@@ -466,6 +466,10 @@ export class Game {
     this.player.def = sheet;
     this.player.flashes = [sheet.idle.map(flashCopy), sheet.run.map(flashCopy)];
     this.playerShadow = shadowSprite(sheet.shadowR, sheet.shadowR, 0.35);
+    // 11.6.4 (D56): keep the host's own roster entry current — the assignment
+    // resolves from roster profiles, seat 0 (host) always wins its pick.
+    const me = this.netRoster.find((e) => e.id === this.netMyId);
+    if (me && me.profile) me.profile.charKey = key;
     this.bus.emit('char', key);
     return key;
   }
@@ -558,7 +562,7 @@ export class Game {
     this.net = new CoopConn(`${proto}://${location.host}/`);
     this.net.onMessage = (m) => this._netMsg(m);
     this.net.connect();
-    this.net.sendHello(this.levelKey, joinProfile(this.meta, this.chars)); // 11.6.3: profile carries this seat's char unlocks (D53/D59)
+    this.net.sendHello(this.levelKey, joinProfile(this.meta, this.chars, this.charKey)); // D53/D59/D56: unlocks + selected char
   }
 
   detachNet() {
@@ -599,12 +603,13 @@ export class Game {
   _netRoster(m) {
     if (!Array.isArray(m.players)) return;
     this.netRoster = m.players;
+    this.bus.emit('roster'); // 11.6.4: select screen re-renders its taken set (D56)
     if (this.netRole !== 'host' || this.state !== 'PLAYING') return;
     const seen = new Set(this.remote.map((r) => r.id));
     let grew = false;
     for (const e of m.players) {
       if (e.id === this.netMyId || seen.has(e.id)) continue;
-      const pl = this._remotePlayer(e.profile);
+      const pl = this._remotePlayer(e.profile, selChar(e.profile)); // provisional — _applyAssign resolves D56
       pl.id = e.id; // join-order seat identity (mirrors _coopStartRun — input reachability)
       this.remote.push(pl);
       grew = true;
@@ -618,53 +623,60 @@ export class Game {
     this.players = [this.player, ...this.remote];
     this.enemies.coopS = coopScale(this.players.length); // 11.3: live ramp on mid-run join/leave
     if (grew) this.net.sendRunStart(this.netMyId, this._coopSeed, this.levelKey); // mid-run joiner gets the seed
-    if (this.state === 'PLAYING') this._applyGhostFlow(); // 11.6.3: roster changed mid-run — (re)evaluate the D59 fallback
+    if (this.state === 'PLAYING') this._applyAssign(); // 11.6.4: roster changed mid-run — (re)resolve per-seat chars
   }
 
-  // 11.6.3 (D59/D62, host): all-starter lobby → EVERY seat plays the ghost —
-  // faceless sheet tinted per seat, baseline stats, no starting weapon, each with
-  // a UNIQUE starting-weapon pair (never duplicated across players). The host's
-  // own seat gets the entry LEVELUP; remotes are auto-assigned offers[0].
-  // Re-evaluated on mid-run roster changes (leaves can break the all-starter
-  // condition; a re-ghosted seat's starting pair is re-dealt).
-  _applyGhostFlow() {
+  // 11.6.4 (D56/D57/D59, host-authoritative): resolve per-seat characters from
+  // the roster profiles and apply each to its live remote. Seat order wins a
+  // contested pick (the host = seat 0 always keeps its own — setCharacter keeps
+  // its roster entry current). A displaced seat gets its next unlocked char;
+  // a seat with no playable char left plays the ghost (D59) with its UNIQUE
+  // 2-offer starting-weapon deal, never duplicated across players. Re-evaluated
+  // on every mid-run roster change (a leave re-frees its char — a displaced
+  // seat is restored; a re-ghosted seat gets a fresh deal).
+  _applyAssign() {
     if (!this.net || this.netRole !== 'host') return;
     const roster = this.netRoster;
-    const ghosting = allStarterLobby(roster); // helper takes roster entries ({profile:{chars}}) or raw lists
+    const hostSeat = roster.findIndex((e) => e.id === this.netMyId);
+    const eff = roster.map((e, i) => (i === hostSeat
+      ? { ...e, profile: { ...e.profile, charKey: this.player.charKey } }
+      : e));
+    const assigned = resolveChars(eff);
     const prevGhost = this._ghost;
+    const ghosting = assigned.includes('ghost');
     this._ghost = ghosting;
-    if (!ghosting) return;
-    const offers = allocateGhostOffers(roster.length, mulberry32((this._coopSeed ^ 0x51ed2701) | 0));
+    const offers = ghosting ? allocateGhostOffers(roster.length, mulberry32((this._coopSeed ^ 0x51ed2701) | 0)) : null;
     roster.forEach((e, i) => {
-      if (e.id === this.netMyId) return; // host: local player below
+      if (i === hostSeat) return; // host's local seat: applied below
       const pl = this.remote.find((r) => r.id === e.id);
-      if (!pl || pl.charKey === 'ghost') return; // late joiner handled at its own start
-      const sheet = this.roster['ghost'];
-      pl.setCharacter('ghost');
-      pl.def = sheet;
-      pl.flashes = [sheet.idle.map(flashCopy), sheet.run.map(flashCopy)];
-      pl.weapons = {}; // D59: the ghost has no starting weapon — drop the starter's
-      recomputeStats(pl); // ghost baseline (100/×1.0/265) replaces the starter's
-      pl._ghostOffers = offers[i];
-      applyCard(pl, { kind: 'weapon', key: offers[i][0], level: 1 }); // auto-pick: the starting weapon
-      pl._ghostOffers = offers[i]; // re-arm: the pair is the contract — the next level-up offers the held remainder
-      pl.hp = pl.maxHp; // ghost base changed maxHp after _remotePlayer refilled
-      if (!this.weaponOwner[offers[i][0]]) this.weaponOwner[offers[i][0]] = pl;
+      if (!pl) return;
+      const key = assigned[i];
+      if (pl._assign === key) return; // steady state — keep the (possibly spent) pair
+      if (key !== 'ghost') {
+        this._applyChar(pl, key, i); // restored/reassigned playable char (D56/D57)
+        pl._ghostOffers = null;
+      } else if (pl._assign !== 'ghost') {
+        // first ghost this run: per-seat tint (D62), no starting weapon,
+        // baseline stats, the unique 2-offer deal (D59)
+        this._applyChar(pl, 'ghost', i);
+        pl._ghostOffers = offers[i];
+        applyCard(pl, { kind: 'weapon', key: offers[i][0], level: 1 }); // auto-pick: the starting weapon
+        pl._ghostOffers = offers[i]; // re-arm: the pair is the contract — the next level-up offers the held remainder
+        pl.hp = pl.maxHp; // ghost base changed maxHp after _setRemoteChar refilled
+        if (!this.weaponOwner[offers[i][0]]) this.weaponOwner[offers[i][0]] = pl;
+      } else {
+        pl._ghostOffers = offers[i]; // re-ghosted: fresh deal for the re-armed pair
+      }
+      pl._assign = key;
     });
     const me = this.players[0];
-    if (me.charKey !== 'ghost') {
+    if (assigned[hostSeat] === 'ghost' && me.charKey !== 'ghost') {
       // first-time ghosting this run — arm the entry pair (a consumed pair stays
       // spent: charKey 'ghost' + _ghostOffers null)
-      const sheet = this.roster['ghost'];
-      me.setCharacter('ghost');
-      me.def = sheet;
-      me.flashes = [sheet.idle.map(flashCopy), sheet.run.map(flashCopy)];
-      me.weapons = {}; // D59: no starting weapon
-      recomputeStats(me); // ghost baseline (100/×1.0/265)
-      me.hp = me.maxHp;
-      me._ghostOffers = offers[0];
+      this._applyChar(me, 'ghost', hostSeat);
+      me._ghostOffers = offers[hostSeat];
     }
-    if (!prevGhost) {
+    if (!prevGhost && assigned[hostSeat] === 'ghost') {
       this.levelupQueue = 1;
       this.cards = null;
       this.state = 'LEVELUP';
@@ -672,7 +684,7 @@ export class Game {
     }
   }
 
-  _remotePlayer(profile) {
+  _remotePlayer(profile, key, seat) {
     const def = this.player.def;
     const pl = new Player(def);
     pl.flashes = [def.idle.map(flashCopy), def.run.map(flashCopy)];
@@ -684,12 +696,27 @@ export class Game {
       pl.metaSpeed = (profile.speedMult || 1) - 1;
       pl.xpMul = profile.xpMult || 1;
       pl.dashCdMul = profile.dashCdMult || 1;
-      recomputeStats(pl);
-      pl.hp = pl.maxHp;
     }
+    this._applyChar(pl, key, seat); // 11.6.4: the seat's ASSIGNED char (D56/D57) — base stats + starting weapon + sheet
     pl._mx = 0; pl._my = 0; pl._dash = false;
     pl._phoenixKills = 0;
+    // _assign stays unset — _applyAssign applies/deals this seat (ghost pair included).
     return pl;
+  }
+
+  // 11.6.4 (D56/D57): (re)apply a character to a Player — per-char base stats
+  // (recomputeStats reads charKey), starting weapon (ghost: none), sheet/flash
+  // swap (ghost = per-seat Pac-Man tint, D62). No LS persistence (host-assigned).
+  _applyChar(pl, key, seat) {
+    pl.setCharacter(key);
+    const sheet = key === 'ghost' ? buildGhost(ghostColor(seat)) : this.roster[key];
+    pl.def = sheet;
+    pl.flashes = [sheet.idle.map(flashCopy), sheet.run.map(flashCopy)];
+    pl.weapons = {};
+    const c = charDef(key);
+    if (c.weapon) pl.weapons[c.weapon] = 1;
+    recomputeStats(pl);
+    pl.hp = pl.maxHp;
   }
 
   _netInput(m) {
@@ -703,15 +730,24 @@ export class Game {
 
   _coopStartRun(seed) {
     const s = this.world.playerStart;
-    this.remote = this.netRoster.filter((e) => e.id !== this.netMyId)
-      .map((e) => { const pl = this._remotePlayer(e.profile); pl.id = e.id; return pl; });
+    const hostSeat = this.netRoster.findIndex((e) => e.id === this.netMyId);
+    const eff = this.netRoster.map((e, i) => (i === hostSeat
+      ? { ...e, profile: { ...e.profile, charKey: this.player.charKey } }
+      : e));
+    const assigned = resolveChars(eff); // 11.6.4 (D56/D59): unique per-seat chars, seat order
+    const remotes = [];
+    this.netRoster.forEach((e, i) => {
+      if (e.id === this.netMyId) return;
+      const pl = this._remotePlayer(e.profile, assigned[i], i); pl.id = e.id; remotes.push(pl);
+    });
+    this.remote = remotes;
     this.players = [this.player, ...this.remote];
     this._snapBuf = [];
     this._step = 0;
     this._coopSeed = seed;
     this.weaponOwner = {}; // 11.5: ownership resets each run
     this.net.sendRunStart(this.netMyId, seed, this.levelKey);
-    this._applyGhostFlow(); // 11.6.3 (D59): all-starter lobby → ghost fallback
+    this._applyAssign(); // 11.6.4 (D56/D59): per-seat chars + ghost 2-offer deal
   }
 
   _remoteStep(dt, r) {
@@ -789,16 +825,13 @@ export class Game {
     this.remote.length = 0;
     this.players = [this.player];
     this.netRole = 'client';
-    this._ghost = allStarterLobby(this.netRoster); // 11.6.3: client renders its own ghost seat (helper: entries or raw lists)
-    if (this._ghost) {
-      const sheet = buildRoster(ghostColor(this._seat()))['ghost'];
-      this.player.setCharacter('ghost');
-      this.player.def = sheet;
-      this.player.flashes = [sheet.idle.map(flashCopy), sheet.run.map(flashCopy)];
-      this.player.weapons = {}; // D59: no starting weapon (host snapshots override from the first frame)
-      recomputeStats(this.player); // ghost baseline (100/×1.0/265)
-      this.player.hp = this.player.maxHp;
-    }
+    // 11.6.4: the client renders its HOST-ASSIGNED char (same pure helper as
+    // the host — the roster profiles are the shared truth; D56/D57/D59). No LS
+    // persistence — the user's selection is untouched.
+    const seat = this._seat();
+    const key = seat >= 0 ? resolveChars(this.netRoster)[seat] : this.charKey;
+    this._ghost = key === 'ghost';
+    if (key !== this.player.charKey) this._applyChar(this.player, key, seat);
     this.input.gesture = true;
     this.input.clearTransient();
     this.state = 'PLAYING';
@@ -865,12 +898,13 @@ export class Game {
   _netState(m) {
     const st = unpackState(m);
     if (!st) return;
+    const seat = this._seat();
+    if (seat < 0) return; // roster not arrived yet; next per-step state overwrites
     this.t = st.time; this.score = st.score; this.kills = st.kills;
     this._reconcileRemote(st.players.length);
     const now = performance.now();
     this._snapBuf.push({ arr: now, players: st.players, enemies: st.enemies });
     if (this._snapBuf.length > 2) this._snapBuf.shift();
-    const seat = this._seat();
     for (let j = 0; j < st.players.length; j++) {
       applyPlayerSnap(j === seat ? this.player : this.remote[j < seat ? j : j - 1], st.players[j]);
     }

@@ -10,6 +10,7 @@ import { fmtTime } from '../utils/math.js';
 import { upgradeCost, isUnlocked, saveSelectedLevel, isCharUnlocked } from '../core/meta.js';
 import { LEVELS, LEVEL_ORDER } from '../world/levels.js';
 import { cardEffectText } from '../entities/player.js';
+import { selChar } from '../net/coop.js';
 
 // --- pure (Node-tested) ---
 
@@ -149,7 +150,10 @@ export function initScreens(game, { icons }) {
   function renderChars() {
     charShards.textContent = `${game.meta.shards} ◆`;
     charList.innerHTML = '';
-    const taken = new Set(); // 11.6.4 hook: chars selected by other seated players
+    const taken = new Set(); // 11.6.4 (D56): chars selected by other seated players
+    if (game.net && game.netMyId) {
+      for (const e of game.netRoster) if (e.id !== game.netMyId) taken.add(selChar(e.profile));
+    }
     for (const key of CFG.characters.order) {
       const def = CFG.characters[key];
       const unlocked = isCharUnlocked(game.chars, key);
@@ -400,6 +404,7 @@ export function initScreens(game, { icons }) {
     }
   }
   game.bus.on('meta', () => { if (overlay === 'upgrades') renderUpgrades(); if (overlay === 'select') renderChars(); });
+  game.bus.on('roster', () => { if (overlay === 'select') renderChars(); }); // 11.6.4: taken set tracks the live lobby
 
   // --- high scores screen ---
   function renderScores() {

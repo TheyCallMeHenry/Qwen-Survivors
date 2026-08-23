@@ -912,6 +912,19 @@ export function buildCharacters(levelKey) {
 // {w, h, shadowR, idle[2], run[4]} — same convention as `player` above. The mage reuses
 // the ORIGINAL frames (D62: starter keeps the Phase-10 look, bit-identity). `ghostColor`
 // tints the sheet (D62; seat order via CFG.ghostColors) — default = seat 0.
+// D62 (11.6.4): per-seat ghost sheet without rebuilding the full roster —
+// same frames/sizes as buildRoster's ghost entry, tinted `color`.
+export function buildGhost(color) {
+  const gc = color || '#ff4b4b';
+  const run = [[4, 0], [0, 0], [-4, 0], [0, 0]];
+  const frame = (m, l, r) => ghostFrame(gc, m, l, r);
+  return {
+    w: 56, h: 64, shadowR: 12,
+    idle: [frame(0, 0, 0), frame(-1, 0, 0)],
+    run: run.map(([l, r], i) => frame(i % 2 ? -1 : 0, l, r)),
+  };
+}
+
 export function buildRoster(ghostColor) {
   const run = [[4, 0], [0, 0], [-4, 0], [0, 0]];
   const mk = (frame, w, h, shadowR) => ({
@@ -919,13 +932,11 @@ export function buildRoster(ghostColor) {
     idle: [frame(0, 0, 0), frame(-1, 0, 0)],
     run: run.map(([l, r], i) => frame(i % 2 ? -1 : 0, l, r)),
   });
-  const gc = ghostColor || '#ff4b4b';
-  const ghost = (dy, legL, legR) => ghostFrame(gc, dy, legL, legR);
   return {
     mage: mk(playerFrame, 56, 64, 12),
     warden: mk(wardenFrame, 58, 66, 13),
     ranger: mk(rangerFrame, 52, 60, 11),
     swash: mk(swashFrame, 54, 62, 12),
-    ghost: mk(ghost, 56, 64, 12),
+    ghost: buildGhost(ghostColor),
   };
 }

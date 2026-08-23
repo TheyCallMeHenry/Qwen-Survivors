@@ -14,7 +14,7 @@ import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, record
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
-import { MSG, pack, unpack, profileFromMeta, joinProfile, sanitizeChars, allStarterLobby, ghostColor, allocateGhostOffers, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap } from '../js/net/coop.js';
+import { MSG, pack, unpack, profileFromMeta, joinProfile, sanitizeChars, allStarterLobby, ghostColor, allocateGhostOffers, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap, selChar, assignChars, resolveChars } from '../js/net/coop.js';
 import { encodeFrame, consumeFrames, wsAcceptKey } from './serve.mjs';
 
 let pass = 0;
@@ -1088,6 +1088,42 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const g4 = cardOffers({}, {}, {}, mulberry32(7), 5, exSet, ['garlic', 'axe']);
   ok(g4.length === 2 && g4[0].key === 'garlic' && g4[1].key === 'axe',
     "11.6.3: the pair is the seat's own contract — supersedes the 11.5 exclusion pool (allocation keeps pairs disjoint)");
+}
+
+// --- 11.6.4 per-seat char assignment: D53 profile charKey + D56 uniqueness ---
+{
+  const starter = CFG.characters.order[0];
+  const seat = (chars, sel) => ({ id: 'x', seat: 0, profile: { chars, charKey: sel } });
+
+  ok(selChar({ chars: ['mage', 'ranger'], charKey: 'ranger' }) === 'ranger', '11.6.4: selChar keeps a playable selected char');
+  ok(selChar({ chars: ['mage', 'ranger'], charKey: 'warden' }) === starter
+    && selChar({ chars: ['mage', 'ranger'], charKey: 'ghost' }) === starter
+    && selChar(null) === starter && selChar({}) === starter,
+    '11.6.4: selChar — locked/ghost/missing sel → starter (no free unlocks)');
+
+  ok(joinProfile({ upgrades: {} }, ['mage', 'ranger'], 'ranger').charKey === 'ranger',
+    '11.6.4: joinProfile carries the selected char (D53)');
+  ok(joinProfile({ upgrades: {} }, ['mage', 'ranger'], 'warden').charKey === starter
+    && joinProfile({ upgrades: {} }, ['mage', 'ranger']).charKey === starter,
+    '11.6.4: joinProfile — locked sel / legacy 2-arg call → starter fallback');
+
+  const r1 = assignChars([seat([starter], starter), seat([starter], starter)]);
+  ok(r1[0] === starter && r1[1] === 'ghost',
+    '11.6.4: contested pick — earlier seat keeps, exhausted displaced seat ghosts (D56/D59)');
+  const r2 = assignChars([seat(['mage', 'ranger'], starter), seat([starter, 'ranger'], starter)]);
+  ok(r2[0] === starter && r2[1] === 'ranger', '11.6.4: displaced seat falls back to its next unlocked char');
+  const r3 = assignChars([seat(['mage', 'warden'], 'warden'), seat(['mage', 'ranger'], 'ranger'), seat([starter], starter), seat(['mage', 'warden', 'ranger'], 'swash')]);
+  ok(r3.join() === 'warden,ranger,mage,ghost',
+    '11.6.4: 4P — seat order wins every contested pick; fully-exhausted seat ghosts');
+  const r4 = assignChars([seat(['mage', 'swash'], null), seat(['mage', 'swash'], starter)]);
+  ok(r4[0] === starter && r4[1] === 'swash', '11.6.4: missing sel → starter; displaced seat keeps its unlocked swash');
+  ok(assignChars(null).length === 0 && assignChars([null])[0] === starter,
+    '11.6.4: null roster / legacy profileless seat normalize (starter)');
+
+  ok(resolveChars([seat([starter], starter), seat([starter], starter)]).join() === 'ghost,ghost',
+    '11.6.4: all-starter lobby → EVERY seat ghosts (D59 wins over the unique assignment)');
+  ok(resolveChars([seat(['mage', 'ranger'], starter), seat(['mage', 'warden'], 'warden')]).join() === 'mage,warden',
+    '11.6.4: mixed lobby → the D56 assignment stands (no D59)');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

@@ -1339,15 +1339,163 @@ m03RunDone = true;
   rC.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(m2.meta, m2.chars) });
   await rC.wait((m) => m.t === 'joined', 'mixed c2 joined');
   h2.startRun('m01');
-  assert(!h2._ghost && h2.state === 'PLAYING' && h2.player.charKey === 'mage',
-    '11.6.3: mixed lobby (one non-starter unlocked) → NO ghosting');
-  assert(Object.keys(h2.player.weapons).length === 1 && h2.player.weapons.wand === 1,
-    '11.6.3: non-ghost host keeps its starter starting weapon');
-  assert(h2.players[1].charKey !== 'ghost' && h2.players[2].charKey !== 'ghost',
-    '11.6.3: non-ghost remotes keep their selected character');
+  // 11.6.4 (D56): the two starter-only seats both hold mage — seat order keeps
+  // the FIRST pick unique; the exhausted displaced seats ghost (D59) with their
+  // disjoint 2-offer deal. The host (a playable pick) is never ghosted here.
+  assert(h2.state === 'PLAYING' && h2.player.charKey === 'mage' && h2.player.weapons.wand === 1,
+    '11.6.3/11.6.4: mixed lobby — host keeps its char + starting weapon, no ghost entry pick');
+  const q1 = h2.players[1], q2 = h2.players[2];
+  assert(q1.charKey === 'ghost' && q2.charKey === 'ghost',
+    '11.6.4: duplicated starter picks — the host keeps mage; both exhausted remote seats ghost (D56/D59)');
+  const qw1 = Object.keys(q1.weapons), qw2 = Object.keys(q2.weapons);
+  assert(qw1.length === 1 && qw2.length === 1 && qw1[0] !== qw2[0]
+    && q1._ghostOffers.length === 2 && q2._ghostOffers.length === 2,
+    '11.6.4: ghosted seats auto-pick disjoint starting weapons + keep their pair');
 
   for (const c of raws) c.w.close();
   await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });
+}
+
+// 11.6.4 — co-op character sync E2E (D53/D56/D57): distinct per-seat chars from
+// the D53 profiles (host sim: per-char stats + starting weapon), a mid-run
+// joiner whose selected char is TAKEN gets reassigned to its next unlocked
+// char (and the client renders the host-assigned char), plus the select screen
+// greying out taken chars (D56).
+{
+  const { createGameServer, attachCoopRoom } = await import('../tools/serve.mjs');
+  const { joinProfile, resolveChars } = await import('../js/net/coop.js');
+  const srv = createGameServer();
+  attachCoopRoom(srv);
+  await new Promise((res) => srv.listen(0, '127.0.0.1', res));
+  const url = `ws://127.0.0.1:${srv.address().port}`;
+  const raws = [];
+  const mkRaw = () => {
+    const c = { w: new WebSocket(url), msgs: [] };
+    c.opened = new Promise((res) => { c.w.addEventListener('open', res); c.w.addEventListener('error', () => res()); });
+    c.w.addEventListener('message', (ev) => c.msgs.push(JSON.parse(String(ev.data))));
+    c.wait = (pred, what, ms = 4000) => new Promise((res, rej) => {
+      const t0 = Date.now();
+      const to = setInterval(() => {
+        const i = c.msgs.findIndex(pred);
+        if (i !== -1) { clearInterval(to); res(c.msgs.splice(i, 1)[0]); }
+        else if (Date.now() - t0 > ms) { clearInterval(to); rej(new Error('11.6.4 E2E timeout: ' + what)); }
+      }, 5);
+    });
+    c.send = (m) => c.w.send(JSON.stringify(m));
+    raws.push(c);
+    return c;
+  };
+  const dummyLoop = { timescale: 1, hitStop() {} };
+  const mkGame = () => {
+    const g = new Game({
+      input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
+      loop: dummyLoop, ctx: makeCtx(), mctx, characters, items,
+    });
+    g.resize(1280, 800);
+    return g;
+  };
+  const wire = (g, raw) => {
+    const conn = {
+      onMessage: null,
+      send: (o) => raw.send(o),
+      close: () => raw.w.close(),
+      sendInput: (mx, my, dash) => raw.send({ t: 'input', mx, my, dash }),
+      sendState: (id, body) => raw.send(Object.assign({ t: 'state' }, body, { id })),
+      sendRunStart: (id, seed, levelKey) => raw.send({ t: 'runstart', id, seed, levelKey }),
+      sendClosed: (reason) => raw.send({ t: 'closed', reason }),
+    };
+    raw.w.addEventListener('message', (ev) => { const m = JSON.parse(String(ev.data)); conn.onMessage && conn.onMessage(m); });
+    g.net = conn;
+    g.net.onMessage = (m) => g._netMsg(m);
+  };
+  const DT = 1 / 60;
+  const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+  const keepAlive = (g) => {
+    for (const p of g.players) if (p.dead || p.hp < p.maxHp * 0.5) { p.dead = false; p.hp = p.maxHp; p.iframes = 5; }
+  };
+
+  // Per-seat selections (simulated LS state): distinct chars on three seats.
+  const hostG = mkGame(), c1G = mkGame(), c2G = mkGame(), c3G = mkGame();
+  const rawA = mkRaw(), rawB = mkRaw(), rawC = mkRaw(), rawD = mkRaw();
+  await Promise.all([rawA, rawB, rawC, rawD].map((c) => c.opened));
+  wire(hostG, rawA); wire(c1G, rawB); wire(c2G, rawC); wire(c3G, rawD);
+  hostG.chars = ['mage']; hostG.charKey = 'mage';
+  c1G.chars = ['mage', 'warden']; c1G.charKey = 'warden';
+  c2G.chars = ['mage', 'ranger']; c2G.charKey = 'ranger';
+  rawA.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(hostG.meta, hostG.chars, hostG.charKey) });
+  await rawA.wait((m) => m.t === 'joined', 'host joined');
+  rawB.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(c1G.meta, c1G.chars, c1G.charKey) });
+  await rawB.wait((m) => m.t === 'joined', 'c1 joined');
+  rawC.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(c2G.meta, c2G.chars, c2G.charKey) });
+  await rawC.wait((m) => m.t === 'joined', 'c2 joined');
+
+  hostG.startRun('m01');
+  assert(!hostG._ghost && hostG.state === 'PLAYING' && hostG.player.charKey === 'mage',
+    '11.6.4: mixed lobby → no ghosting, host keeps its own char');
+  const pl1 = hostG.players[1], pl2 = hostG.players[2];
+  assert(pl1.charKey === 'warden' && pl1.maxHp === CFG.characters.warden.hp + pl1.metaHp && pl1.weapons.garlic === 1
+    && Math.abs(pl1.dmgMul - CFG.characters.warden.dmg) < 1e-9,
+    '11.6.4: remote (seat 1) spawned from its profile char — warden 150 HP, ×0.85 dmg, Wraith Garlic');
+  assert(pl2.charKey === 'ranger' && pl2.maxHp === CFG.characters.ranger.hp + pl2.metaHp && pl2.weapons.blades === 1
+    && Math.abs(pl2.dmgMul - CFG.characters.ranger.dmg) < 1e-9,
+    '11.6.4: remote (seat 2) spawned from its profile char — ranger 110 HP, Aegis Blades');
+  assert(new Set([hostG.player.charKey, pl1.charKey, pl2.charKey]).size === 3,
+    '11.6.4: per-seat chars unique across the lobby (D56)');
+  for (let i = 0; i < 40; i++) {
+    keepAlive(hostG); keepAlive(c1G); keepAlive(c2G);
+    hostG.update(DT); c1G.update(DT); c2G.update(DT);
+    if (i % 20 === 19) await tick();
+  }
+
+  // Mid-run joiner: its selected char (mage) is TAKEN by the host, and it has
+  // swash unlocked → the host reassigns it swash; the client renders that.
+  c3G.chars = ['mage', 'swash']; c3G.charKey = 'mage';
+  rawD.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(c3G.meta, c3G.chars, c3G.charKey) });
+  await rawD.wait((m) => m.t === 'joined', 'c3 joined');
+  await rawA.wait((m) => m.t === 'roster' && m.players.length === 4, 'host roster 4');
+  await tick(60);
+  const pl3 = hostG.players[3];
+  assert(pl3 && pl3.charKey === 'swash' && pl3.maxHp === CFG.characters.swash.hp + pl3.metaHp && pl3.weapons.flame === 1,
+    '11.6.4: late joiner with a TAKEN pick is reassigned its next unlocked char (swash, Pyre Lance)');
+  assert(resolveChars(hostG.netRoster).join() === 'mage,warden,ranger,swash',
+    '11.6.4: host-authoritative resolution — every seat unique, seat order');
+  await rawD.wait((m) => m.t === 'runstart', 'c3 runstart');
+  for (let i = 0; i < 60; i++) {
+    keepAlive(hostG); keepAlive(c1G); keepAlive(c2G); keepAlive(c3G);
+    hostG.update(DT); c1G.update(DT); c2G.update(DT); c3G.update(DT);
+    if (i % 20 === 19) await tick();
+  }
+  assert(c3G.player.charKey === 'swash' && c3G._ghost === false,
+    '11.6.4: joiner client renders the host-assigned char (swash, not the LS pick)');
+
+  for (const c of raws) c.w.close();
+  await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });
+
+  // Greyed-out taken chars in the select screen (D56) — fake co-op lobby on the
+  // main game (solo menu state): the other seats' picks are TAKEN + denied.
+  const saved = { net: game.net, netMyId: game.netMyId, netRoster: game.netRoster, state: game.state };
+  game.net = { sendClosed() {} }; // truthy gate only — the select reads roster/netMyId
+  game.netMyId = 'me';
+  game.netRoster = [
+    { id: 'me', seat: 0, profile: { chars: ['mage', 'warden'], charKey: 'mage' } },
+    { id: 'p2', seat: 1, profile: { chars: ['mage', 'warden'], charKey: 'warden' } },
+    { id: 'p3', seat: 2, profile: { chars: ['mage', 'ranger'], charKey: 'ranger' } },
+  ];
+  let denied4 = 0;
+  const offDenied4 = game.bus.on('denied', () => denied4++);
+  document.getElementById('btn-character').click();
+  pump(10);
+  const cs4 = byId['char-list'].children;
+  assert(cs4.length === 4, '11.6.4: select shows all 4 chars');
+  assert(cs4[1].classList.contains('taken') && cs4[2].classList.contains('taken')
+    && !cs4[0].classList.contains('taken') && !cs4[3].classList.contains('taken'),
+    '11.6.4: co-op — warden/ranger (held by other seats) are greyed TAKEN, own + free stay open');
+  cs4[1].click(); // warden is taken → denied, not selected
+  assert(denied4 === 1 && game.charKey === 'mage', '11.6.4: tapping a taken char is denied (D56)');
+  byId['btn-char-confirm'].click();
+  pump(5);
+  offDenied4(); // bus.on returns its own unsubscribe
+  game.net = saved.net; game.netMyId = saved.netMyId; game.netRoster = saved.netRoster;
 }
 
 // self-verification: every one-shot path above must have actually fired

@@ -139,12 +139,55 @@ export function allocateGhostOffers(n, rng) {
   return out;
 }
 
-// D53 (11.6.3): join profile = the meta stat profile + this seat's unlocked
-// characters (player-specific sim input — ghost-fallback detection, D59).
-export function joinProfile(meta, chars) {
+// D53 (11.6.4): the seat's SELECTED character, sanitized — a playable key from
+// the seat's own unlocked list; missing/unknown/locked → the starter.
+export function selChar(profile) {
+  const order = CFG.characters.order;
+  const starter = order[0];
+  const p = profile && typeof profile === 'object' ? profile : null;
+  const sel = p && typeof p.charKey === 'string' ? p.charKey : null;
+  if (sel && order.includes(sel) && sanitizeChars(p ? p.chars : null).includes(sel)) return sel;
+  return starter;
+}
+
+// D56 (11.6.4): per-seat character assignment — UNIQUE per player, seat order
+// (an earlier seat wins a contested pick; the host = seat 0 always keeps its
+// own). A seat keeps its selected char if playable+unlocked+unclaimed;
+// otherwise the first unclaimed playable char it has unlocked; otherwise
+// 'ghost' (D59 fallback — no playable char left for that seat).
+export function assignChars(roster) {
+  const order = CFG.characters.order;
+  const taken = new Set();
+  const out = [];
+  for (const e of Array.isArray(roster) ? roster : []) {
+    const prof = e && e.profile ? e.profile : null;
+    const unlocked = sanitizeChars(prof ? prof.chars : null);
+    const sel = selChar(prof);
+    let key = !taken.has(sel) && unlocked.includes(sel) ? sel : null;
+    if (!key) key = order.find((k) => unlocked.includes(k) && !taken.has(k)) || null;
+    if (!key) key = 'ghost';
+    taken.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+// D53 (11.6.3/11.6.4): join profile = the meta stat profile + this seat's
+// unlocked characters + its selected character (player-specific sim input —
+// ghost-fallback detection D59, per-char spawn D56/D57).
+export function joinProfile(meta, chars, sel) {
   const p = profileFromMeta(meta);
   p.chars = sanitizeChars(chars);
+  p.charKey = selChar({ chars: p.chars, charKey: sel });
   return p;
+}
+
+// D56/D59 (11.6.4): final per-seat char resolution — D59 wins: an all-starter
+// lobby ghosts EVERY seat (incl. the host); otherwise the D56 unique assignment
+// stands (a seat with no playable char left still ghosts).
+export function resolveChars(roster) {
+  const a = assignChars(roster);
+  return allStarterLobby(roster) ? a.map(() => 'ghost') : a;
 }
 
 // 11.4 leash (A2): every player stays within R of EVERY other player (all
