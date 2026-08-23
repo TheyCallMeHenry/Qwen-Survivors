@@ -241,6 +241,7 @@ let gemDone = false, gemAsserted = false, gemT0 = 0, gemEvents = 0; // 10.8 gem 
 let wandOffDone = false, wandOffAsserted = false, wandOffAt = 0, wandOffKills = 0, wandLv = 1;
 let stickDone = false, stickUp = false, stickT = 0, stickX0 = 0;
 let dashBtnDone = false, dashBtnAsserted = false;
+let soloHudDone = false; // 11.7 solo invariance (11.11): no coop class, TL = local player
 let sawBullets = false, sawBombs = false, sawFlames = false;
 let burnDone = false, burnAsserted = false, burnEnemy = null, burnKills = 0, burnAt = 0;
 let dashIFrameStep = 0, dashIFrameHp0 = 0; // 0 = not started, 1 = in flight, 2 = done
@@ -417,6 +418,13 @@ function steer() {
       const cdTouch = byId['btn-dash'].style._props['--cd'];
       assert(cdHud === cdTouch && parseFloat(cdHud) > 0,
         `HUD dash --cd not driven (hud=${cdHud} touch=${cdTouch}, mid-dash expects equal + > 0)`);
+    }
+    if (!soloHudDone && st === 'PLAYING' && game.t >= 6) {
+      soloHudDone = true;
+      // 11.7 solo invariance (11.11): no coop class, TL (#hud-left) driven by the local player
+      assert(!byId['hud'].classList.contains('coop'), '11.7: coop class present on #hud during a solo run');
+      assert(byId['hp-label'].textContent === `${Math.max(0, Math.ceil(game.player.hp))} / ${game.player.maxHp}`,
+        '11.7: solo TL panel not driven by the local player');
     }
     // 9.3a synergy E2E setup: force every requirement to max so the offer pool
     // is exactly the 5 fused cards; the LEVELUP branch above then drives the
@@ -1315,9 +1323,13 @@ m03RunDone = true;
   const w3 = Object.keys(pl3.weapons);
   assert(w3.length === 1 && !allFlat.includes(w3[0]),
     `11.6.3: joiner auto-picked a 4th unique starting weapon (${w3})`);
-  assert(Object.keys(hostG.weaponOwner).length === 4
-    && new Set(Object.values(hostG.weaponOwner)).size === 4,
-    '11.6.3: every ghost pick registered a distinct first-picker owner (11.5)');
+  // The 4 ghost first-picks (host entry, both remote starts, joiner start) must
+  // each be registered to their picker; live pump auto-picks may add legitimate
+  // extra entries (11.5) — assert the true first-picks, not a strict count.
+  const expectOwner = { [hostPair[0]]: hostG.player, [w1[0]]: pl1, [w2[0]]: pl2, [w3[0]]: pl3 };
+  assert(Object.keys(expectOwner).every((k) => hostG.weaponOwner[k] === expectOwner[k])
+    && new Set(Object.values(expectOwner)).size === 4,
+    '11.6.3: every ghost pick registered its distinct first-picker owner (11.5)');
   for (let i = 0; i < 30; i++) {
     keepAlive(hostG); keepAlive(c1G); keepAlive(c2G); keepAlive(c3G);
     hostG.update(DT); c1G.update(DT); c2G.update(DT); c3G.update(DT);
@@ -1441,11 +1453,67 @@ m03RunDone = true;
     '11.6.4: remote (seat 2) spawned from its profile char — ranger 110 HP, Aegis Blades');
   assert(new Set([hostG.player.charKey, pl1.charKey, pl2.charKey]).size === 3,
     '11.6.4: per-seat chars unique across the lobby (D56)');
+  // 11.6b (D29 respec): starting-weapon pre-ownership — each seat's starting weapon is
+  // registered owned at run start, so it is excluded from the OTHER seats' offers.
+  assert(hostG.weaponOwner.wand === hostG.player && hostG.weaponOwner.garlic === pl1
+    && hostG.weaponOwner.blades === pl2,
+    '11.6b: starting weapons pre-owned at run start (wand/garlic/blades → their seats)');
+  assert(hostG._ownerExclusion(pl1).has('wand') && hostG._ownerExclusion(pl1).has('blades')
+    && !hostG._ownerExclusion(pl1).has('garlic')
+    && hostG._ownerExclusion(hostG.player).has('garlic') && hostG._ownerExclusion(hostG.player).has('blades')
+    && !hostG._ownerExclusion(hostG.player).has('wand'),
+    '11.6b: other seats\' starters are excluded from offers, own starter is not');
+  // Synergy first-pick ownership: host force-picks blight (forced card bypasses gating,
+  // same pattern as the 11.5 garlic pick); the other seats never see it.
+  hostG.levelupQueue = 1;
+  hostG.state = 'LEVELUP';
+  hostG.cards = [{ kind: 'synergy', key: 'blight', level: 1 }];
+  hostG.pickCard(0);
+  assert(hostG.state === 'PLAYING', '11.6b: forced pick drains the queue (back to PLAYING)');
+  assert(hostG.player.synergies.blight === 1 && hostG.weaponOwner.blight === hostG.player,
+    '11.6b: first picker owns the synergy (host pick registered)');
+  assert(!hostG._ownerExclusion(hostG.player).has('blight'),
+    '11.6b: owner keeps their own synergy (no self-exclusion)');
+  // Max the cap + passives so pl1's pool is exactly the gated synergies {blight, phoenix}:
+  // blight must be absent (host-owned), phoenix (unowned) must be present.
+  const pl1P0 = { ...pl1.passives };
+  pl1.weapons = { wand: 5, garlic: 5, axe: 5 }; // 3 maxed = cap 3 filled; gates blight(wand+garlic)+phoenix(passives) only
+  pl1.passives = { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3 };
+  const pl1Excl = cardOffers(pl1.weapons, pl1.passives, pl1.synergies, hostG.rng, weaponCap(3), hostG._ownerExclusion(pl1));
+  assert(pl1Excl.length === 1 && pl1Excl[0].kind === 'synergy' && pl1Excl[0].key === 'phoenix',
+    '11.6b: owned blight never offered to another seat (pool = phoenix only)');
+  pl1.weapons = { garlic: 1 }; pl1.passives = pl1P0; recomputeStats(pl1); // restore the warden baseline
   for (let i = 0; i < 40; i++) {
     keepAlive(hostG); keepAlive(c1G); keepAlive(c2G);
     hostG.update(DT); c1G.update(DT); c2G.update(DT);
     if (i % 20 === 19) await tick();
   }
+
+  // 11.7 — co-op HUD corners (host side): TL = seat 0 (host), TR/BL/BR per-seat panels,
+  // visible count = player count, join order (A5). The host Game drives a second HUD
+  // instance on the shared stub #hud (panels are the appended children).
+  const hudHost = initHud(hostG);
+  const [pan1, pan2, pan3] = hudHost.panels;
+  hudHost.update();
+  assert(byId['hud'].classList.contains('coop'), '11.7: co-op run did not add the coop class to #hud');
+  assert(!byId['hud'].classList.contains('hidden'), '11.7: HUD hidden during the co-op run');
+  assert(byId['hp-label'].textContent === `${Math.max(0, Math.ceil(hostG.player.hp))} / ${hostG.player.maxHp}`
+    && byId['lvl-badge'].textContent === `LV ${hostG.player.level}`,
+    '11.7: TL panel not driven by seat-0 (host) data');
+  assert(!pan1.root.classList.contains('off') && pan1.name.textContent === 'Warden',
+    '11.7: seat-1 (TR) panel not visible with the assigned char name at 3P');
+  pl1.hp = 40;
+  hudHost.update();
+  assert(pan1.hpLabel.textContent === `40 / ${pl1.maxHp}`, '11.7: seat-1 HP bar not tracking pl1');
+  pl1.level = 7;
+  hudHost.update();
+  assert(pan1.lvl.textContent === 'LV 7', '11.7: seat-1 level badge not tracking pl1');
+  pl1.level = 1;
+  // 3P = TL+TR+BL (visible count = player count, join order A5) — BR only at 4P.
+  assert(!pan2.root.classList.contains('off') && pan2.name.textContent === 'Ranger',
+    '11.7: seat-2 (BL) panel not visible with the assigned char name at 3P');
+  assert(pan3.root.classList.contains('off'),
+    '11.7: seat-3 (BR) panel visible at 3P (only 3 players seated)');
 
   // Mid-run joiner: its selected char (mage) is TAKEN by the host, and it has
   // swash unlocked → the host reassigns it swash; the client renders that.
@@ -1467,6 +1535,29 @@ m03RunDone = true;
   }
   assert(c3G.player.charKey === 'swash' && c3G._ghost === false,
     '11.6.4: joiner client renders the host-assigned char (swash, not the LS pick)');
+
+  // 11.7 — the 4th joiner: BR (seat 3) appears, visible count = 4; then it leaves →
+  // the count drops back to 3 and the seat-3 panel hides again.
+  for (let i = 0; i < 30; i++) {
+    keepAlive(hostG); keepAlive(c1G); keepAlive(c2G); keepAlive(c3G);
+    hostG.update(DT); c1G.update(DT); c2G.update(DT); c3G.update(DT);
+    if (i % 15 === 14) await tick();
+  }
+  hudHost.update(); // render-hook equivalent — panels track the live player count
+  assert(!pan3.root.classList.contains('off') && pan3.name.textContent === 'Swashbuckler',
+    '11.7: seat-3 (BR) panel did not appear for the 4th joiner');
+  rawD.w.close();
+  await tick(80);
+  for (let i = 0; i < 20; i++) {
+    keepAlive(hostG); keepAlive(c1G); keepAlive(c2G); keepAlive(c3G);
+    hostG.update(DT); c1G.update(DT); c2G.update(DT); c3G.update(DT);
+    if (i % 10 === 9) await tick();
+  }
+  assert(hostG.players.length === 3, '11.7: seat-3 leave did not reconcile the host roster back to 3');
+  hudHost.update();
+  assert(pan3.root.classList.contains('off'), '11.7: seat-3 panel still visible after the leave');
+  assert(!pan1.root.classList.contains('off') && !pan2.root.classList.contains('off'),
+    '11.7: other seat panels disturbed by the seat-3 leave');
 
   for (const c of raws) c.w.close();
   await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });

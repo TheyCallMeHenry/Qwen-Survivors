@@ -312,6 +312,32 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     '11.5.2: passives not locked (all weapons excluded → 3 passives drawn)');
 }
 
+// --- 11.6b: synergy exclusivity (pure cardOffers) ---
+{
+  const allPassMax = {};
+  for (const k of Object.keys(CFG.passives)) allPassMax[k] = CFG.passives[k].max;
+  // Cap filled with 5 maxed weapons → no new-weapon slots; all passives maxed → no
+  // passive slots; the pool is exactly the gated synergies {blight, tempest, phoenix}
+  // (all three drawn). Once ANOTHER player owns blight, it must never be offered.
+  const exBlight = new Set(['blight']);
+  const blightMax = { wand: 5, garlic: 5, axe: 5, blades: 5, pistols: 5 };
+  for (let seed = 1; seed <= 3; seed++) {
+    const draw = cardOffers(blightMax, allPassMax, {}, mulberry32(seed), 5, exBlight);
+    ok(draw.every((c) => !(c.kind === 'synergy' && c.key === 'blight')),
+      `11.6b: other-owned synergy never offered (sources at max, seed ${seed})`);
+  }
+  // Control: the same pool with no owner offers blight.
+  ok(cardOffers(blightMax, allPassMax, {}, mulberry32(1), 5)
+    .some((c) => c.kind === 'synergy' && c.key === 'blight'),
+    '11.6b: control — unowned blight IS offerable');
+  // Excluding an (unoffered) synergy key must not perturb the weapon draw (rng parity).
+  const base = { wand: 3, garlic: 1 };
+  const a = cardOffers(base, {}, {}, mulberry32(11), 5);
+  const b = cardOffers(base, {}, {}, mulberry32(11), 5, new Set(['tempest']));
+  ok(JSON.stringify(a) === JSON.stringify(b),
+    '11.6b: excluding a synergy does not shift the weapon draw (same rng)');
+}
+
 // --- Phase 9: synergy table shape + gating ---
 {
   for (const [k, S] of Object.entries(CFG.synergies)) {

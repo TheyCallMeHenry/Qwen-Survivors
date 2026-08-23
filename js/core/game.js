@@ -246,7 +246,7 @@ export class Game {
     if (this.state !== 'LEVELUP' || !this.cards || !this.cards[i]) return;
     const card = this.cards[i];
     applyCard(this.player, card);
-    if (card.kind === 'weapon' && card.level === 1) this.weaponOwner[card.key] = this.player; // 11.5: first picker owns
+    if (card.level === 1 && (card.kind === 'weapon' || card.kind === 'synergy')) this.weaponOwner[card.key] = this.player; // 11.5/11.6b: first picker owns
     this.levelupQueue--;
     this.bus.emit('card', card, i);
     if (this.levelupQueue > 0) {
@@ -433,12 +433,13 @@ export class Game {
     this.bus.emit('cards', offers);
   }
 
-  // 11.5: weapon keys owned by ANOTHER player (first picker owns the weapon + its
-  // upgrades for the run). Solo: always empty — the only owner is the local player.
+  // 11.5/11.6b: weapon + synergy keys owned by ANOTHER player (first picker owns
+  // the card + its upgrades for the run; starting weapons are pre-owned). Solo:
+  // always empty — the only owner is the local player.
   _ownerExclusion(pl) {
     const s = new Set();
     for (const [k, owner] of Object.entries(this.weaponOwner)) {
-      if (owner !== pl && !pl.weapons[k]) s.add(k);
+      if (owner !== pl && !pl.weapons[k] && !(pl.synergies || {})[k]) s.add(k);
     }
     return s;
   }
@@ -714,7 +715,10 @@ export class Game {
     pl.flashes = [sheet.idle.map(flashCopy), sheet.run.map(flashCopy)];
     pl.weapons = {};
     const c = charDef(key);
-    if (c.weapon) pl.weapons[c.weapon] = 1;
+    if (c.weapon) {
+      pl.weapons[c.weapon] = 1;
+      if (!this.weaponOwner[c.weapon]) this.weaponOwner[c.weapon] = pl; // 11.6b: starting weapon pre-owned (excluded from others' offers)
+    }
     recomputeStats(pl);
     pl.hp = pl.maxHp;
   }
@@ -748,6 +752,8 @@ export class Game {
     this.weaponOwner = {}; // 11.5: ownership resets each run
     this.net.sendRunStart(this.netMyId, seed, this.levelKey);
     this._applyAssign(); // 11.6.4 (D56/D59): per-seat chars + ghost 2-offer deal
+    const hw = charDef(this.player.charKey).weapon; // 11.6b: the host's own starting weapon is pre-owned too
+    if (hw && !this.weaponOwner[hw]) this.weaponOwner[hw] = this.player;
   }
 
   _remoteStep(dt, r) {
@@ -775,7 +781,7 @@ export class Game {
       const offers = cardOffers(pl.weapons, pl.passives, pl.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(pl), pl._ghostOffers);
       if (!offers.length) break;
       applyCard(pl, offers[0]); // host auto-picks; the client sees it via snapshots
-      if (offers[0].kind === 'weapon' && offers[0].level === 1) this.weaponOwner[offers[0].key] = pl; // 11.5: first picker owns
+      if (offers[0].level === 1 && (offers[0].kind === 'weapon' || offers[0].kind === 'synergy')) this.weaponOwner[offers[0].key] = pl; // 11.5/11.6b: first picker owns
     }
     this.bus.emit('levelup');
   }

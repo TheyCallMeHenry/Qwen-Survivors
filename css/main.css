@@ -135,6 +135,47 @@ html, body {
     var(--panel);
 }
 
+/* 11.7 — co-op corner panels (seats 1–3; #hud-left is always seat 0). Display-only;
+   display:none until the seat is occupied (visible count = player count). */
+.seat-panel {
+  position: absolute;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  width: clamp(140px, 24vw, 250px);
+  pointer-events: none;
+}
+.seat-panel.off { display: none; }
+#hud-seat-1 { top: calc(96px + var(--safe-t)); right: calc(12px + var(--safe-r)); }
+#hud-seat-2 { bottom: calc(16px + var(--safe-b)); left: calc(12px + var(--safe-l)); }
+#hud-seat-3 { bottom: calc(16px + var(--safe-b)); right: calc(12px + var(--safe-r)); }
+.seat-face { width: 44px; height: auto; image-rendering: pixelated; }
+.seat-name {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em;
+  text-shadow: 0 1px 2px #000;
+}
+.seat-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+.seat-lvl {
+  min-width: 46px; height: 22px; line-height: 20px; text-align: center;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel);
+  font-size: 11px; font-weight: 800; color: var(--accent2);
+  padding: 0 4px;
+}
+.seat-dash {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid rgba(94, 234, 212, 0.65);
+  background:
+    radial-gradient(circle, rgba(94, 234, 212, 0.16) 0 58%, transparent 60%),
+    conic-gradient(rgba(2, 8, 16, 0.72) calc(var(--cd, 0) * 1turn), transparent 0);
+}
+/* 11.7 — co-op: minimap moves to bottom-center (it would collide with the seat-1 TR
+   panel at 2P); pause/dash buttons stay top-right above the seat-1 panel.
+   (11.9 later: ~66% size + pause/mute beside the minimap.) */
+#hud.coop #minimap-frame {
+  position: fixed; top: auto; bottom: calc(16px + var(--safe-b));
+  left: 50%; transform: translateX(-50%);
+  width: clamp(137.5px, 25vmin, 237.5px);
+}
+
 /* ============ touch UI (shown only when body.touch is set by main.js) ============ */
 #touch-ui { position: fixed; inset: 0; z-index: 20; pointer-events: none; display: none; }
 body.touch #touch-ui { display: block; }

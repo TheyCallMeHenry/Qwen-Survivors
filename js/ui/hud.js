@@ -2,9 +2,15 @@
 // Owns #btn-pause / #btn-dash wiring + Pause-menu Settings rows (#set-zoom / #set-mute).
 // Mute state lives in localStorage (CFG.scores.muteKey); the audio modules (Phase 5)
 // re-read it on the 'mute' bus event. (13.8: mute moved from the HUD button to Settings.)
+// 11.7 — Co-op corner panels: #hud-left is ALWAYS the SEAT-0 panel (solo seat 0 = local
+// player, so solo is unchanged); seats 1–3 = generated .seat-panel corners (TR/BL/BR),
+// one per seated player in join order (A5). Display-only — the input controls
+// (#btn-dash / #btn-dash-hud / #btn-pause) always follow the LOCAL player.
 
 import { CFG } from '../config.js';
 import { clamp, fmtTime } from '../utils/math.js';
+import { buildGhost } from '../art/characters.js';
+import { ghostColor, resolveChars } from '../net/coop.js';
 
 export function initHud(game) {
   const $ = (id) => document.getElementById(id);
@@ -26,6 +32,60 @@ export function initHud(game) {
   const input = game.input;
 
   const setTxt = (el, s) => { if (el.textContent !== s) el.textContent = s; };
+
+  // --- 11.7: co-op corner panels (seats 1–3; seat 0 = the existing #hud-left) ---
+  const mkPanel = (seat) => {
+    const el = (tag, cls) => { const n = document.createElement(tag); n.className = cls; return n; };
+    const root = el('div', 'seat-panel');
+    root.id = `hud-seat-${seat}`;
+    root.classList.add('off');
+    const face = el('canvas', 'seat-face');
+    const name = el('div', 'seat-name');
+    const pHpBar = el('div', 'bar hp-bar');
+    const pHpFill = el('div', 'bar-fill');
+    const pHpLabel = el('span', 'bar-label');
+    pHpBar.append(pHpFill, pHpLabel);
+    const row = el('div', 'seat-row');
+    const lvl = el('div', 'seat-lvl');
+    const pXpBar = el('div', 'bar xp-bar');
+    const pXpFill = el('div', 'bar-fill');
+    pXpBar.append(pXpFill);
+    row.append(lvl, pXpBar);
+    const dash = el('div', 'seat-dash');
+    root.append(face, name, pHpBar, row, dash);
+    hud.appendChild(root);
+    return { root, face, name, hpBar: pHpBar, hpFill: pHpFill, hpLabel: pHpLabel, lvl, xpFill: pXpFill, dash, _vis: false, _key: '' };
+  };
+  const panels = [mkPanel(1), mkPanel(2), mkPanel(3)];
+  const ghostSheet = [null, null, null, null]; // seat → tinted ghost sheet cache (D62 per-seat tint)
+  const seatPlayer = (j) => {
+    if (!game.net || game.netRole === 'solo') return game.player;
+    const seat = game._seat();
+    if (seat < 0 || j >= game.players.length) return null;
+    return j === seat ? game.player : game.remote[j < seat ? j : j - 1]; // same mapping as _netState/_interp
+  };
+  const syncFace = (pan, key, seat) => {
+    if (pan._key === key) return; // redraw only on (re)assignment
+    pan._key = key;
+    const sheet = key === 'ghost'
+      ? (ghostSheet[seat] || (ghostSheet[seat] = buildGhost(ghostColor(seat))))
+      : game.roster[key];
+    if (!sheet) return;
+    pan.face.width = sheet.w * 2;
+    pan.face.height = sheet.h * 2;
+    pan.face.getContext('2d').drawImage(sheet.idle[0], 0, 0, sheet.w * 2, sheet.h * 2);
+  };
+  const syncPanel = (pan, seat, key, pl) => {
+    setTxt(pan.name, CFG.characters[key].name);
+    syncFace(pan, key, seat);
+    const frac = pl.hp / pl.maxHp;
+    pan.hpFill.style.transform = `scaleX(${clamp(frac, 0, 1)})`;
+    pan.hpBar.classList.toggle('low', frac < CFG.gems.lowHpFrac);
+    setTxt(pan.hpLabel, `${Math.max(0, Math.ceil(pl.hp))} / ${pl.maxHp}`);
+    pan.xpFill.style.transform = `scaleX(${clamp(pl.xp / CFG.xpNeed(pl.level), 0, 1)})`;
+    setTxt(pan.lvl, `LV ${pl.level}`);
+    pan.dash.style.setProperty('--cd', String(clamp(pl.dashCd / CFG.player.dashCd, 0, 1)));
+  };
 
   // --- buttons (key M and the mute row funnel into one 'mute' toggle point) ---
   btnPause.addEventListener('click', () => game.pause());
@@ -67,18 +127,35 @@ export function initHud(game) {
     hud.classList.toggle('hidden', !show);
     hud.setAttribute('aria-hidden', show ? 'false' : 'true');
     if (!show) return;
-    const p = game.player;
+    // 11.7: TL (#hud-left) is the SEAT-0 panel — solo seat 0 = local player (invariance);
+    // in co-op seat 0 is the host (on the host) or the remote host (on clients).
+    const p = seatPlayer(0) || game.player;
     const frac = p.hp / p.maxHp;
     hpFill.style.transform = `scaleX(${clamp(frac, 0, 1)})`;
     hpBar.classList.toggle('low', frac < CFG.gems.lowHpFrac);
-    setTxt(hpLabel, `${Math.ceil(p.hp)} / ${p.maxHp}`);
+    setTxt(hpLabel, `${Math.max(0, Math.ceil(p.hp))} / ${p.maxHp}`);
     xpFill.style.transform = `scaleX(${clamp(p.xp / CFG.xpNeed(p.level), 0, 1)})`;
     setTxt(lvlBadge, `LV ${p.level}`);
     setTxt(timer, fmtTime(CFG.run.time - game.t));
     setTxt(score, String(game.liveScore()));
     const cd = String(clamp(p.dashCd / CFG.player.dashCd, 0, 1));
     if (cd !== cdStr) { cdStr = cd; btnDash.style.setProperty('--cd', cd); btnDashHud.style.setProperty('--cd', cd); }
+    // 11.7: co-op corners — visible count = current player count, join order (A5).
+    const coop = !!(game.net && game.netRole !== 'solo');
+    hud.classList.toggle('coop', coop);
+    if (!coop) return;
+    const chars = resolveChars(game.netRoster);
+    const n = Math.min(chars.length, game.players.length);
+    for (let s = 1; s <= panels.length; s++) {
+      const pan = panels[s - 1];
+      const on = s < n;
+      if (pan._vis !== on) { pan._vis = on; pan.root.classList.toggle('off', !on); }
+      if (!on) continue;
+      const pl = seatPlayer(s);
+      if (!pl) continue;
+      syncPanel(pan, s, chars[s], pl);
+    }
   };
   update();
-  return { update };
+  return { update, panels };
 }
