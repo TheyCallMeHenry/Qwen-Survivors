@@ -91,6 +91,12 @@ export function weaponCap(n) {
   return CFG.run.maxWeapons - (c - 1);
 }
 
+// 11.10: N players = N bosses of the current level (1P=1 … 4P=4; solo = 1).
+// Boss stat ramp is applied separately (Enemies.spawn × coopS, Q7).
+export function bossCount(n) {
+  return Math.min(CFG.coop.maxPlayers, Math.max(1, Math.floor(n) || 1));
+}
+
 // 11.4 leash (A2): every player stays within R of EVERY other player (all
 // pairwise distances ≤ R — every player sees every other). Project (x, y) into
 // the intersection of the radius-R disks around `others` (convex — iterative

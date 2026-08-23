@@ -896,8 +896,9 @@ for (const k of ['rat', 'bat', 'goblin', 'wolf', 'brute', 'cultist', 'ryu'])
   sample.dead = true; // compacted on the next update; not a kill
 }
 assert(pumpUntil(() => game.bossSpawned, 20 * 60 * 60), `m02 run: Ryū never spawned (state=${game.state} t=${game.t.toFixed(1)}s)`);
-const ryuBoss = game.enemies.list.find((e) => e.boss);
-assert(ryuBoss && ryuBoss.type === 'ryu', 'm02 boss is not the Ryū');
+const ryuBosses = game.enemies.list.filter((e) => e.boss);
+const ryuBoss = ryuBosses[0];
+assert(ryuBosses.length === 1 && ryuBoss && ryuBoss.type === 'ryu', 'm02 boss is not the Ryū (solo = exactly 1, 11.10)');
 assert(ryuBoss.hp === 3000 && ryuBoss.dmg === 35, 'Ryū stats not ×1.25 (3000/35 expected)');
 assert(m02Banners.includes('RYŪ AWAKENS'), 'm02 boss banner did not name Ryū');
 assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
@@ -932,8 +933,9 @@ for (const k of ['rat', 'bat', 'goblin', 'wolf', 'brute', 'cultist', 'shark'])
   sample.dead = true; // compacted on the next update; not a kill
 }
 assert(pumpUntil(() => game.bossSpawned, 20 * 60 * 60), `m03 run: Great White never spawned (state=${game.state} t=${game.t.toFixed(1)}s)`);
-const sharkBoss = game.enemies.list.find((e) => e.boss);
-assert(sharkBoss && sharkBoss.type === 'shark', 'm03 boss is not the Great White');
+const sharkBosses = game.enemies.list.filter((e) => e.boss);
+const sharkBoss = sharkBosses[0];
+assert(sharkBosses.length === 1 && sharkBoss && sharkBoss.type === 'shark', 'm03 boss is not the Great White (solo = exactly 1, 11.10)');
 assert(sharkBoss.hp === 3744 && sharkBoss.dmg === 43.68, 'Great White stats not ×1.56 (3744/43.68 expected)');
 assert(m03Banners.includes('THE GREAT WHITE AWAKENS'), 'm03 boss banner did not name the Great White');
 assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
@@ -1734,6 +1736,30 @@ m03RunDone = true;
   assert(!pan1.root.classList.contains('off') && !pan2.root.classList.contains('off'),
     '11.7: other seat panels disturbed by the seat-3 leave');
 
+  // 11.10 — boss count: N players = N bosses of the current level. The wave is
+  // injected through the real _spawns path: fast-forward the host past B.at
+  // (240 s) so the next _playingUpdate step fires it (3P → Wraith ×3), then
+  // verify count + per-boss ramp + banner + the bosses crossing the wire via
+  // the same enemySnap pipeline as every other enemy.
+  const bossBanners = [];
+  const offBossBanners = hostG.bus.on('banner', (b) => bossBanners.push(b.text));
+  hostG.t = 241; // past B.at — the boss wave fires on the next step
+  for (let i = 0; i < 10; i++) {
+    keepAlive(hostG); keepAlive(c1G); keepAlive(c2G);
+    hostG.update(DT); c1G.update(DT); c2G.update(DT);
+    if (i % 5 === 4) await tick();
+  }
+  offBossBanners();
+  const bossWave = hostG.enemies.list.filter((e) => e.boss);
+  assert(bossWave.length === 3, '11.10: 3P → 3 bosses of the current level (Wraith ×3)');
+  assert(bossWave.every((e) => e.type === 'wraith'
+    && Math.abs(e.maxHp - CFG.enemies.wraith.hp * hostG.enemies.diff * hostG.enemies.coopS) < 1e-6),
+    '11.10: every boss carries the +33%/player ramp (maxHp = base × diff × coopScale(3), Q7)');
+  assert(bossBanners.includes('THE WRAITH AWAKENS ×3'), '11.10: co-op boss banner names the ×N wave');
+  await tick(40);
+  assert(c1G.enemies.list.filter((e) => e.boss).length === 3,
+    '11.10: client sees all 3 bosses in the per-step state (enemySnap boss flag, N-pipeline)');
+
   for (const c of raws) c.w.close();
   await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });
 
@@ -1786,5 +1812,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
   `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) · loop alive throughout`,
 );

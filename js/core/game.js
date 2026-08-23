@@ -23,7 +23,7 @@ import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
 import { buildMinimapBase, drawMinimapLive } from '../world/minimap.js';
 import { playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState, ENEMY_KEYS } from '../net/sync.js';
-import { MSG, profileFromMeta, joinProfile, ghostColor, allocateGhostOffers, coopScale, leashClamp, weaponCap, resolveChars, selChar } from '../net/coop.js';
+import { MSG, profileFromMeta, joinProfile, ghostColor, allocateGhostOffers, coopScale, leashClamp, weaponCap, bossCount, resolveChars, selChar } from '../net/coop.js';
 import { CoopConn } from '../net/conn.js';
 
 export class Game {
@@ -393,10 +393,16 @@ export class Game {
     const B = L.boss || { key: 'wraith', at: R.bossAt, name: 'THE WRAITH' };
     const S = this.enemies.coopS; // 11.3 co-op difficulty factor (1.0 solo)
     if (!this.bossSpawned && this.t >= B.at) {
-      const pt = this._spawnPt();
-      this.enemies.spawn(B.key, pt.x, pt.y);
+      // 11.10: N players = N bosses of the current level (count fixed at the
+      // spawn moment — mid-run joiners before B.at add bosses; after it, the
+      // wave is done). Solo: exactly 1, bit-identical to the pre-11.10 path.
+      const n = bossCount(this.players.length);
+      for (let i = 0; i < n; i++) {
+        const pt = this._spawnPt();
+        this.enemies.spawn(B.key, pt.x, pt.y);
+      }
       this.bossSpawned = true;
-      this.bus.emit('banner', { text: `${B.name} AWAKENS` });
+      this.bus.emit('banner', { text: n > 1 ? `${B.name} AWAKENS ×${n}` : `${B.name} AWAKENS` });
     }
     if (this.t < CFG.spawner.firstSpawn) return;
     if (this.enemies.list.length >= aliveCap(this.t, L, S)) {
@@ -974,10 +980,7 @@ export class Game {
     lights.push({ x: p.x, y: p.y, r: pr, rgb: L.playerRgb, flicker: L.playerFlicker });
     for (const r of this.remote) if (!r.dead) lights.push({ x: r.x, y: r.y, r: pr, rgb: L.playerRgb, flicker: L.playerFlicker });
     for (const e of this.enemies.list) {
-      if (e.boss && !e.dead) {
-        lights.push({ x: e.x, y: e.y, r: L.bossR, rgb: L.bossRgb, flicker: L.bossFlicker });
-        break;
-      }
+      if (e.boss && !e.dead) lights.push({ x: e.x, y: e.y, r: L.bossR, rgb: L.bossRgb, flicker: L.bossFlicker }); // 11.10: every live boss gets its light hole (solo = 1)
     }
     return lights;
   }

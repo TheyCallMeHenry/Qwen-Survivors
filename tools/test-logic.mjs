@@ -14,7 +14,7 @@ import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, record
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
-import { MSG, pack, unpack, profileFromMeta, joinProfile, sanitizeChars, allStarterLobby, ghostColor, charAccent, allocateGhostOffers, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap, selChar, assignChars, resolveChars } from '../js/net/coop.js';
+import { MSG, pack, unpack, profileFromMeta, joinProfile, sanitizeChars, allStarterLobby, ghostColor, charAccent, allocateGhostOffers, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap, bossCount, selChar, assignChars, resolveChars } from '../js/net/coop.js';
 import { encodeFrame, consumeFrames, wsAcceptKey } from './serve.mjs';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -1216,6 +1216,16 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     '11.9: PAUSE fixed beside the co-op minimap (offset tracks --coop-mm, req 6a)');
   ok(!/#hud\.coop[^{]*#btn-dash/.test(css) && !/#hud\.coop[^{]*#btn-mute/.test(css),
     '11.9: DASH stays top-right (11.7) and mute is not moved (Pause-menu Settings, 13.8/D72)');
+}
+
+// --- 11.10 boss count: N players = N bosses of the current level (pure rule) ---
+{
+  ok(bossCount(1) === 1 && bossCount(2) === 2 && bossCount(3) === 3 && bossCount(4) === 4,
+    '11.10: 1P=1 … 4P=4 bosses (solo = 1 Wraith)');
+  ok(bossCount(0) === 1 && bossCount(7) === CFG.coop.maxPlayers,
+    '11.10: clamped to [1, maxPlayers]');
+  ok(CFG.enemies.wraith.boss && CFG.enemies.ryu.boss && CFG.enemies.shark.boss,
+    '11.10: the three per-level bosses are boss-flagged (Phase 13)');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);
