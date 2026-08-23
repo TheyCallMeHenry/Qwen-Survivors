@@ -229,6 +229,7 @@ export const CFG = {
     axeSpeed: 430, axeLife: 1.9, axeR: 10, axeKb: 130, axeTick: 0.30,
     orbitSpeed: 2.4, orbitR: 9, orbitTick: 0.35, orbitKb: 190, orbitSize: 26,
     garlicTick: 0.45,
+    spawnOriginFrac: 0.55, // 16.2: shared projectile spawn origin — fraction of the character sprite height above the feet (mid-torso); 1 = feet (legacy), 0 = head
     orbLife: 4.5, orbR: 7,
     hitStopKill: 0.05, hitStopBoss: 0.18, hitStopHurt: 0.07,
     // Twin Fangs rounds (small, fast, short-lived — distinct from the cyan bolt)

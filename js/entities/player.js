@@ -152,6 +152,13 @@ export class Player {
     this._weapons(dt, enemies, combat);
   }
 
+  // 16.2: shared projectile spawn origin — (x, y) IS the feet (the sprite is
+  // bottom-anchored), so every fired weapon aims + spawns from mid-torso:
+  // a fraction (CFG.combat.spawnOriginFrac) of the character sprite height up.
+  _spawnY() {
+    return this.y - this.def.h * CFG.combat.spawnOriginFrac;
+  }
+
   _weapons(dt, enemies, combat) {
     const W = CFG.weapons;
     if (this.weapons.wand) {
@@ -160,10 +167,11 @@ export class Player {
       if (this._wandCd <= 0) {
         const e = this._nearest(enemies, CFG.combat.wandRange);
         if (e) {
-          const ang = Math.atan2(e.y - this.y, e.x - this.x);
+          const sy = this._spawnY();
+          const ang = Math.atan2(e.y - sy, e.x - this.x);
           for (let i = 0; i < S.count; i++) {
             const a2 = ang + (i - (S.count - 1) / 2) * CFG.combat.wandSpread;
-            combat.fireBolt(this.x, this.y, a2, S.dmg * this.dmgMul, S.pierce,
+            combat.fireBolt(this.x, sy, a2, S.dmg * this.dmgMul, S.pierce,
               this.synergies.blight ? CFG.synergies.blight.levels[0] : null, this);
           }
           this._wandCd = S.rate;
@@ -175,8 +183,9 @@ export class Player {
       this._axeCd -= dt;
       if (this._axeCd <= 0) {
         const e = this._nearest(enemies, CFG.combat.wandRange);
-        const ang = e ? Math.atan2(e.y - this.y, e.x - this.x) : this.aimAng;
-        combat.fireAxe(this.x, this.y, ang, S.dmg * this.dmgMul, S.size, S.count, this);
+        const sy = this._spawnY();
+        const ang = e ? Math.atan2(e.y - sy, e.x - this.x) : this.aimAng;
+        combat.fireAxe(this.x, sy, ang, S.dmg * this.dmgMul, S.size, S.count, this);
         this._axeCd = S.cd;
       }
     }
@@ -186,11 +195,12 @@ export class Player {
       if (this._pistolCd <= 0) {
         const [n1, n2] = this._nearestTwo(enemies, CFG.combat.pistolRange);
         if (n1) {
-          const a1 = Math.atan2(n1.y - this.y, n1.x - this.x);
-          const a2 = n2 ? Math.atan2(n2.y - this.y, n2.x - this.x) : a1 + S.spread;
+          const sy = this._spawnY();
+          const a1 = Math.atan2(n1.y - sy, n1.x - this.x);
+          const a2 = n2 ? Math.atan2(n2.y - sy, n2.x - this.x) : a1 + S.spread;
           const inf = this.synergies.inferno ? CFG.synergies.inferno.levels[0] : null;
-          combat.fireBullet(this.x, this.y, a1, S.dmg * this.dmgMul, inf, this);
-          combat.fireBullet(this.x, this.y, a2, S.dmg * this.dmgMul, inf, this);
+          combat.fireBullet(this.x, sy, a1, S.dmg * this.dmgMul, inf, this);
+          combat.fireBullet(this.x, sy, a2, S.dmg * this.dmgMul, inf, this);
           if (combat.pulse) combat.pulse('pistol');
           this._pistolCd = S.rate;
         }
@@ -202,14 +212,15 @@ export class Player {
       if (this._bombCd <= 0) {
         const C = CFG.combat;
         const e = this._nearest(enemies, C.wandRange);
+        const sy = this._spawnY();
         let ang = this.aimAng, dist = C.bombDist;
         if (e) {
-          ang = Math.atan2(e.y - this.y, e.x - this.x);
-          dist = Math.min(Math.hypot(e.x - this.x, e.y - this.y), C.bombDist);
+          ang = Math.atan2(e.y - sy, e.x - this.x);
+          dist = Math.min(Math.hypot(e.x - this.x, e.y - sy), C.bombDist);
         }
         dist = Math.max(dist, C.bombMin);
         const nap = this.synergies.napalm ? CFG.synergies.napalm.levels[0] : null;
-        combat.fireBomb(this.x, this.y, ang, dist, S.dmg * this.dmgMul, S.r, S.fuse, nap, this);
+        combat.fireBomb(this.x, sy, ang, dist, S.dmg * this.dmgMul, S.r, S.fuse, nap, this);
         this._bombCd = S.cd;
       }
     }
@@ -224,10 +235,11 @@ export class Player {
       } else {
         const e = this._nearest(enemies, S.range);
         if (e) {
-          this._flameAng = Math.atan2(e.y - this.y, e.x - this.x);
+          const sy = this._spawnY();
+          this._flameAng = Math.atan2(e.y - sy, e.x - this.x);
           const n = 2 + ((combat.t * 60) | 0) % 2; // flow: 2–3 sprites per frame
           for (let i = 0; i < n; i++) {
-            combat.emitFlame(this.x, this.y, this._flameAng, S.tick * this.dmgMul, S.dot * this.dmgMul, S.dotDur, this);
+            combat.emitFlame(this.x, sy, this._flameAng, S.tick * this.dmgMul, S.dot * this.dmgMul, S.dotDur, this);
           }
           if (combat.pulse) combat.pulse('fire');
           f.fuel -= dt;

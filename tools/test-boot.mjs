@@ -946,6 +946,82 @@ assert(game.kills > 0, 'm03 run: no kills (m03 roster never spawned?)');
 }
 m03RunDone = true;
 
+// 16.2 — projectile spawn origin: feet → mid-torso (shared spawn offset, config
+// scalar). Controlled m01 game (fresh Game — the main flow keeps going after):
+// every weapon's first projectile must spawn at mid-torso y (feet.y − def.h ×
+// spawnOriginFrac), not the feet; the blade orbit center is mid-torso (a
+// feet-level enemy is NOT sheared); combat.draw now draws blades/garlic for each
+// live player (latent fix: this.player was never assigned → they were never drawn).
+// fire162 = the player's weapon fire pass (Player.update → _weapons, projectiles
+// spawn UNMOVED — assert exact origins); tick162 = the projectile sim pass.
+{
+  const g2 = new Game({
+    input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
+    loop: { timescale: 1, hitStop() {} }, ctx: makeCtx(), mctx, characters, items,
+  });
+  g2.resize(1280, 800);
+  g2.startRun('m01');
+  const p2 = g2.player;
+  const f162 = CFG.combat.spawnOriginFrac;
+  const sy162 = p2.y - p2.def.h * f162;
+  assert(sy162 < p2.y, '16.2: mid-torso origin is above the feet');
+  const fire162 = () => p2.update(1 / 60, { x: 0, y: 0 }, g2.combat, g2.enemies, g2.world);
+  const tick162 = () => g2.combat.update(1 / 60, g2.players, g2.enemies);
+  // wand (owned at run start) — the target sits inside every weapon range
+  // (flame L1 range 300 uses a strict <, so keep it comfortably inside)
+  g2.enemies.spawn('rat', p2.x + 250, p2.y);
+  fire162();
+  assert(g2.combat.bolts.length > 0 && g2.combat.bolts[0].y === sy162 && g2.combat.bolts[0].x === p2.x,
+    `16.2: wand bolt spawned at mid-torso (got y=${g2.combat.bolts[0] && g2.combat.bolts[0].y}, want ${sy162}, feet ${p2.y})`);
+  g2.combat.bolts.length = 0; tick162();
+  // axe
+  p2.weapons.axe = 1; p2._axeCd = 0;
+  fire162();
+  assert(g2.combat.axes.length > 0 && g2.combat.axes[0].y === sy162 && g2.combat.axes[0].x === p2.x,
+    '16.2: axe spawned at mid-torso');
+  g2.combat.axes.length = 0; tick162();
+  // twin pistols (2 rounds, same origin)
+  p2.weapons.pistols = 1; p2._pistolCd = 0;
+  fire162();
+  assert(g2.combat.bullets.length === 2 && g2.combat.bullets.every((b) => b.y === sy162 && b.x === p2.x),
+    '16.2: pistol bullets spawned at mid-torso (×2)');
+  g2.combat.bullets.length = 0; tick162();
+  // bombs (lob starts at mid-torso: arc origin y0 = sy)
+  p2.weapons.bombs = 1; p2._bombCd = 0;
+  fire162();
+  assert(g2.combat.bombs.length === 1 && g2.combat.bombs[0].y0 === sy162 && g2.combat.bombs[0].x0 === p2.x,
+    '16.2: bomb arc origin at mid-torso');
+  g2.combat.bombs.length = 0; tick162();
+  // flame (emission origin — 16.3 builds on this)
+  p2.weapons.flame = 1; p2._flame.fuel = CFG.weapons.flame.levels[0].fuel;
+  fire162();
+  assert(g2.combat.flames.length > 0 && g2.combat.flames.every((fl) => fl.y === sy162 && fl.x === p2.x),
+    '16.2: flame emission origin at mid-torso');
+  g2.combat.flames.length = 0; tick162();
+  // blades: orbit center = mid-torso (16.2) — the feet-level orbit point must NOT
+  // be sheared, the mid-torso one must (rad = the level-1 orbit radius; _orbitT
+  // starts 0 → after one tick the blade sits ~0.04 rad past +x at radius rad).
+  const rad162 = CFG.weapons.blades.levels[0].rad;
+  const eF = g2.enemies.spawn('rat', p2.x + rad162, p2.y);   // feet-level orbit point
+  const eM = g2.enemies.spawn('rat', p2.x + rad162, sy162);  // mid-torso orbit point
+  // populate the spatial grid exactly as the first half of enemies.update does
+  // (the grid is only rebuilt there — without it the orbiter queries nothing;
+  // skipping the full update keeps the rats at their exact spawn geometry)
+  g2.enemies.grid.clear();
+  for (const e of g2.enemies.list) if (!e.dead) g2.enemies.grid.add(e.x, e.y, e);
+  p2.weapons.blades = 1; p2._orbitT = 0; p2._tempestT = 0;
+  tick162();
+  assert(eM.hp < eM.maxHp && eF.hp === eF.maxHp,
+    `16.2: blade orbits mid-torso (mid hit=${eM.hp < eM.maxHp}, feet hit=${eF.hp < eF.maxHp})`);
+  // draw: blade + garlic ring rendered per live player (latent-fix — they were
+  // invisible before: this.player/this.orbitT/this.garlicT were never assigned).
+  p2.weapons.garlic = 1; // mage has no garlic — grant one for the ring draw
+  const d0 = drawOps.drawImage, ar0 = drawOps.arc;
+  g2.combat.draw(g2.ctx, g2.t, g2.players);
+  assert(drawOps.drawImage - d0 >= CFG.weapons.blades.levels[0].n, '16.2: combat.draw drew the blade sprites (per-player loop live)');
+  assert(drawOps.arc - ar0 === 1, '16.2: combat.draw drew the garlic pulse ring (feet-centered, live phase)');
+}
+
 // 11.1 — co-op transport E2E: the real serve.mjs (WS upgrade + frame codec +
 // room relay) on an ephemeral loopback port, driven by native WebSocket clients
 // (Node 22+). Ephemeral port 0 — the only fixed port stays 47893 (serve.mjs).

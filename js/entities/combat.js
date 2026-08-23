@@ -177,7 +177,8 @@ export class Combat {
         a.y += a.vy * dt;
         if (a.life <= C.axeLife * 0.45 || a.x < 40 || a.x > CFG.world.w - 40 || a.y < 40 || a.y > CFG.world.h - 40) a.back = true;
       } else {
-        const dx = player.x - a.x, dy = player.y - a.y;
+        const oy = player.y - player.def.h * C.spawnOriginFrac; // 16.2: returns to the mid-torso spawn origin
+        const dx = player.x - a.x, dy = oy - a.y;
         const d = Math.hypot(dx, dy) || 1;
         a.vx = approach(a.vx, (dx / d) * 760, 10, dt);
         a.vy = approach(a.vy, (dy / d) * 760, 10, dt);
@@ -218,6 +219,7 @@ export class Combat {
     const C = CFG.combat;
     player._orbitT += dt * C.orbitSpeed; // per-player orbit angle (co-op)
     const S = CFG.weapons.blades.levels[player.weapons.blades - 1];
+    const oy = player.y - player.def.h * C.spawnOriginFrac; // 16.2: orbit around the mid-torso origin
     let tempestS = null, fireT = false;
     if ((player.synergies.tempest || 0) > 0) {
       tempestS = CFG.synergies.tempest.levels[0];
@@ -227,7 +229,7 @@ export class Combat {
     for (let i = 0; i < S.n; i++) {
       const a = player._orbitT + (TAU / S.n) * i;
       const bx = player.x + Math.cos(a) * S.rad;
-      const by = player.y + Math.sin(a) * S.rad;
+      const by = oy + Math.sin(a) * S.rad;
       for (const e of enemies.grid.near(bx, by)) {
         if (e.dead) continue;
         if (this.t - (this._orbCd.get(e) || -10) < C.orbitTick) continue;
@@ -235,7 +237,7 @@ export class Combat {
         const dx = e.x - bx, dy = e.y - by;
         if (dx * dx + dy * dy >= rr * rr) continue;
         this._orbCd.set(e, this.t);
-        const kx = e.x - player.x, ky = e.y - player.y;
+        const kx = e.x - player.x, ky = e.y - oy;
         const kd = Math.hypot(kx, ky) || 1;
         this.damageEnemy(e, S.dmg * player.dmgMul, kx / kd, ky / kd, C.orbitKb, player);
       }
@@ -397,7 +399,11 @@ export class Combat {
     return true;
   }
 
-  draw(ctx, t) {
+  // players = live players (host: all seats; client: the local player — its orbit/
+  // garlic clocks are advanced cosmetically in _clientUpdate). Remote players have
+  // no _orbitT/_garlicT in the snapshot (projectiles never cross the wire, 16.2
+  // snapshot-neutral) → their blades/ring are not drawn on the client.
+  draw(ctx, t, players) {
     const C = CFG.combat;
     if (this.boltImg) for (const b of this.bolts) {
       ctx.save();
@@ -414,12 +420,17 @@ export class Combat {
       ctx.drawImage(this.axeImg, -s / 2, -s / 2, s, s);
       ctx.restore();
     }
-    if (this.bladeImg && this.player && this.player.weapons.blades) {
-      const S = CFG.weapons.blades.levels[this.player.weapons.blades - 1];
+    // 16.2 latent-fix: this.player was never assigned (constructor/ctor sites), so the
+    // blades (and the garlic ring below) were NEVER drawn — the block below now loops the
+    // live players, using each player's sim orbit angle (damage position == drawn position).
+    if (this.bladeImg) for (const pl of players || []) {
+      if (!pl.weapons.blades || typeof pl._orbitT !== 'number') continue;
+      const S = CFG.weapons.blades.levels[pl.weapons.blades - 1];
+      const oy = pl.y - pl.def.h * C.spawnOriginFrac; // 16.2: mid-torso orbit center
       for (let i = 0; i < S.n; i++) {
-        const a = this.orbitT + (TAU / S.n) * i;
-        const bx = this.player.x + Math.cos(a) * S.rad;
-        const by = this.player.y + Math.sin(a) * S.rad;
+        const a = pl._orbitT + (TAU / S.n) * i;
+        const bx = pl.x + Math.cos(a) * S.rad;
+        const by = oy + Math.sin(a) * S.rad;
         ctx.save();
         ctx.translate(bx, by);
         ctx.rotate(a + TAU / 4);
@@ -465,15 +476,19 @@ export class Combat {
       }
       ctx.restore();
     }
-    if (this.player && this.player.weapons.garlic) {
-      // pulsing aura ring
-      const S = CFG.weapons.garlic.levels[this.player.weapons.garlic - 1];
-      const ph = this.garlicT / C.garlicTick;
+    // Pulsing ground ring — intentionally centered on the FEET (the aura is a ground
+    // pulse, not a fired projectile; 16.2 keeps the damage field feet-centered too).
+    // Phase = the player's own garlic pulse timer (this.garlicT was never assigned —
+    // it would have been NaN, and the ring would have thrown on the NaN radius).
+    for (const pl of players || []) {
+      if (!pl.weapons.garlic || typeof pl._garlicT !== 'number') continue;
+      const S = CFG.weapons.garlic.levels[pl.weapons.garlic - 1];
+      const ph = pl._garlicT / C.garlicTick;
       ctx.globalAlpha = 0.10 + 0.05 * Math.sin(ph * TAU);
       ctx.strokeStyle = '#b9f2a0';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(this.player.x, this.player.y, S.r * (0.97 + 0.03 * Math.sin(ph * TAU)), 0, TAU);
+      ctx.arc(pl.x, pl.y, S.r * (0.97 + 0.03 * Math.sin(ph * TAU)), 0, TAU);
       ctx.stroke();
       ctx.globalAlpha = 1;
     }

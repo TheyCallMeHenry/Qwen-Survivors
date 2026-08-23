@@ -852,6 +852,11 @@ export class Game {
     this._interp();
     this.camera.update(dt, this.player.x, this.player.y, this.player.vx, this.player.vy);
     this.snow.update(dt);
+    // 16.2 visual: the client never simulates, so advance the LOCAL player's orbit +
+    // garlic clocks cosmetically at the host sim rates (combat.draw reads these for the
+    // blade/garlic visuals; remote blades have no angle in the snapshot → not drawn).
+    this.player._orbitT += dt * CFG.combat.orbitSpeed;
+    this.player._garlicT = (this.player._garlicT + dt) % CFG.combat.garlicTick;
   }
 
   _interp() {
@@ -1031,7 +1036,7 @@ export class Game {
     // world space: projectiles → orbs → particles
     ctx.save();
     ctx.translate(vw / 2 - view.x, vh / 2 - view.y);
-    this.combat.draw(ctx, t);
+    this.combat.draw(ctx, t, this.players);
     this.enemies.drawOrbs(ctx);
     this.particles.draw(ctx, x0, y0, x1, y1);
     ctx.restore();

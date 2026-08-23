@@ -1171,6 +1171,19 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     '11.8: unknown/missing key → starter accent fallback');
 }
 
+// --- 16.2 projectile spawn origin: shared mid-torso offset (config scalar) ---
+{
+  const f = CFG.combat.spawnOriginFrac;
+  ok(Number.isFinite(f) && f > 0.4 && f < 0.7, '16.2: spawnOriginFrac in the mid-torso band (0.4–0.7)');
+  const pA = new Player({ w: 56, h: 64 });
+  pA.reset(100, 200);
+  ok(pA._spawnY() === 200 - 64 * f, '16.2: _spawnY = feet − frac × sprite height (mage 64)');
+  ok(pA._spawnY() < 200, '16.2: spawn origin is above the feet');
+  const pB = new Player({ w: 58, h: 66 });
+  pB.reset(100, 200);
+  ok(pB._spawnY() === 200 - 66 * f && pB._spawnY() < pA._spawnY(), '16.2: taller sprite (warden 66) → higher origin');
+}
+
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);
 for (const f of fails) console.error(`  FAIL ${f}`);
 process.exit(fails.length ? 1 : 0);
