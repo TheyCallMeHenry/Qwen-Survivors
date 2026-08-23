@@ -184,6 +184,11 @@ export class Snow {
         ctx.fill();
         continue;
       }
+      // 16.1: the snowflake path command — 13.4's bubble branch swallowed the old
+      // `else ctx.arc(...)` and left beginPath()+fill() on an EMPTY path (a silent
+      // no-op in canvas AND in the stub), so Map 01 snow was invisible. Restored
+      // exactly as in v1.0.0 (03eeac2).
+      else ctx.arc(sx, sy, f.sz, 0, TAU);
       ctx.fill();
     }
     ctx.globalAlpha = 1;

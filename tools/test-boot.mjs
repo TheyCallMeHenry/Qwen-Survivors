@@ -38,7 +38,7 @@ const okR = (v) => Number.isFinite(v) && v >= 0;
 // 10.4 bench: draw-op counts (Node ms under-states browser cost — draw call
 // volume is the proxy for it). Counted inside the ctx proxy only; the harness
 // set() no-ops, so nothing else can instrument this way.
-const drawOps = { drawImage: 0, arc: 0, fill: 0, fillRect: 0, stroke: 0, fillText: 0, radial: 0 };
+const drawOps = { drawImage: 0, arc: 0, ellipse: 0, fill: 0, fillRect: 0, stroke: 0, fillText: 0, radial: 0 };
 
 function makeCtx() {
   return new Proxy({}, {
@@ -51,7 +51,7 @@ function makeCtx() {
       };
       if (p === 'createLinearGradient') return () => grad;
       if (p === 'arc') return (...a) => { drawOps.arc++; if (a.length < 3 || a.length > 6) throw new TypeError('arc: ' + a.length + ' args'); if (!okR(a[2])) throw new IndexSizeError(); };
-      if (p === 'ellipse') return (...a) => { if (a.length !== 7) throw new TypeError('ellipse: ' + a.length + ' args, 7 required'); if (!okR(a[2]) || !okR(a[3])) throw new IndexSizeError(); };
+      if (p === 'ellipse') return (...a) => { drawOps.ellipse++; if (a.length !== 7) throw new TypeError('ellipse: ' + a.length + ' args, 7 required'); if (!okR(a[2]) || !okR(a[3])) throw new IndexSizeError(); };
       if (p === 'measureText') return () => ({ width: 8 });
       if (p === 'getImageData') return (x, y, w, h) => ({ data: new Uint8ClampedArray(Math.max(1, w * h) * 4), width: w, height: h });
       if (typeof p === 'string') {
@@ -251,6 +251,23 @@ let benchPhase = 0, benchStartT = 0; // 10.4 one-shot worst-case bench: 0=off ·
 let bench = null;
 let m02RunDone = false; // 13.3 — M02 real run one-shot
 let m03RunDone = false; // 13.5 — M03 real run one-shot
+
+// 16.1 — foreground snow path probe (D70: quantify what actually draws). The ctx
+// stub counts path ops, so the delta across ONE snow pass = the flake path
+// commands; 0 commands = invisible flakes in the browser too (empty-path fill
+// is a silent no-op both here and in canvas). Per kind, n flakes: snow = n arc
+// + n fill · petal = n ellipse + n fill · bubble = 2n arc + n stroke + n fill.
+function probeSnow(what) {
+  const s = game.snow, n = s.flakes.length;
+  const a0 = drawOps.arc, e0 = drawOps.ellipse, f0 = drawOps.fill, st0 = drawOps.stroke;
+  s.draw(ctx, game.camera, game.camera.w, game.camera.h, 1);
+  const arc = drawOps.arc - a0, ell = drawOps.ellipse - e0, fill = drawOps.fill - f0, stroke = drawOps.stroke - st0;
+  assert(n === CFG.perf.snowCount, `${what}: flake count ${n} !== CFG.perf.snowCount`);
+  if (s.kind === 'snow') assert(arc === n && ell === 0 && fill === n && stroke === 0, `${what}: snow pass drew arc=${arc} ellipse=${ell} fill=${fill} (want ${n}/0/${n} — 0 = invisible snow)`);
+  else if (s.kind === 'petal') assert(arc === 0 && ell === n && fill === n && stroke === 0, `${what}: petal pass drew arc=${arc} ellipse=${ell} fill=${fill} (want 0/${n}/${n})`);
+  else if (s.kind === 'bubble') assert(arc === 2 * n && ell === 0 && fill === n && stroke === n, `${what}: bubble pass drew arc=${arc} stroke=${stroke} fill=${fill} (want ${2 * n}/${n}/${n})`);
+  else assert(false, `${what}: unknown snow kind "${s.kind}"`);
+}
 
 function steer() {
   const st = game.state;
@@ -725,6 +742,7 @@ pump(90);
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start click did not start the run');
 assert(game.levelKey === 'm01', 'btn-start did not begin the selected level (m01)');
+probeSnow('run 1 m01 start (16.1)'); // in-game m01 foreground — the user-visible path
 
 // run 1: stand still (keep-alive iframes in steer) → kills + level-up cards +
 // heart/pause one-shots → force death through the real damage pipeline
@@ -829,6 +847,7 @@ pump(300);
 assert(game.world.level.key === 'm02', 'm02 menu backdrop did not generate');
 assert(game.world.decor.length > 100 && game.world.decor.every((d) => d.img), 'm02 menu backdrop: decor sprites unresolved');
 assert(game.snow.kind === 'petal', 'm02 menu backdrop foreground is not petal');
+probeSnow('m02 menu backdrop (16.1)');
 assert(game.minimapBase, 'm02 minimap base missing');
 // m01 regression: same dance returns the snow backdrop
 game.state = 'GAMEOVER';
@@ -839,6 +858,7 @@ game.toMenu();
 pump(300);
 assert(game.world.level.key === 'm01', 'm01 menu backdrop regression');
 assert(game.snow.kind === 'snow', 'm01 menu backdrop foreground is not snow');
+probeSnow('m01 menu backdrop (16.1)');
 
 // 13.4 — M03 "The Drowned City" menu backdrop (no real m03 run: weights land 13.5).
 // Render pump exercises the m03 sky (sun glow + godrays pass) + open-water schools.
@@ -851,6 +871,7 @@ pump(300);
 assert(game.world.level.key === 'm03', 'm03 menu backdrop did not generate');
 assert(game.world.decor.length > 100 && game.world.decor.every((d) => d.img && d.img.width === d.w && d.img.height === d.h), 'm03 menu backdrop: decor sprites unresolved or size mismatch');
 assert(game.snow.kind === 'bubble', 'm03 menu backdrop foreground is not bubble');
+probeSnow('m03 menu backdrop (16.1)');
 assert(game.world.lakes.length === 3 && game.world.lakes.every((l) => l.img && l.koi === 5), 'm03 fish schools not wired');
 assert(game.minimapBase, 'm03 minimap base missing');
 
@@ -860,6 +881,7 @@ run = 3;
 game.levelKey = 'm02';
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start did not start the m02 run');
+probeSnow('m02 run start (16.1)');
 const m02Gem = game.pickups.gemImg;
 assert(m02Gem && m02Gem.width === 24 && game.pickups.heartImg.width === 22,
   '13.10: pickup reskin (gem/heart) not applied at m02 run start');
@@ -896,6 +918,7 @@ assert(game.state === 'MENU', 'm03 run: btn-go-menu did not return to menu');
 game.levelKey = 'm03';
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start did not start the m03 run');
+probeSnow('m03 run start (16.1)');
 assert(game.pickups.gemImg && game.pickups.gemImg !== m02Gem,
   '13.10: m03 run did not reskin the pickups');
 assert(game.levelKey === 'm03' && game.level.diff === 1.56, 'm03 run did not take level m03 (diff 1.56)');
