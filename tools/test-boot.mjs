@@ -1780,6 +1780,31 @@ m03RunDone = true;
   assert(c1G.enemies.list.filter((e) => e.boss).length === 3,
     '11.10: client sees all 3 bosses in the per-step state (enemySnap boss flag, N-pipeline)');
 
+  // 11.12 — pause-on-blur in co-op (risk register: the co-op blur rule = the documented
+  // host-only pause — a client blur cannot pause the shared run; the UI says "pause is
+  // host-only"): what Game._onBlur calls on each browser, asserted here without the
+  // global blur listener (the harness doesn't fire window blur).
+  if (hostG.state === 'LEVELUP') hostG.pickCard(0); // the run must be PLAYING for the pause
+  hostG.pause();
+  assert(hostG.state === 'PAUSED', '11.12: host blur-pause did not pause the co-op run');
+  assert(c1G.state === 'PLAYING', '11.12: client stays PLAYING under a host pause (no client pause path)');
+  c1G.pause();
+  assert(c1G.state === 'PLAYING', '11.12: client pause() is a no-op (the host owns the sim)');
+  hostG.resume();
+  assert(hostG.state === 'PLAYING', '11.12: host resume did not restore PLAYING');
+
+  // 11.12 — multi-client E2E must reach VICTORY (join → run with locks + scaling →
+  // victory): pump the live 3P run from the boss wave to t = 300 (DAWN BREAKS) with
+  // all three seats alive (keepAlive per the 11.2/11.3 pattern).
+  for (let i = 0; i < 6000 && !(hostG.state === 'GAMEOVER' && hostG.victory); i++) {
+    keepAlive(hostG); keepAlive(c1G); keepAlive(c2G);
+    if (hostG.state === 'LEVELUP') hostG.pickCard(0); // the run must not park on a level-up
+    hostG.update(DT); c1G.update(DT); c2G.update(DT);
+    if (i % 20 === 19) await tick();
+  }
+  assert(hostG.state === 'GAMEOVER' && hostG.victory,
+    `11.12: 3P co-op run did not reach victory (state=${hostG.state} t=${hostG.t.toFixed(1)}s)`);
+
   for (const c of raws) c.w.close();
   await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });
 
@@ -1832,5 +1857,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
   `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · loop alive throughout`,
 );

@@ -188,6 +188,14 @@ html, body {
   left: calc(50% - var(--coop-mm) / 2 - 80px);
   transform: translateX(-100%);
 }
+/* 11.12 — co-op corner layout on small screens (mobile parity): at narrow widths the
+   BL/BR seat panels (140px min) would overlap the co-op bottom-center minimap + PAUSE
+   cluster (all anchored bottom:16px) — lift the bottom seat panels above the cluster
+   (clears the 91px-min minimap, which is 69px tall, with margin; display-only panels,
+   no touch targets moved — the ≥72 px PAUSE/DASH targets are untouched). */
+@media (max-width: 520px) {
+  #hud.coop #hud-seat-2, #hud.coop #hud-seat-3 { bottom: calc(112px + var(--safe-b)); }
+}
 
 /* ============ touch UI (shown only when body.touch is set by main.js) ============ */
 #touch-ui { position: fixed; inset: 0; z-index: 20; pointer-events: none; display: none; }

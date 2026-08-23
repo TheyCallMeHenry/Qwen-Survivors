@@ -1228,6 +1228,19 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     '11.10: the three per-level bosses are boss-flagged (Phase 13)');
 }
 
+// --- 11.12 co-op mobile parity (CSS: touch targets + small-screen corner layout) ---
+{
+  const css = readFileSync(fileURLToPath(new URL('../css/main.css', import.meta.url)), 'utf8');
+  ok(/\.hud-btn \{\s*width: 72px; height: 72px/.test(css),
+    '11.12: .hud-btn touch targets ≥72 px (PAUSE/DASH — the co-op pause beside the minimap)');
+  ok(/#hud\.coop #btn-pause \{[^}]*\}/.test(css) && !/#hud\.coop #btn-pause \{[^}]*width:/.test(css),
+    '11.12: co-op PAUSE keeps the 72×72 .hud-btn size (no smaller override in the co-op rule)');
+  const lift = css.match(/@media \(max-width: 520px\) \{\s*#hud\.coop #hud-seat-2, #hud\.coop #hud-seat-3 \{ bottom: calc\((\d+)px \+ var\(--safe-b\)\);? \}\s*\}/);
+  ok(lift, '11.12: small-screen corner layout lifts the BL/BR co-op seat panels above the bottom cluster');
+  ok(!!lift && +lift[1] >= 112,
+    '11.12: lifted seat panels clear the co-op minimap + PAUSE cluster (minimap min 91px wide → 69px tall + 16px inset + margin)');
+}
+
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);
 for (const f of fails) console.error(`  FAIL ${f}`);
 process.exit(fails.length ? 1 : 0);
