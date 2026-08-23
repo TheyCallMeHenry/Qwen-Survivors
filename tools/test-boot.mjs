@@ -160,7 +160,7 @@ const { aliveCap } = await import('../js/entities/spawner.js');
 const { getLevel } = await import('../js/world/levels.js');
 const { clamp, rand, mulberry32 } = await import('../js/utils/math.js');
 const { recomputeStats, cardOffers } = await import('../js/entities/player.js');
-const { weaponCap } = await import('../js/net/coop.js');
+const { weaponCap, bossCount } = await import('../js/net/coop.js');
 
 const canvas = byId['game'];
 const cvsEvt = (type, e) => (canvas._ls && canvas._ls[type] || []).slice().forEach((f) => f(e));
@@ -242,6 +242,7 @@ let wandOffDone = false, wandOffAsserted = false, wandOffAt = 0, wandOffKills = 
 let stickDone = false, stickUp = false, stickT = 0, stickX0 = 0;
 let dashBtnDone = false, dashBtnAsserted = false;
 let soloHudDone = false; // 11.7 solo invariance (11.11): no coop class, TL = local player
+let soloInvDone = false; // 11.11 solo invariance: a 1P run carries NO co-op overhead
 let sawBullets = false, sawBombs = false, sawFlames = false;
 let burnDone = false, burnAsserted = false, burnEnemy = null, burnKills = 0, burnAt = 0;
 let dashIFrameStep = 0, dashIFrameHp0 = 0; // 0 = not started, 1 = in flight, 2 = done
@@ -442,6 +443,25 @@ function steer() {
       assert(!byId['hud'].classList.contains('coop'), '11.7: coop class present on #hud during a solo run');
       assert(byId['hp-label'].textContent === `${Math.max(0, Math.ceil(game.player.hp))} / ${game.player.maxHp}`,
         '11.7: solo TL panel not driven by the local player');
+    }
+    if (!soloInvDone && st === 'PLAYING' && game.bossSpawned) {
+      soloInvDone = true;
+      // 11.11 — solo invariance: a 1P run carries NO co-op overhead. D57 re-read:
+      // "identical" = no co-op overhead, NOT Phase-10 stat/sprite identity — the
+      // solo baseline INCLUDES character select + the selected char's stats/weapon,
+      // so the asserts below are about net/roster/cap/boss state, not sprites.
+      assert(game.net === null && game.netRole === 'solo', '11.11: solo run is not net-free (net/netRole)');
+      assert(game.netRoster.length === 0 && game.netMyId === null, '11.11: solo run carries a roster/seat');
+      assert(game.players.length === 1 && game.remote.length === 0, '11.11: solo run has remote players');
+      assert(game.enemies.coopS === 1, '11.11: solo difficulty ramp != 1.0');
+      assert(weaponCap(1) === CFG.run.maxWeapons, '11.11: 1P weapon cap != base maxWeapons');
+      assert(bossCount(1) === 1, '11.11: 1P boss count != 1');
+      const soloBosses = game.enemies.list.filter((e) => e.boss);
+      assert(soloBosses.length === 1 && soloBosses[0].type === 'wraith', '11.11: solo m01 boss is not exactly one Wraith');
+      for (const [k, owner] of Object.entries(game.weaponOwner)) {
+        assert(owner === game.player, `11.11: solo weaponOwner "${k}" is not owned by the local player`);
+      }
+      assert(game._ownerExclusion(game.player).size === 0, '11.11: solo owner exclusion is not empty');
     }
     // 9.3a synergy E2E setup: force every requirement to max so the offer pool
     // is exactly the 5 fused cards; the LEVELUP branch above then drives the
@@ -1812,5 +1832,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
   `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) · loop alive throughout`,
 );
