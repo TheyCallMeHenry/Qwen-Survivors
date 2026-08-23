@@ -103,7 +103,7 @@ Lazy `AudioContext` (created/resumed on first user gesture — required for mobi
 
 `localStorage` key `qsurv.hiscores.v1` — top 10 `{score, time, kills, level, date}` (Phase 13: one list per level — `v1` = Map 01). Mute in `qsurv.mute`. Meta progression in `qsurv.meta.v1` — `{shards, upgrades}` (Soulshards + between-run upgrade levels). **Run-duration selection (Phase 17, 2026-08-22)** persists per level key (13.9 `scoreKeyFor` pattern; default 5:00); **level-up action uses (Phase 18)** are per-player unlock/upgrade levels in the meta store (Soulshard economy, meta.js pattern) — run-only USE counters are in-run state, never persisted.
 
-### 3.8 Multiplayer & co-op (Phase 11 — spec 2026-08-21; 11.1–11.11 implemented (2026-08-22/23); 11.12–11.13 pending — see `docs/PROGRESS.md`)
+### 3.8 Multiplayer & co-op (Phase 11 — spec 2026-08-21; 11.1–11.12 implemented (2026-08-22/23); 11.13 pending (NAS-side, D64) — see `docs/PROGRESS.md`)
 
 **Transport:** zero-dep WebSocket upgrade in `tools/serve.mjs` — port **47893 only**, bind 0.0.0.0, LAN-reachable (existing rules); no new ports, no npm deps, no external services/CDNs. One room = one run; 1–4 clients; join/leave semantics defined in the protocol.
 
