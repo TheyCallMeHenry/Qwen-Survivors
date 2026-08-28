@@ -13,6 +13,27 @@
 
 ## Entries (newest first)
 
+### 2026-08-28 11:09 -04:00 — Playtest defect report (3 items) against the published GitHub Pages build — docs-only turn
+- **Received:** 2026-08-28 11:09 -04:00 (no time in message; system time at capture)
+- **Classification:** `bug report`
+- **Context:** User's only test channel = the published GitHub Pages build; three defect reports; docs-only turn per user instruction.
+- **Verbatim input:**
+
+```
+**NOTE:** I don't see the features of the updated version in the playable GitHub Pages version of the game - this is how I perform all testing.
+
+**Additional Notes:**
+Qwen Survivors Bugs:
+1. The visual effects / sprites for some of the weapons are no longer visible (*and possibly not causing damage - uncertain*), including the garlic, aegis blades, and possibly others (*unless confirmed correct sprite appear in the below listed weapons*).
+Confirmed still working (*purely based on visuals still appearing correctly - damage/effects should still be carefully reviewed*): Twin Fangs, Spectral Axe, Moonbolt Wand, Sunder Bombs, Pyre Lance
+
+2. If an exp shard gets dropped in a place completely inaccessible/unreachable by the player - i.e.: the middle of the ice pond and/or any other potentially non-player-character-traversable spots - then the shard should get pushed away from the center of the non-player-character-traversable spot until it reaches the outer perimeter/edge of the non-player-character-traversable spot.
+
+3. Exp shards on M03 are too similar in color to the health/heart pick-ups making it difficult for the player to discern the difference while playing.
+
+**UPDATE ALL NECESSARY DOCUMENTATION APPROPRIATELY *ONLY* - DO NOT BEGIN IMPLEMENTING FIXES IN THIS TURN.**
+```
+
 ### 2026-08-28 — Approve commit + push of the DSH workspace access doc fixes
 
 **Received:** 2026-08-28 (no time in message; date only)
