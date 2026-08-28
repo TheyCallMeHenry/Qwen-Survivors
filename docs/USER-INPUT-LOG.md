@@ -13,6 +13,30 @@
 
 ## Entries (newest first)
 
+### 2026-08-28 — Approve commit + push of the DSH workspace access doc fixes
+
+**Received:** 2026-08-28 (no time in message; date only)
+**Classification:** `answer/approval`
+**Context:** Approves committing and pushing the AGENTS.md/PROGRESS.md/input-log changes from the malformed-cwd investigation.
+**Verbatim input:**
+
+```
+yes
+```
+
+### 2026-08-28 — Malformed workspace cwd report (duplicated C:\Users\ajbro prefix) from a separate DSH session
+
+**Received:** 2026-08-28 (no time in message; date only)
+**Classification:** `bug report`
+**Context:** User pasted a separate DSH session's report that its working directory does not exist on disk.
+**Verbatim input:**
+
+```
+The following is from a separate session where I attempted to perform development work within this DeepSeek Harness on the linked project:
+
+The reported working directory doesn't actually exist on disk — the path has a duplicated `C:\Users\ajbro\` segment, which looks malformed. Let me find where the project actually lives.
+```
+
 ### 2026-08-28 09:18 EDT — DSH environment documentation request (junction access + future-session docs)
 
 **Received:** 2026-08-28 09:18 EDT

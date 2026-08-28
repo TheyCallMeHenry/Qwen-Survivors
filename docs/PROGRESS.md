@@ -461,7 +461,7 @@ User spec (verbatim, PLAN §3.13): **Weapons:** Tank Cannon · Continuous laser 
 ## Environment & Known Caveats
 
 - **Shell:** PowerShell (pwsh) on Windows via DeepSeek Harness (since 2026-08-28; node v24.11.0) — shell substitutions work. Earlier Zed-era caveat (Git Bash, no substitutions) is obsolete.
-- **DSH workspace = junction:** the DSH WebGUI folder picker only lists C: paths → open `C:\Users\ajbro\DeepSeekHarness-STUFF\LINKED-Qwen-Survivors` (junction → `D:\Apps\Qwen-Survivors`, **not a copy** — see AGENTS.md "Environment & Access"). All real files live on D:; the recipes in this section still point at the real D: paths.
+- **DSH workspace = D: path:** register the DSH workspace at `D:\Apps\Qwen-Survivors` (the picker's path editor accepts absolute paths; the C: junction is an equivalent entry — `fs.realpath` collapses both spellings to the same workspace; see AGENTS.md "Environment & Access"). A session cwd with a duplicated `C:\Users\ajbro\` prefix is a stale dead registration (phantom nested tree, since removed) — re-register the workspace; do not patch the path. The recipes in this section still point at the real D: paths.
 - **No Node `fetch`** in throwaway drivers (undici keep-alive → libuv teardown assert on Windows) → use `node:http` + `keepAlive:false`.
 - **No argv[1]-vs-`import.meta.url` gates** in `.mjs` entrypoints (MSYS path normalization).
 - **Detached server recipe:** `powershell.exe -NoProfile -Command "Start-Process -FilePath node -ArgumentList 'tools/serve.mjs' -WorkingDirectory 'D:\Apps\Qwen-Survivors' -RedirectStandardOutput 'D:\Apps\Qwen-Survivors\server.log' -RedirectStandardError 'D:\Apps\Qwen-Survivors\server-err.log' -WindowStyle Hidden"` · Stop: `netstat -ano | findstr 47893` → kill the node PID.
