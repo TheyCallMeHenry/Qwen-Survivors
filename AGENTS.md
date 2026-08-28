@@ -2,6 +2,15 @@
 
 Applies to every agent session in this repo. Overrides personal defaults where stricter.
 
+## Environment & Access (this machine — read first)
+
+- **Real location:** `D:\Apps\Qwen-Survivors` (Windows, secondary drive). All real files live there — there is no C: copy, and never create one.
+- **DSH workspace = junction:** `C:\Users\ajbro\DeepSeekHarness-STUFF\LINKED-Qwen-Survivors` is a Windows **junction → `D:\Apps\Qwen-Survivors`**. The DSH WebGUI folder picker only lists C: paths, so select the junction path as the workspace; every read/write through it lands on D:.
+- **Junction repair (no admin needed):** if missing/broken — remove any placeholder at the C: path, then `New-Item -ItemType Junction -Path 'C:\Users\ajbro\DeepSeekHarness-STUFF\LINKED-Qwen-Survivors' -Target 'D:\Apps\Qwen-Survivors'`. Never `mklink` without `/J` (symlinks need elevation). Deleting the junction removes only the link, never the D: files.
+- **Git:** `origin` = `https://github.com/TheyCallMeHenry/Qwen-Survivors.git` (**public** repo — never commit user-private content). Branches: `main` + per-night work branches `overnight-YYYY-MM-DD`. Commit/push only when the user explicitly asks (rule 7).
+- **Off-limits:** never read, modify, or commit `human-user-notes_AI-agent-ignore/` (user's private notes; gitignored). `D:\Apps\Qwen-Survivors-backups` (outside the repo) is user backup material — do not touch.
+- **Session start:** this file → `docs/PROGRESS.md` (Status → active resume notes) → propose the next step(s) → user confirms → implement. Before any tick: all three gates green (baselines in PROGRESS "How to Resume a Session").
+
 ## Non-negotiables
 
 1. **`docs/PROGRESS.md` is the law.** A task/step/phase is NOT complete until its checkbox is ticked in `docs/PROGRESS.md` with a date + one-line note. Update it *before* declaring anything done. Zero exceptions. Keep it lean — it is loaded every session: Status + Master Checklist + *active* resume notes only, one line per session in the log; no API dumps, line refs, or kept-for-reference blocks (the code is the implementation record).

@@ -13,6 +13,17 @@
 
 ## Entries (newest first)
 
+### 2026-08-28 09:18 EDT — DSH environment documentation request (junction access + future-session docs)
+
+**Received:** 2026-08-28 09:18 EDT
+**Classification:** `process rule`
+**Context:** Junction to the D: project created; user wants durable docs so future DSH sessions work the project correctly.
+**Verbatim input:**
+
+```
+Please generate instructional/informative documentation - whatever would be necessary to ensure future sessions within DeepSeek Harness will automatically understand how to correctly, effectively, and optimally perform the necessary development and implementation work.
+```
+
 ### 2026-08-23 — 11.9 rescope: mute reposition dropped (mute lives in Pause Settings)
 
 **Received:** 2026-08-23 (no time in message; date only)
