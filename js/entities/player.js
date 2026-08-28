@@ -33,7 +33,7 @@ export class Player {
     this.animT = 0; this.frameIdx = 0; this.moving = false; this.flip = false;
     this.dead = false;
     this._wandCd = 0; this._axeCd = 0;
-    this._pistolCd = 0; this._bombCd = 0;
+    this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0;
     this._garlicT = 0; this._orbitT = 0; this._tempestT = 0;
     this._flame = { fuel: 0, reloading: false };
     this._flameAng = 0;
@@ -64,7 +64,7 @@ export class Player {
     this.animT = 0; this.frameIdx = 0; this.moving = false; this.flip = false;
     this.dead = false;
     this._wandCd = 0; this._axeCd = 0;
-    this._pistolCd = 0; this._bombCd = 0;
+    this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0;
     this._garlicT = 0; this._orbitT = 0; this._tempestT = 0;
     this._flame = { fuel: 0, reloading: false };
     this._flameAng = 0;
@@ -247,6 +247,19 @@ export class Player {
         }
       }
     }
+    if (this.weapons.bow) {
+      const S = W.bow.levels[this.weapons.bow - 1];
+      this._bowCd -= dt;
+      if (this._bowCd <= 0) {
+        const e = this._nearest(enemies, CFG.combat.wandRange);
+        if (e) {
+          const sy = this._spawnY();
+          const ang = Math.atan2(e.y - sy, e.x - this.x);
+          combat.fireArrow(this.x, sy, ang, S.dmg * this.dmgMul, this);
+          this._bowCd = S.rate;
+        }
+      }
+    }
   }
 
   // The two closest live enemies within range (for the twin pistols' 2-direction shot).
@@ -358,6 +371,10 @@ const WEAPON_FIELDS = {
     ['range', (v) => `range ${v}`, (a, b) => `range ${a}→${b}`],
     ['fuel', (v) => `fuel ${fmtS(v)} s`, (a, b) => `fuel ${fmtS(a)}→${fmtS(b)} s`],
     ['recharge', (v) => `recharge ${fmtS(v)} s`, (a, b) => `recharge ${fmtS(a)}→${fmtS(b)} s`],
+  ],
+  bow: [
+    ['rate', (v) => `every ${fmtS(v)} s`, (a, b) => `rate ${fmtS(a)}→${fmtS(b)} s`],
+    ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
   ],
 };
 

@@ -229,6 +229,12 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     if (b.tick < a.tick || b.dot < a.dot || b.range < a.range || b.fuel < a.fuel || b.recharge > a.recharge) flaOk = false;
   }
   ok(flaOk, 'weapons.flame: tick↑ dot↑ range↑ fuel↑ recharge↓');
+  let bowOk = true;
+  for (let i = 1; i < 5; i++) {
+    const a = L('bow')[i - 1], b = L('bow')[i];
+    if (b.dmg < a.dmg || b.rate > a.rate) bowOk = false;
+  }
+  ok(bowOk, 'weapons.bow: dmg non-decreasing, rate non-increasing');
 }
 
 // --- Passives / character starting weapons / boss / spawner weights ---
@@ -296,13 +302,13 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     '11.5.2: other-owned weapons never offered (pool = bombs/flame + phoenix only)');
   // Cap drives the new-weapon slots. Owned weapons MAXED (no upgrade cards) with incomplete synergy
   // pairs (no garlic/blades/flame → no weapon synergies); passives maxed (phoenix IS gated — the only
-  // 4th pool item). Cap 5: pool = {garlic:1, blades:1, flame:1, phoenix}. Cap 4 (2P): new-weapon
-  // slots closed → pool = {phoenix} only.
+  // non-weapon pool item). Cap 5: pool = {garlic:1, blades:1, flame:1, bow:1, phoenix} (12.2: bow
+  // joins the roster). Cap 4 (2P): new-weapon slots closed → pool = {phoenix} only.
   const w4 = { wand: 5, axe: 5, pistols: 5, bombs: 5 };
   for (let seed = 1; seed <= 3; seed++) {
     const draw = cardOffers(w4, allPassMax, {}, mulberry32(seed), 5);
     ok(draw.length === 3 && draw.every((c) => (c.kind === 'weapon' && c.level === 1
-        && (c.key === 'garlic' || c.key === 'blades' || c.key === 'flame'))
+        && (c.key === 'garlic' || c.key === 'blades' || c.key === 'flame' || c.key === 'bow'))
         || (c.kind === 'synergy' && c.key === 'phoenix')), `11.5.2: cap 5 → new-weapon slots open (seed ${seed})`);
   }
   const cap4 = cardOffers(w4, allPassMax, {}, mulberry32(1), 4);
@@ -391,6 +397,45 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   for (const key of Object.keys(CFG.meta.upgrades))
     for (let L = 1; L <= CFG.meta.upgrades[key].max; L++)
       ok(cardEffectText('meta', key, L).length > 0, `cardEffectText coverage: meta ${key} L${L}`);
+}
+
+// --- 12.2: Bow & Arrow — fast single-target arrow (Combat, Node-safe) ---
+{
+  const C = CFG.combat;
+  ok(CFG.weapons.bow.levels.length === 5, '12.2: bow has a 5-level table');
+  ok(cardEffectText('weapon', 'bow', 1) === 'every 0.55 s · 16 dmg', '12.2: bow L1 exact-effect line');
+  ok(cardEffectText('weapon', 'bow', 2) === 'rate 0.55→0.48 s · dmg 16→21', '12.2: bow L2 delta line');
+  const c = new Combat();
+  const owner = { x: 0, y: 0, vx: 0, vy: 0 };
+  const mkEnemy = (x) => ({ x, y: 100, r: 12, hp: 100, maxHp: 100, flash: 0, vx: 0, vy: 0, dead: false });
+  const e = mkEnemy(160);
+  const e2 = mkEnemy(176); // beyond e on the flight path — reachable only if the arrow PIERCED e (next step, dist 12 < 16)
+  c.fireArrow(100, 100, 0, 16, owner);
+  ok(c.arrows.length === 1, '12.2: fireArrow pushes one arrow');
+  const a0 = c.arrows[0];
+  ok(a0.x === 100 && a0.y === 100 && a0.vx === C.arrowSpeed && a0.vy === 0 && a0.dmg === 16 && a0.owner === owner,
+    '12.2: arrow spawns at the origin at arrowSpeed along the aim, dmg/owner carried');
+  const grid = { grid: { near: () => [e, e2] }, list: [e, e2] };
+  let steps = 0;
+  while (c.arrows.length && steps < 30) { c.update(1 / 60, [], grid); steps++; }
+  ok(steps < 30 && c.arrows.length === 0, '12.2: the arrow is consumed on its first hit');
+  ok(e.hp === 84 && e.vx === C.arrowKb && e.vy === 0, '12.2: hit applies dmg + knockback along the flight direction');
+  ok(e2.hp === 100 && e2.vx === 0, '12.2: no pierce — the enemy beyond e is untouched (Heart-Piercer 12.6 adds pierce)');
+  // empty flight → life expiry (no stray arrows)
+  c.fireArrow(100, 100, 0, 16, owner);
+  const empty = { grid: { near: () => [] }, list: [] };
+  for (let i = 0; i < 90 && c.arrows.length; i++) c.update(1 / 60, [], empty);
+  ok(c.arrows.length === 0, '12.2: unhit arrow expires by life');
+  // Pitfall invariant (source-level, canvas-free): every CFG icon name must exist in buildIcons()
+  // — the card DOM draws icons[def.icon] unguarded (browser crash class).
+  const src = readFileSync(new URL('../js/art/items.js', import.meta.url), 'utf8');
+  const iconNames = new Set([
+    ...Object.values(CFG.weapons).map((w) => w.icon),
+    ...Object.values(CFG.synergies).map((s) => s.icon),
+    ...Object.values(CFG.passives).map((p) => p.icon),
+  ]);
+  ok([...iconNames].every((n) => new RegExp(`icons\\.${n}\\s*=`).test(src)),
+    '12.2: every CFG icon name (incl. bow) exists in buildIcons()');
 }
 
 // --- Phase 9: meta progression (pure) ---
@@ -863,7 +908,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
 
 // --- 11.2 host-authoritative sync: snapshot codec + per-player ownership ---
 {
-  ok(WEAPON_KEYS.length === 7 && PASSIVE_KEYS.length === 5 && SYNERGY_KEYS.length === 5 && ENEMY_KEYS.length === 9,
+  ok(WEAPON_KEYS.length === 8 && PASSIVE_KEYS.length === 5 && SYNERGY_KEYS.length === 5 && ENEMY_KEYS.length === 9,
     '11.2: key tables follow CFG order/counts');
 
   const p = new Player({});
@@ -873,7 +918,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   applyCard(p, { kind: 'synergy', key: 'blight', level: 1 });
   p.xp = 12.345; p.hp = 55.55; p.dashT = 0.333; p.dashCd = 1.666; p.flip = true;
   const ps = playerSnap(p);
-  ok(ps.length === 26, '11.2: playerSnap is 26 slots');
+  ok(ps.length === 27, '11.2: playerSnap is 27 slots (SNAP_V=2)');
   const p2 = new Player({});
   p2.reset(0, 0);
   applyPlayerSnap(p2, ps);
@@ -1093,8 +1138,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     ok(JSON.stringify(mkDeal(n, 1234)) === JSON.stringify(d), `11.6.3: ${n}P — seeded determinism`);
   }
   const d4 = mkDeal(4, 99);
-  ok(d4.length === 4 && d4[0].length === 2 && d4[1].length === 2 && d4[2].length === 2 && d4[3].length === 1,
-    `11.6.3: 4P × 2 = 8 > roster ${nRoster} → 2/2/2/1 (last seat gets the remainder)`);
+  ok(d4.length === 4 && d4[0].length === 2 && d4[1].length === 2 && d4[2].length === 2 && d4[3].length === 2,
+    `11.6.3: 4P × 2 = 8 = roster ${nRoster} (12.2: bow) → 2/2/2/2 (exact fill, no remainder)`);
   ok(new Set(d4.flat()).size === d4.flat().length, '11.6.3: 4P — still never duplicated across players');
   ok(JSON.stringify(mkDeal(4, 100)) !== JSON.stringify(mkDeal(4, 99)), '11.6.3: seed varies the deal');
 

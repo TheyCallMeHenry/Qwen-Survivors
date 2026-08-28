@@ -170,6 +170,27 @@ function bulletSprite() {
   return c;
 }
 
+function arrowSprite() {
+  // 12.2: Bow & Arrow arrow — straight shaft, pointed tip, rear fletching
+  const c = makeCanvas(30, 12);
+  const g = c.getContext('2d');
+  g.strokeStyle = '#c9b08a';
+  g.lineWidth = 2.4;
+  g.lineCap = 'round';
+  g.beginPath(); g.moveTo(4, 6); g.lineTo(22, 6); g.stroke();
+  g.fillStyle = '#e8eefc';
+  g.beginPath(); g.moveTo(29, 6); g.lineTo(21, 2.6); g.lineTo(21, 9.4); g.closePath(); g.fill();
+  g.strokeStyle = '#e8b45a';
+  g.lineWidth = 1.6;
+  g.beginPath();
+  g.moveTo(4, 6); g.lineTo(7, 3.2);
+  g.moveTo(6.5, 6); g.lineTo(9.5, 3.2);
+  g.moveTo(4, 6); g.lineTo(7, 8.8);
+  g.moveTo(6.5, 6); g.lineTo(9.5, 8.8);
+  g.stroke();
+  return c;
+}
+
 function bombSprite() {
   // Cartoon bomb: round black sphere, curved fuse wire out of the top, spark
   const c = makeCanvas(30, 34);
@@ -370,6 +391,26 @@ export function buildIcons() {
     g.beginPath(); g.arc(53, 32, 3, 0, TAU); g.fill();
     g.beginPath(); g.arc(19, 40, 3, 0, TAU); g.fill();
   });
+  icons.bow = make((g) => {
+    // 12.2: drawn bow (limb + string) with a nocked arrow
+    g.strokeStyle = '#8a6a3a'; g.lineWidth = 5; g.lineCap = 'round';
+    g.beginPath(); g.arc(26, 36, 24, -Math.PI * 0.42, Math.PI * 0.42); g.stroke();
+    const tx = 26 + 24 * Math.cos(Math.PI * 0.42), ty = 36 + 24 * Math.sin(Math.PI * 0.42);
+    g.strokeStyle = 'rgba(230,235,250,0.8)'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(26 + 24 * Math.cos(-Math.PI * 0.42), 36 - 24 * Math.sin(Math.PI * 0.42));
+    g.lineTo(tx, ty); g.stroke();
+    g.strokeStyle = '#c9b08a'; g.lineWidth = 3.4;
+    g.beginPath(); g.moveTo(22, 36); g.lineTo(48, 36); g.stroke();
+    g.fillStyle = '#e8eefc';
+    g.beginPath(); g.moveTo(58, 36); g.lineTo(47, 31.5); g.lineTo(47, 40.5); g.closePath(); g.fill();
+    g.strokeStyle = '#e8b45a'; g.lineWidth = 1.8;
+    g.beginPath();
+    g.moveTo(22, 36); g.lineTo(27, 32.5);
+    g.moveTo(24.5, 36); g.lineTo(29.5, 32.5);
+    g.moveTo(22, 36); g.lineTo(27, 39.5);
+    g.moveTo(24.5, 36); g.lineTo(29.5, 39.5);
+    g.stroke();
+  });
   icons.bombs = make((g) => {
     g.strokeStyle = '#c9a35c'; g.lineWidth = 3; g.lineCap = 'round';
     g.beginPath(); g.moveTo(36, 22); g.quadraticCurveTo(40, 12, 50, 10); g.stroke();
@@ -537,6 +578,7 @@ export function buildItems() {
     boomerang: boomerangSprite(),
     blade: bladeSprite(),
     bullet: bulletSprite(),
+    arrow: arrowSprite(),
     bomb: bombSprite(),
     flame: flameSprite(),
     explosion: explosionSprite(),

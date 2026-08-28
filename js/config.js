@@ -144,6 +144,18 @@ export const CFG = {
         { tick: 16, dot: 10, dotDur: 3.6, range: 380, fuel: 8.0, recharge: 5.0 },
       ],
     },
+    bow: {
+      name: 'Bow & Arrow',
+      desc: 'Looses a fast arrow at the nearest foe.',
+      icon: 'bow',
+      levels: [
+        { rate: 0.55, dmg: 16 },
+        { rate: 0.48, dmg: 21 },
+        { rate: 0.42, dmg: 27 },
+        { rate: 0.36, dmg: 34 },
+        { rate: 0.30, dmg: 42 },
+      ],
+    },
   },
 
   // Weapon/passive synergies: a single-level card offered only when every
@@ -236,6 +248,9 @@ export const CFG = {
     bulletSpeed: 720, bulletLife: 0.8, bulletR: 4, bulletKb: 120, pistolRange: 520,
     // Sunder Bombs (lob arc + fuse pause before AOE)
     bombDist: 240, bombMin: 120, bombFly: 0.55, bombH: 70, bombKb: 260, bombFlash: 0.4,
+    // Bow & Arrow (12.2): fast single-target arrow at the nearest foe — straight
+    // flight, one hit (no pierce; Heart-Piercer 12.6 adds that), mid-torso origin (16.2)
+    arrowSpeed: 640, arrowLife: 1.4, arrowR: 4, arrowKb: 150,
     // Pyre Lance flame sprites (flow-y drag/rise + wobble, grow-then-fade)
     // 16.3: front speed exactly 2x the pre-16.3 build (260/80) + lifetime trimmed
     // 0.65 -> 0.33 => mean stream reach exactly +33% (94.6 -> 125.8 px, drag

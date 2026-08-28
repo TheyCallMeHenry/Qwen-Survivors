@@ -75,6 +75,7 @@ export class Game {
     this.combat.onHurt = (dmg, pl) => this._onHurt(dmg, pl);
     this.combat.onDeath = (pl) => this._onDeath(pl);
     this.combat.bulletImg = items.bullet;
+    this.combat.arrowImg = items.arrow;
     this.combat.bombImg = items.bomb;
     this.combat.flameImg = items.flame;
     this.combat.explosionImg = items.explosion;

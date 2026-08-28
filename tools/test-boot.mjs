@@ -7,7 +7,7 @@
 // user's path: btn-start click → run 1 (stand still → level-up cards → heart
 // pickup → forced death) → meta flow (gameover saves Soulshards → menu →
 // Upgrades screen: assert rows/shards, buy Vitality, back) → run 2 via
-// btn-start (meta maxHp 80 applied (mage 60 + 20) → kept alive → all 7 weapons via forced
+// btn-start (meta maxHp 80 applied (mage 60 + 20) → kept alive → all 8 weapons via forced
 // card picks → wand-off kill window → bullets/bombs/flames observed → burn
 // DoT kill → dash i-frame E2E → touch stick + dash button → synergy E2E:
 // all-max → blight card drawn + picked → wraith boss at 4:00 → victory at
@@ -161,6 +161,7 @@ const { getLevel } = await import('../js/world/levels.js');
 const { clamp, rand, mulberry32 } = await import('../js/utils/math.js');
 const { recomputeStats, cardOffers } = await import('../js/entities/player.js');
 const { weaponCap, bossCount } = await import('../js/net/coop.js');
+const { SNAP_V } = await import('../js/net/sync.js');
 
 const canvas = byId['game'];
 const cvsEvt = (type, e) => (canvas._ls && canvas._ls[type] || []).slice().forEach((f) => f(e));
@@ -243,7 +244,7 @@ let stickDone = false, stickUp = false, stickT = 0, stickX0 = 0;
 let dashBtnDone = false, dashBtnAsserted = false;
 let soloHudDone = false; // 11.7 solo invariance (11.11): no coop class, TL = local player
 let soloInvDone = false; // 11.11 solo invariance: a 1P run carries NO co-op overhead
-let sawBullets = false, sawBombs = false, sawFlames = false;
+let sawBullets = false, sawBombs = false, sawFlames = false, sawArrows = false;
 let burnDone = false, burnAsserted = false, burnEnemy = null, burnKills = 0, burnAt = 0;
 let dashIFrameStep = 0, dashIFrameHp0 = 0; // 0 = not started, 1 = in flight, 2 = done
 let synActive = false, synDone = false, synRetries = 0;
@@ -309,7 +310,7 @@ function steer() {
       cards[0].click();
       return;
     }
-    const missing = ['axe', 'garlic', 'blades', 'pistols', 'bombs', 'flame'].filter((k) => !game.player.weapons[k]);
+    const missing = ['axe', 'garlic', 'blades', 'pistols', 'bombs', 'flame', 'bow'].filter((k) => !game.player.weapons[k]);
     if (missing.length) {
       // the starting weapon is wand (mage default) — force the other weapons
       // through the real pickCard/applyCard pipeline (the click still goes through the card DOM).
@@ -408,6 +409,7 @@ function steer() {
       if (!sawBullets && game.combat.bullets.length > 0) sawBullets = true;
       if (!sawBombs && game.combat.bombs.length > 0) sawBombs = true;
       if (!sawFlames && game.combat.flames.length > 0) sawFlames = true;
+      if (!sawArrows && game.combat.arrows.length > 0) sawArrows = true;
     }
     if (!stickDone && st === 'PLAYING' && game.t >= 60) {
       stickDone = true; stickT = game.t; stickX0 = p.x;
@@ -474,7 +476,7 @@ function steer() {
       game.levelupQueue = 1;
     }
     // 10.4 — one-shot worst-case multi-hit bench (5 s in-game window, run 2):
-    // all 7 weapons L5 + all passives max + 5/5 synergies + aliveCap dummies
+    // all 8 weapons L5 + all passives max + 5/5 synergies + aliveCap dummies
     // kept in a 150-450 px ring around the player (maxed weapons keep the
     // ring turning over → sustained mass-damage + mass-kill bursts). Logs
     // update vs render vs hud+screens ms — the 10.4 before/after contract.
@@ -547,7 +549,7 @@ function steer() {
           .map((k) => `${k}=${((drawOps[k] - bench.ops0[k]) / bench.nRen).toFixed(1)}`)
           .join(' ');
         console.log(
-          `[10.4-bench] 5 s worst-case (7 weapons L5 + passives max + 5/5 synergies, ${maxEnemies} enemies peak): ` +
+          `[10.4-bench] 5 s worst-case (8 weapons L5 + passives max + 5/5 synergies, ${maxEnemies} enemies peak): ` +
           `update=${(bench.upd / bench.nUpd).toFixed(3)} ms/step (n=${bench.nUpd}) · ` +
           `render=${(bench.ren / bench.nRen).toFixed(3)} ms/frame (n=${bench.nRen}) · ` +
           `hud+screens=${(bench.dom / bench.nRen).toFixed(3)} ms/frame · ` +
@@ -809,7 +811,7 @@ run = 2;
 wandOffDone = wandOffAsserted = false; wandOffAt = 0; wandOffKills = 0; wandLv = 1;
 stickDone = stickUp = false; stickT = 0; stickX0 = 0;
 dashBtnDone = dashBtnAsserted = false;
-sawBullets = sawBombs = sawFlames = false;
+sawBullets = sawBombs = sawFlames = sawArrows = false;
 burnDone = burnAsserted = false; burnEnemy = null; burnKills = 0; burnAt = 0;
 dashIFrameStep = 0; dashIFrameHp0 = 0;
 synActive = synDone = false; synRetries = 0;
@@ -1020,6 +1022,12 @@ m03RunDone = true;
   assert(g2.combat.flames.length > 0 && g2.combat.flames.every((fl) => fl.y === sy162 && fl.x === p2.x),
     '16.2: flame emission origin at mid-torso');
   g2.combat.flames.length = 0; tick162();
+  // bow: arrow spawn origin = mid-torso (12.2)
+  p2.weapons.bow = 1; p2._bowCd = 0;
+  fire162();
+  assert(g2.combat.arrows.length > 0 && g2.combat.arrows[0].y === sy162 && g2.combat.arrows[0].x === p2.x,
+    '16.2: arrow spawned at mid-torso');
+  g2.combat.arrows.length = 0; tick162();
   // blades: orbit center = mid-torso (16.2) — the feet-level orbit point must NOT
   // be sheared, the mid-torso one must (rad = the level-1 orbit radius; _orbitT
   // starts 0 → after one tick the blade sits ~0.04 rad past +x at radius rad).
@@ -1283,7 +1291,7 @@ m03RunDone = true;
   assert(hostG.enemies.list.some((e) => !e.boss)
     && hostG.enemies.list.every((e) => e.boss || Math.abs(e.maxHp - CFG.enemies[e.type].hp * S3) < 1e-6),
     '11.3: 3P host spawn — every non-boss enemy maxHp = base × coopScale(3) (boss same ramp, Q7)');
-  assert(lastSt.v === 1 && lastSt.step > 100 && lastSt.score >= 0,
+  assert(lastSt.v === SNAP_V && lastSt.step > 100 && lastSt.score >= 0,
     '11.2: state relayed with v/step fields (relay passthrough)');
   assert(c1G.enemies.list.length > 0, '11.2: client applied enemy snapshots');
   const seat1 = hostG.players[1]; // c1G is seat 1 (join order)
@@ -1839,7 +1847,7 @@ m03RunDone = true;
 assert(keyPickDone, 'keyboard card pick never exercised');
 assert(heartDone && heartAsserted, 'heart pickup path never exercised');
 assert(wandOffDone && wandOffAsserted, 'wand-off kill window never exercised');
-assert(sawBullets && sawBombs && sawFlames, 'new-weapon projectiles (bullets/bombs/flames) never observed');
+assert(sawBullets && sawBombs && sawFlames && sawArrows, 'new-weapon projectiles (bullets/bombs/flames/arrows) never observed');
 assert(burnDone && burnAsserted, 'burn DoT kill path never exercised');
 assert(dashIFrameStep === 2, 'dash i-frame E2E never completed');
 assert(synDone, 'synergy E2E (blight) never completed');
@@ -1855,7 +1863,7 @@ assert(JSON.parse(localStorage.getItem(CFG.scores.storageKey) || '[]').length ==
 console.log(
   `PASS boot-sim — runs=4 (death + victory + m02 + m03) · level-ups=${levelUps} · max enemies alive=${maxEnemies} · ` +
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
-  `boss spawned · pause/resume + mute · card pick via click + key 1 · all 7 weapons (wand-off kill window) · ` +
-  `pistols/bombs/flame projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
+  `boss spawned · pause/resume + mute · card pick via click + key 1 · all 8 weapons (wand-off kill window) · ` +
+  `pistols/bombs/flame/arrows projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
   `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · loop alive throughout`,
 );

@@ -13,6 +13,7 @@ export class Combat {
     this.bullets = [];
     this.bombs = [];
     this.flames = [];
+    this.arrows = [];
     this.explosions = [];
     this.t = 0;
     this.enemies = null;
@@ -22,6 +23,7 @@ export class Combat {
     this.bulletImg = null;
     this.bombImg = null;
     this.flameImg = null;
+    this.arrowImg = null;
     this.explosionImg = null;
     this.onKill = null;   // (enemy) — set by game: score/gems/particles/hit-stop
     this.onHurt = null;   // () — set by game: shake/flash
@@ -40,6 +42,7 @@ export class Combat {
     this.bullets.length = 0;
     this.bombs.length = 0;
     this.flames.length = 0;
+    this.arrows.length = 0;
     this.explosions.length = 0;
     this.t = 0;
     this._orbCd.clear();
@@ -89,6 +92,19 @@ export class Combat {
     });
   }
 
+  // 12.2: fast single-target arrow (no pierce — Heart-Piercer 12.6 adds that).
+  fireArrow(x, y, ang, dmg, owner = null) {
+    const C = CFG.combat;
+    this.arrows.push({
+      x, y,
+      vx: Math.cos(ang) * C.arrowSpeed,
+      vy: Math.sin(ang) * C.arrowSpeed,
+      rot: ang, dmg, owner,
+      hit: new Set(),
+      life: C.arrowLife,
+    });
+  }
+
   fireBomb(x, y, ang, dist, dmg, radius, fuse, napalm = null, owner = null) {
     const C = CFG.combat;
     const tx = x + Math.cos(ang) * dist;
@@ -129,6 +145,7 @@ export class Combat {
     this.t += dt;
     this._bolts(dt, enemies);
     this._bullets(dt, enemies);
+    this._arrows(dt, enemies);
     this._axes(dt, enemies);
     this._bombs(dt, enemies);
     this._flames(dt, enemies);
@@ -168,6 +185,32 @@ export class Combat {
         }
       }
       if (gone) this.bolts.splice(i, 1);
+    }
+  }
+
+  // 12.2: straight flight, first hit ends it (no pierce). Knockback along the
+  // arrow's own velocity (constant speed → unit direction).
+  _arrows(dt, enemies) {
+    const C = CFG.combat;
+    for (let i = this.arrows.length - 1; i >= 0; i--) {
+      const a = this.arrows[i];
+      a.x += a.vx * dt;
+      a.y += a.vy * dt;
+      a.life -= dt;
+      let gone = a.life <= 0 || a.x < 0 || a.x > CFG.world.w || a.y < 0 || a.y > CFG.world.h;
+      if (!gone) {
+        for (const e of enemies.grid.near(a.x, a.y)) {
+          if (e.dead || a.hit.has(e)) continue;
+          const rr = e.r + C.arrowR;
+          const dx = e.x - a.x, dy = e.y - a.y;
+          if (dx * dx + dy * dy >= rr * rr) continue;
+          a.hit.add(e);
+          this.damageEnemy(e, a.dmg, a.vx / C.arrowSpeed, a.vy / C.arrowSpeed, C.arrowKb, a.owner);
+          gone = true;
+          break;
+        }
+      }
+      if (gone) this.arrows.splice(i, 1);
     }
   }
 
@@ -449,6 +492,13 @@ export class Combat {
       ctx.translate(b.x, b.y);
       ctx.rotate(b.rot);
       ctx.drawImage(this.bulletImg, -this.bulletImg.width / 2, -this.bulletImg.height / 2);
+      ctx.restore();
+    }
+    if (this.arrowImg) for (const a of this.arrows) {
+      ctx.save();
+      ctx.translate(a.x, a.y);
+      ctx.rotate(a.rot);
+      ctx.drawImage(this.arrowImg, -this.arrowImg.width / 2, -this.arrowImg.height / 2);
       ctx.restore();
     }
     if (this.bombImg) for (const b of this.bombs) {
