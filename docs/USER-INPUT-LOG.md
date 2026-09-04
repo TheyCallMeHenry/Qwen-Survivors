@@ -13,6 +13,83 @@
 
 ## Entries (newest first)
 
+### 2026-09-04 — Approval: commit the current (partial Phase 22) work
+- **Received:** 2026-09-04 (no time in message; date only)
+- **Classification:** `answer/approval`
+- **Context:** Answers the session's flagged commit/publish decision (rule 7) — commit authorized; push/publish not requested.
+- **Verbatim input:**
+
+```
+Go ahead and commit.
+```
+
+
+### 2026-09-04 — Approval: proceed with recommended plan (Phase 22, 22.1 first)
+- **Received:** 2026-09-04 (no time in message; date only)
+- **Classification:** `answer/approval`
+- **Context:** Answers the session's pending question — approves Phase 22 (22.1 audit first, then 22.2/22.3/22.4), incl. AGENTS.md restore finding.
+- **Verbatim input:**
+
+```
+Yes, proceed according to your recommended plan.
+```
+
+
+### 2026-09-04 — Session kick-off + new ask: codebase-improvement assessment alongside next-step proposal
+- **Received:** 2026-09-04 (no time in message; date only)
+- **Classification:** `process rule`
+- **Context:** Kick-off prompt WITH substantive addition — wants improvement areas from a codebase assessment, not just next-step proposal.
+- **Verbatim input:**
+
+```
+Please review this project's documentation to get up-to-speed on the current status of development and implementation then propose your recommendation for the step(s) we should complete within this new session - including areas of potential improvement based on your assessment of the current codebase.
+```
+
+
+### 2026-08-28 — Research: smarter alternative to the verbatim user-input capture rule
+- **Received:** 2026-08-28 (no time in message; date only)
+- **Classification:** `process rule`
+- **Context:** User requests research for an optimal, intelligent rule capturing important user decisions/feedback without blind verbatim logging.
+- **Verbatim input:**
+
+```
+1. Please review the current project rule which dictates the necessity to immediately verbatim document user input, then do the following:
+
+**CRITICAL NOTE:** You **MUST** thoroughly validate **ALL** assumptions by performing **ALL** of the following steps:
+2. **BEFORE SEARCHING THE WEB AND/OR PERFORMING WEB RESEARCH YOU *MUST* VERIFY TODAY'S REAL-WORLD ACTUAL DATE TO ENSURE YOUR RESEARCH IS GENUINELY UP-TO-DATE AND ACCURATE. THIS STEP *CANNOT* BE BATCHED WITH THE RESEARCH STEPS, AND IS 100% CRITICAL AND NON-NEGOTIABLE.**
+3. Perform targeted web research based on the most up-to-date, evidence-based, data-/outcomes-driven, sources-cited, marketing-claims-aware/marketing-claims-avoidant, hype-aware/hype-avoidant data/best practices as they pertain to effectively, efficiently, optimally, and intelligently establishing an agent rule which achieves a similar effect to the current verbatim user input documentation rule, but which functions more optimally and more intelligently and forces immediate capture and documentation of actionable/important user decisions, key data/information from user responses to agent questions, actionable/important user feedback/added informational context, and any other similar actionable, important, and/or critical user-provided data/information - **BUT** without "blindly" verbatim documenting practically every user-provided/-made input.
+4. You must then immediately document your findings within a uniquely/appropriately named documentation file which is purpose-built/-formatted to enable enacting/implementing a solution based on your findings during a later turn/session.
+5. Report back to me with a **VERY BRIEF** (*≤ 20 lines*) rundown of your findings.
+```
+
+### 2026-08-28 — Full documentation sync: carry determinations/findings/troubleshooting into future sessions
+- **Received:** 2026-08-28 (no time in message; date only)
+- **Classification:** `process rule`
+- **Context:** Post-publish-handoff + BitDefender incident; user wants a complete, accurate docs carry-over before continuing.
+- **Verbatim input:**
+
+```
+Update all pertinent/relevant project documentation to ensure a complete and accurate representation of the current project, including all determinations, findings, research, testing, troubleshooting approaches/attempts/resolutions, and any-and-all other data which needs to be carried over into future sessions.
+```
+
+### 2026-08-28 — BitDefender block report: harness network-diagnostic one-liner flagged "Malicious command line"
+- **Received:** 2026-08-28 (no time in message; date only)
+- **Classification:** `bug report`
+- **Context:** User shares the BitDefender block log for the harness's TLS-diagnostic command; confirms pushes must go via the user's own terminal.
+- **Verbatim input:**
+
+```
+From within BitDefender mere moments ago: "Malicious command line detected
+now
+
+Feature:
+Antivirus
+
+The app C:\Program Files\PowerShell\7\pwsh.exe was passed a malicious command line and has been blocked. Your device is now safe.
+
+Command line: "C:\Program Files\PowerShell\7\pwsh.exe" -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [System.Text.UTF8Encoding]::new($false); node -e \"const https=require('https');const r=https.get('https://github.com',res=>{console.log('node TLS OK:',res.statusCode);res.destroy();process.exit(0)});r.on('error',e=>{console.log('node TLS FAIL:',e.message);process.exit(1)});setTimeout(()=>{console.log('node TLS TIMEOUT');process.exit(1)},15000)\"; certutil -urlcache -f -split https://github.com 2>&1 | Select-Object -Last 2""
+```
+
 ### 2026-08-28 11:09 -04:00 — Playtest defect report (3 items) against the published GitHub Pages build — docs-only turn
 - **Received:** 2026-08-28 11:09 -04:00 (no time in message; system time at capture)
 - **Classification:** `bug report`
