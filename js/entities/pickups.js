@@ -2,6 +2,31 @@
 import { CFG } from '../config.js';
 import { TAU } from '../utils/math.js';
 
+// 22.2: push a point out of every non-traversable ellipse spot (m01 lakes /
+// m02 koi pond — registered colliders with `ellipse: true`) radially from the
+// spot center to its perimeter + pad (walkable ground just outside the edge).
+// Loops so overlapping spots resolve; capped so pathological stacks can't hang.
+export function escapeFromSpots(x, y, spots, pad) {
+  if (!spots || spots.length === 0) return { x, y };
+  let guard = 0;
+  for (let moved = true; moved && guard++ < 8;) {
+    moved = false;
+    for (const s of spots) {
+      const dx = x - s.x, dy = y - s.y;
+      const k = (dx * dx) / (s.rx * s.rx) + (dy * dy) / (s.ry * s.ry);
+      if (k >= 1) continue;
+      let bx, by; // boundary point on the center→point ray (radial projection)
+      if (k < 1e-9) { bx = s.x + s.rx; by = s.y; } // dead center — pick the +x edge
+      else { bx = s.x + dx / Math.sqrt(k); by = s.y + dy / Math.sqrt(k); }
+      const bd = Math.hypot(bx - s.x, by - s.y) || 1;
+      x = bx + ((bx - s.x) / bd) * pad;
+      y = by + ((by - s.y) / bd) * pad;
+      moved = true;
+    }
+  }
+  return { x, y };
+}
+
 export class Pickups {
   constructor(sprites = {}) {
     this.gemImg = sprites.gem || null;
@@ -49,9 +74,20 @@ export class Pickups {
   }
 
   // player: {x, y, r, magnet} — magnet = passive multiplier (1 = none).
+  // spots (22.2): ellipse colliders — an unmagnetized gem inside one is nudged
+  // out to the spot's edge every step (dropped-inside can never happen again,
+  // even if a future feature moves gems post-spawn). Magnetized gems fly to
+  // the player and may legally cross water on their way in.
   // Returns {xp, heal} collected this step.
-  update(dt, player) {
+  update(dt, player, spots) {
     const out = { xp: 0, heal: 0 };
+    if (spots && spots.length) {
+      for (const g of this.gems) {
+        if (!g.on || g.mag) continue;
+        const o = escapeFromSpots(g.x, g.y, spots, CFG.gems.escapePad);
+        g.x = o.x; g.y = o.y;
+      }
+    }
     const magR = CFG.gems.magnetBase * (player.magnet || 1);
     for (const g of this.gems) {
       if (!g.on) continue;

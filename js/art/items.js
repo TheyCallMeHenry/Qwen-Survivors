@@ -4,15 +4,18 @@ import { makeCanvas, glowSprite, shadowSprite, poly, roundRectPath } from './bas
 import { TAU } from '../utils/math.js';
 
 // Per-level pickup tints (13.10, A5): m01 = original, M02 gold-pink, M03 cyan.
-const GEM_PAL = {
+// 22.3: the m03 heart moved from teal (≈ gem cyan at a glance) to warm coral —
+// cool gems vs warm hearts is the strongest in-run discrimination, and coral
+// keeps the underwater identity. Exported for the test-logic contrast invariant.
+export const GEM_PAL = {
   m01: { glow: '94,234,212', stops: ['#25f2cf', '#0fb89b', '#0a6f60'], edge: 'rgba(6,60,50,0.6)' },
   m02: { glow: '255,196,128', stops: ['#ffd98a', '#ff9e7d', '#c94f6d'], edge: 'rgba(120,40,60,0.6)' },
   m03: { glow: '80,220,255', stops: ['#6fd8ff', '#1f9fd8', '#0d5f96'], edge: 'rgba(8,60,90,0.6)' },
 };
-const HEART_PAL = {
+export const HEART_PAL = {
   m01: { top: '#ff7d90', low: '#d42a4c', edge: 'rgba(90,10,30,0.65)' },
   m02: { top: '#ffb3a0', low: '#e0446e', edge: 'rgba(120,20,50,0.65)' },
-  m03: { top: '#7fe8e0', low: '#18a8c8', edge: 'rgba(10,60,90,0.65)' },
+  m03: { top: '#ff9d7e', low: '#e2503c', edge: 'rgba(110,30,25,0.65)' }, // 22.3 coral
 };
 
 // Per-level gem/heart pair (13.10): m01 default; unknown level falls back to m01.

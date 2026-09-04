@@ -10,7 +10,7 @@ import { World } from '../world/world.js';
 import { Camera } from '../systems/camera.js';
 import { Lighting } from '../systems/lighting.js';
 import { Particles, Snow } from '../entities/particles.js';
-import { Pickups } from '../entities/pickups.js';
+import { Pickups, escapeFromSpots } from '../entities/pickups.js';
 import { Enemies } from '../entities/enemies.js';
 import { Combat } from '../entities/combat.js';
 import { Player, cardOffers, applyCard, recomputeStats, charDef } from '../entities/player.js';
@@ -158,6 +158,7 @@ export class Game {
     const seed = (Math.random() * 4294967296) | 0;
     this.rng = mulberry32(seed ^ 0x9e3779b9);
     this.world.generate(seed, this.levelKey);
+    this._pickupSpots = this.world.colliders.filter((c) => c.ellipse); // 22.2
     this.minimapBase = buildMinimapBase(this.world);
     const s = this.world.playerStart;
     this.player.reset(s.x, s.y);
@@ -350,7 +351,7 @@ export class Game {
     if (this.state !== 'PLAYING') return; // died to contact
     this.combat.update(dt, this.players, this.enemies);
     for (const pl of this.players) {
-      const got = this.pickups.update(dt, pl);
+      const got = this.pickups.update(dt, pl, this._pickupSpots);
       if (got.heal > 0) pl.heal(got.heal);
       if (got.xp > 0) {
         this.bus.emit('gem');
@@ -500,7 +501,10 @@ export class Game {
     this.kills++;
     this.score += e.score;
     const p = killer || this.player; // solo: killer always falls back to the local player
-    this.pickups.gem(e.x, e.y, e.xp);
+    // 22.2: a kill inside a non-traversable spot (m01 lake / m02 koi pond) must
+    // never strand its gem — drop it at the spot's outer edge instead.
+    const gp = escapeFromSpots(e.x, e.y, this._pickupSpots, CFG.gems.escapePad);
+    this.pickups.gem(gp.x, gp.y, e.xp);
     if (p.synergies && p.synergies.phoenix) {
       p._phoenixKills = (p._phoenixKills || 0) + 1;
       const S = CFG.synergies.phoenix.levels[0];
@@ -812,6 +816,7 @@ export class Game {
     this._reskinPickups();
     this.rng = mulberry32(seed ^ 0x9e3779b9); // same world-seed mix as the host
     this.world.generate(seed, this.levelKey);
+    this._pickupSpots = this.world.colliders.filter((c) => c.ellipse); // 22.2 (host-sim nudge only — client renders snaps)
     this.minimapBase = buildMinimapBase(this.world);
     const s = this.world.playerStart;
     this.player.reset(s.x, s.y);

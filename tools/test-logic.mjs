@@ -9,6 +9,8 @@ import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../js/
 import { Enemies } from '../js/entities/enemies.js';
 import { Player, cardOffers, applyCard, recomputeStats, cardEffectText, charDef } from '../js/entities/player.js';
 import { Combat } from '../js/entities/combat.js';
+import { Pickups, escapeFromSpots } from '../js/entities/pickups.js';
+import { GEM_PAL, HEART_PAL } from '../js/art/items.js';
 import { SNAP_V, WEAPON_KEYS, PASSIVE_KEYS, SYNERGY_KEYS, ENEMY_KEYS, E_FLAG_FLASH, E_FLAG_BURN, E_FLAG_BLIGHT, E_FLAG_BOSS, E_FLAG_FLIP, playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState } from '../js/net/sync.js';
 import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom, defaultChars, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar } from '../js/core/meta.js';
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
@@ -1284,6 +1286,59 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(lift, '11.12: small-screen corner layout lifts the BL/BR co-op seat panels above the bottom cluster');
   ok(!!lift && +lift[1] >= 112,
     '11.12: lifted seat panels clear the co-op minimap + PAUSE cluster (minimap min 91px wide → 69px tall + 16px inset + margin)');
+}
+
+// --- 22.2 XP gem escape from non-traversable spots (pure helper + wiring) ---
+{
+  const K = (pt, s) => ((pt.x - s.x) / s.rx) ** 2 + ((pt.y - s.y) / s.ry) ** 2;
+  const spot = { x: 1000, y: 800, rx: 200, ry: 90, ellipse: true };
+  const c = escapeFromSpots(1000, 800, [spot], 6); // dead center
+  ok(c.x === 1206 && c.y === 800, '22.2: dead-center point exits to the +x perimeter + pad');
+  const p = escapeFromSpots(1100, 845, [spot], 6);
+  ok(K(p, spot) > 1.01, '22.2: inside point lands outside the ellipse (k>1, pad beyond the perimeter)');
+  ok(Math.abs(Math.atan2(845 - 800, 1100 - 1000) - Math.atan2(p.y - 800, p.x - 1000)) < 1e-9,
+    '22.2: escape keeps the radial bearing from the spot center');
+  const q = escapeFromSpots(1300, 700, [spot], 6);
+  ok(q.x === 1300 && q.y === 700, '22.2: outside point untouched');
+  const bnd = escapeFromSpots(1200, 800, [spot], 6); // exactly on the perimeter (k=1)
+  ok(bnd.x === 1200 && bnd.y === 800, '22.2: on-perimeter point untouched');
+  const s2 = { x: 1150, y: 800, rx: 140, ry: 60, ellipse: true };
+  const o = escapeFromSpots(1120, 800, [spot, s2], 6);
+  ok(K(o, spot) > 1 && K(o, s2) > 1, '22.2: overlapping spots both cleared (looped)');
+  const noS = escapeFromSpots(50, 50, [], 6);
+  ok(noS.x === 50 && noS.y === 50, '22.2: empty spot list = identity');
+  // Live pipeline (pure class): an unmagnetized gem inside a spot is nudged out
+  const pk = new Pickups();
+  pk.gem(1000, 800, 1); // dropped dead center of the pond
+  pk.update(1 / 60, { x: 2400, y: 2400, r: 12, magnet: 1 }, [spot]);
+  const g0 = pk.gems.find((g) => g.on);
+  ok(g0 && K(g0, spot) > 1.05 && g0.x === 1206 && g0.y === 800,
+    '22.2: Pickups.update nudges an inside gem out to the +x edge + pad');
+  // Wiring (source scans — the nudge + drop-site escape must be live in game.js)
+  const gsrc = readFileSync(fileURLToPath(new URL('../js/core/game.js', import.meta.url)), 'utf8');
+  ok((gsrc.match(/_pickupSpots = this\.world\.colliders\.filter\(\(c\) => c\.ellipse\)/g) || []).length === 2,
+    '22.2: _pickupSpots built from ellipse colliders at BOTH run-start sites (host + client)');
+  ok(/pickups\.update\(dt, pl, this\._pickupSpots\)/.test(gsrc),
+    '22.2: per-step gem nudge wired through pickups.update (host sim)');
+  ok(/escapeFromSpots\(e\.x, e\.y, this\._pickupSpots, CFG\.gems\.escapePad\)/.test(gsrc),
+    '22.2: kill-drop site escapes spots (gems never spawn inside one)');
+  ok(CFG.gems.escapePad > 0 && CFG.gems.escapePad <= 24,
+    '22.2: escapePad config scalar present + sane');
+}
+
+// --- 22.3 M03 gem vs heart contrast (palette invariant, via the 13.10 seam) ---
+{
+  const rgb = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  ok(GEM_PAL.m03.stops.every((s) => rgb(s)[2] > rgb(s)[0]),
+    '22.3: m03 gem stays cool (every stop blue-dominant)');
+  ok(rgb(HEART_PAL.m03.top)[0] > rgb(HEART_PAL.m03.top)[2] && rgb(HEART_PAL.m03.low)[0] > rgb(HEART_PAL.m03.low)[2],
+    '22.3: m03 heart is warm (top + low red-dominant — coral, not teal)');
+  const gm = rgb(GEM_PAL.m03.stops[1]), ht = rgb(HEART_PAL.m03.top);
+  ok(Math.abs(gm[0] - ht[0]) + Math.abs(gm[1] - ht[1]) + Math.abs(gm[2] - ht[2]) >= 150,
+    '22.3: m03 gem vs heart channel-distance ≥150 (discernible mid-run)');
+  ok(HEART_PAL.m01.top === '#ff7d90' && HEART_PAL.m01.low === '#d42a4c' &&
+     HEART_PAL.m02.top === '#ffb3a0' && HEART_PAL.m02.low === '#e0446e',
+    '22.3: m01/m02 heart palettes untouched (only m03 retuned)');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

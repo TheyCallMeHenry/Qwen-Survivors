@@ -202,7 +202,7 @@ export const CFG = {
     regen:  { name: 'Moon Sigil',     desc: 'Regenerate 0.8 HP/s', icon: 'sigil', max: 3, val: 0.8 },
   },
 
-  gems: { magnetBase: 70, collectR: 16, maxAlive: 320, heartPool: 32, heartChance: 0.045, heartChanceLowHp: 0.08, heartHeal: 20, lowHpFrac: 0.3 },
+  gems: { magnetBase: 70, collectR: 16, maxAlive: 320, heartPool: 32, heartChance: 0.045, heartChanceLowHp: 0.08, heartHeal: 20, lowHpFrac: 0.3, escapePad: 6 }, // escapePad (22.2): px beyond a spot's edge
 
   // XP needed to go from level L to L+1
   xpNeed: (L) => 4 + (L - 1) * 3,
