@@ -13,6 +13,17 @@
 
 ## Entries (newest first)
 
+### 2026-09-04 — Approval: merge to main + publish Pages (explicit rule-7 ask)
+- **Received:** 2026-09-04 (no time in message; date only)
+- **Classification:** `answer/approval`
+- **Context:** Answers the flagged publish decision (Pages staleness = root cause of the garlic/blades-invisible report) — explicit publish request; ff-merge overnight-2026-08-22 -> main + push main.
+- **Verbatim input:**
+
+```
+Yes, also perform the necessary merge to get the updated version active on Pages.
+```
+
+
 ### 2026-09-04 — Approval: push the committed work
 - **Received:** 2026-09-04 (no time in message; date only)
 - **Classification:** `answer/approval`
