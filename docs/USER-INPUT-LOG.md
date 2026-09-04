@@ -13,6 +13,17 @@
 
 ## Entries (newest first)
 
+### 2026-09-04 — Approval: push the committed work
+- **Received:** 2026-09-04 (no time in message; date only)
+- **Classification:** `answer/approval`
+- **Context:** Answers the pending push/publish question (rule 7) — push authorized for the work branch; merge to main / Pages publish NOT requested.
+- **Verbatim input:**
+
+```
+Push the committed work.
+```
+
+
 ### 2026-09-04 — Approval: commit the current (partial Phase 22) work
 - **Received:** 2026-09-04 (no time in message; date only)
 - **Classification:** `answer/approval`
