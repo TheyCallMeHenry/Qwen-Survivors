@@ -33,10 +33,13 @@ export class Player {
     this.animT = 0; this.frameIdx = 0; this.moving = false; this.flip = false;
     this.dead = false;
     this._wandCd = 0; this._axeCd = 0;
-    this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0;
+    this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0; this._snowCd = 0;
+    this._bowCharge = 0; // 23.1: >0 while the string is drawing (charge-up wind-up)
+    this._ringCd = 0; this._ringBeams = []; // 12.4: Ring of Chain Lightning tick + live arcs
     this._garlicT = 0; this._orbitT = 0; this._tempestT = 0;
     this._flame = { fuel: 0, reloading: false };
     this._flameAng = 0;
+    this.overHeal = 0; // 23.3: Phoenix Heart over-health pool (hp above maxHp, decays to 0)
   }
 
   // 11.6: select the playable character (D56: unique per co-op player; solo: menu pick).
@@ -64,11 +67,13 @@ export class Player {
     this.animT = 0; this.frameIdx = 0; this.moving = false; this.flip = false;
     this.dead = false;
     this._wandCd = 0; this._axeCd = 0;
-    this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0;
+    this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0; this._snowCd = 0;
+    this._bowCharge = 0;
+    this._ringCd = 0; this._ringBeams = [];
     this._garlicT = 0; this._orbitT = 0; this._tempestT = 0;
     this._flame = { fuel: 0, reloading: false };
     this._flameAng = 0;
-    this._phoenixKills = 0;
+    this.overHeal = 0;
   }
 
   gainXp(n) {
@@ -84,6 +89,24 @@ export class Player {
 
   heal(n) {
     if (n > 0) this.hp = Math.min(this.maxHp, this.hp + n);
+  }
+
+  // Effective HP ceiling incl. the Phoenix Heart over-health pool (23.3): a fraction of
+  // CURRENT max HP, re-evaluated on every call (Heart of Oak raises max mid-run).
+  ohCap() {
+    return this.maxHp * CFG.synergies.phoenix.levels[0].ceiling;
+  }
+
+  // 23.3: heart collected AT FULL HP with the synergy → over-health past max, capped at
+  // ohCap(). The bonus sits on hp (so damage eats it first) and decays via _overHeal.
+  applyOverHeal(n) {
+    if (!(this.synergies && this.synergies.phoenix) || n <= 0) return false;
+    if (this.hp < this.maxHp) return false; // injured → the caller routes to heal()
+    const cap = this.ohCap();
+    const before = Math.max(this.hp, this.maxHp);
+    this.hp = Math.min(cap, before + n);
+    this.overHeal = Math.max(0, Math.min(this.hp - this.maxHp, cap - this.maxHp));
+    return true;
   }
 
   tryDash(ax, ay) {
@@ -123,6 +146,7 @@ export class Player {
     }
 
     if (this.regen > 0 && this.hp > 0) this.hp = Math.min(this.maxHp, this.hp + this.regen * dt);
+    this._overHeal(dt);
 
     this.x += this.vx * dt;
     this.y += this.vy * dt;
@@ -150,6 +174,21 @@ export class Player {
     if (Math.abs(this.vx) > 12) this.flip = this.vx < 0;
 
     this._weapons(dt, enemies, combat);
+  }
+
+  // 23.3: the over-health diminishes CFG.synergies.phoenix.decay of max HP per second
+  // back to 100% (hp pinned at maxHp); a fresh heart re-applies and out-runs it.
+  _overHeal(dt) {
+    if (this.overHeal <= 0) { this.overHeal = 0; return; }
+    const drain = this.maxHp * CFG.synergies.phoenix.levels[0].decay * dt;
+    const target = Math.max(this.maxHp, this.hp - drain);
+    if (target >= this.hp) { // decay would overshoot the remainder — settle at hp = maxHp
+      this.overHeal = Math.max(0, this.overHeal - drain);
+      this.hp = this.maxHp;
+      return;
+    }
+    this.overHeal = this.hp > this.maxHp ? target - this.maxHp : 0;
+    this.hp = target;
   }
 
   // 16.2: shared projectile spawn origin — (x, y) IS the feet (the sprite is
@@ -247,17 +286,52 @@ export class Player {
         }
       }
     }
-    if (this.weapons.bow) {
-      const S = W.bow.levels[this.weapons.bow - 1];
-      this._bowCd -= dt;
-      if (this._bowCd <= 0) {
+    if (this.weapons.snowball) {
+      // 12.3: lob at the nearest enemy — the burst lands on it (target point tracked at
+      // fire time; impact AoE + slow stacks resolve in combat._snowBurst).
+      const S = W.snowball.levels[this.weapons.snowball - 1];
+      this._snowCd -= dt;
+      if (this._snowCd <= 0) {
         const e = this._nearest(enemies, CFG.combat.wandRange);
         if (e) {
           const sy = this._spawnY();
-          const ang = Math.atan2(e.y - sy, e.x - this.x);
-          combat.fireArrow(this.x, sy, ang, S.dmg * this.dmgMul, this);
+          combat.fireSnowball(this.x, sy, e.x, e.y, S.dmg * this.dmgMul, S.r, this);
+          this._snowCd = S.cd;
+        }
+      }
+    }
+    if (this.weapons.ringLightning) {
+      // 12.4: periodic shock bolt at the nearest foe (mid-torso origin, 16.2). Each bolt
+      // adds one shock stack; the 3rd stacks → stun + chain burst (combat.applyShock).
+      const S = W.ringLightning.levels[this.weapons.ringLightning - 1];
+      this._ringCd -= dt;
+      if (this._ringCd <= 0) {
+        const e = this._nearest(enemies, CFG.combat.wandRange);
+        if (e) {
+          const sy = this._spawnY();
+          combat.fireShockBolt(this.x, sy, e, S.dmg * this.dmgMul, S.jumps, this);
+          this._ringCd = CFG.combat.ringCd;
+        }
+      }
+    }
+    if (this.weapons.bow) {
+      const S = W.bow.levels[this.weapons.bow - 1];
+      // 23.1 charge-up: full interval → drawn string holds for CFG.weapons.bow.charge
+      // (visible draw/telegraph, see draw()) → arrow looses → back to interval.
+      this._bowCd -= dt;
+      if (this._bowCharge > 0) {
+        this._bowCharge -= dt;
+        if (this._bowCharge <= 0) {
+          const e = this._nearest(enemies, CFG.combat.wandRange);
+          if (e) {
+            const sy = this._spawnY();
+            combat.fireArrow(this.x, sy, Math.atan2(e.y - sy, e.x - this.x), S.dmg * this.dmgMul, this);
+          }
           this._bowCd = S.rate;
         }
+      } else if (this._bowCd <= 0) {
+        const e = this._nearest(enemies, CFG.combat.wandRange);
+        if (e) this._bowCharge = W.bow.charge;
       }
     }
   }
@@ -306,6 +380,23 @@ export class Player {
       ctx.fillRect(this.x - w / 2, this.y - def.h - 12, w, h);
       ctx.fillStyle = this._flame.reloading ? '#ff9a4a' : '#ff6b2e';
       ctx.fillRect(this.x - w / 2 + 0.5, this.y - def.h - 11.5, (w - 1) * f, h - 1);
+    }
+    // 23.1 charge-up telegraph: the arrow nocks at mid-torso and slides from full draw
+    // (tail on the body, opposite the aim) to the muzzle as _bowCharge drains.
+    if (this.weapons.bow && this._bowCharge > 0) {
+      const sy = this._spawnY();
+      const t = Math.max(0, Math.min(1, 1 - this._bowCharge / CFG.weapons.bow.charge));
+      const len = 22;
+      const bx = this.x - Math.cos(this.aimAng) * (len - 14 * t);
+      const by = sy - Math.sin(this.aimAng) * (len - 14 * t);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(230,240,255,0.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(this.x + Math.cos(this.aimAng) * 6, sy + Math.sin(this.aimAng) * 6);
+      ctx.stroke();
+      ctx.restore();
     }
   }
 }
@@ -372,8 +463,21 @@ const WEAPON_FIELDS = {
     ['fuel', (v) => `fuel ${fmtS(v)} s`, (a, b) => `fuel ${fmtS(a)}→${fmtS(b)} s`],
     ['recharge', (v) => `recharge ${fmtS(v)} s`, (a, b) => `recharge ${fmtS(a)}→${fmtS(b)} s`],
   ],
+  snowball: [
+    ['cd', (v) => `every ${fmtS(v)} s`, (a, b) => `every ${fmtS(a)}→${fmtS(b)} s`],
+    ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
+    ['r', (v) => `blast radius ${v}`, (a, b) => `radius ${a}→${b}`],
+  ],
+  ringLightning: [
+    ['cd', (v) => `every ${fmtS(v)} s`, (a, b) => `every ${fmtS(a)}→${fmtS(b)} s`],
+    ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
+    ['jumps', (v) => `chain ${v} foe${v > 1 ? 's' : ''}`, (a, b) => `chain ${a}→${b} foes`],
+  ],
   bow: [
     ['rate', (v) => `every ${fmtS(v)} s`, (a, b) => `rate ${fmtS(a)}→${fmtS(b)} s`],
+    // 23.1: flat-per-weapon scalar (charge lives on the def, not the level row) — L1 card
+    // only, never a prev→next delta
+    ['charge', (v) => `draw ${fmtS(v)} s`, null],
     ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
   ],
 };
@@ -384,10 +488,15 @@ function _weaponEffect(key, level) {
   if (!def || !fields) return '';
   const cur = def.levels[level - 1];
   if (!cur) return '';
-  if (level <= 1) return fields.map(([f, abs]) => abs(cur[f])).join(' · ');
+  // 23.1: flat-per-weapon scalars (bow `charge`) live on the def, not the level row —
+  // shown on the L1 full-stat card only, never as a prev→next delta.
+  if (level <= 1) {
+    const parts = fields.map(([f, abs]) => abs(f in cur ? cur[f] : def[f]));
+    return parts.filter((s) => s !== null).join(' · ');
+  }
   const prev = def.levels[level - 2];
   const parts = [];
-  for (const [f, , delta] of fields) if (prev[f] !== cur[f]) parts.push(delta(prev[f], cur[f]));
+  for (const [f, , delta] of fields) if (delta && prev[f] !== cur[f]) parts.push(delta(prev[f], cur[f]));
   return parts.length ? parts.join(' · ') : fields.map(([f, abs]) => abs(cur[f])).join(' · ');
 }
 
@@ -411,7 +520,8 @@ const SYNERGY_EFFECT = {
   tempest: (s) => `Orbiting blades hurl tangential bolts — ${s.dmg} dmg every ${fmtS(s.rate)} s`,
   inferno: (s) => `Twin rounds ignite foes — ${s.dps} dmg/s burn for ${fmtS(s.dur)} s`,
   napalm: (s) => `Bomb blasts ignite foes — ${s.dps} dmg/s burn for ${fmtS(s.dur)} s`,
-  phoenix: (s) => `Heal ${s.heal} HP every ${s.every} kills`,
+  // 23.3: over-heal in place of the old kill-heal (machinery deleted, not moved)
+  phoenix: (s) => `Hearts at full health grant over-health up to ${Math.round(s.ceiling * 100)}% max HP — diminishes ${pct(s.decay)}/s`,
 };
 
 function _synergyEffect(key) {
@@ -483,12 +593,26 @@ export function cardOffers(weapons, passives, synergies, rng, cap = CFG.run.maxW
     if (!S.requires.every((r) => reqAtMax(weapons, passives, r))) continue;
     pool.push({ kind: 'synergy', key: k, level: lvl + 1 });
   }
+  // Weighted draw so an eligible synergy surfaces the moment its pair maxes —
+  // it still appears early when the pool is crowded. Weighted by duplication;
+  // dedup keeps an offer from showing the same card twice (synergy is duplicated).
+  const SYNERGY_DRAW_WEIGHT = 8;
+  const weighted = [];
+  for (const c of pool) {
+    const w = c.kind === 'synergy' ? SYNERGY_DRAW_WEIGHT : 1;
+    for (let n = 0; n < w; n++) weighted.push(c);
+  }
   const out = [];
-  const arr = pool.slice();
-  while (out.length < 3 && arr.length) {
-    const i = (rng() * arr.length) | 0;
-    out.push(arr[i]);
-    arr.splice(i, 1);
+  const drawn = new Set();
+  const remaining = weighted.slice();
+  while (out.length < 3 && remaining.length) {
+    const i = (rng() * remaining.length) | 0;
+    const card = remaining[i];
+    remaining.splice(i, 1);
+    const tag = `${card.kind}:${card.key}`;
+    if (drawn.has(tag)) continue; // 22.7: skip a duplicate draw from weighting
+    drawn.add(tag);
+    out.push(card);
   }
   return out;
 }

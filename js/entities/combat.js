@@ -14,6 +14,8 @@ export class Combat {
     this.bombs = [];
     this.flames = [];
     this.arrows = [];
+    this.snowballs = []; // 12.3: lobbed snowballs (bomb-style flight, burst ON impact)
+
     this.explosions = [];
     this.t = 0;
     this.enemies = null;
@@ -24,6 +26,9 @@ export class Combat {
     this.bombImg = null;
     this.flameImg = null;
     this.arrowImg = null;
+    this.snowballImg = null; // 12.3
+    this.frostImg = null;    // 12.3: small frost burst for the snowball impact
+    this.sparkImg = null;    // 12.4: lightning spark at a bolt's strike point
     this.explosionImg = null;
     this.onKill = null;   // (enemy) — set by game: score/gems/particles/hit-stop
     this.onHurt = null;   // () — set by game: shake/flash
@@ -43,6 +48,7 @@ export class Combat {
     this.bombs.length = 0;
     this.flames.length = 0;
     this.arrows.length = 0;
+    this.snowballs.length = 0;
     this.explosions.length = 0;
     this.t = 0;
     this._orbCd.clear();
@@ -105,6 +111,18 @@ export class Combat {
     });
   }
 
+  // 12.3 Snowball Launcher: lob to a target POINT, burst ON impact (no fuse pause) in a
+  // small AoE that damages + slows (12.5 stack pipeline). Flight mirrors fireBomb.
+  fireSnowball(x, y, tx, ty, dmg, radius, owner = null) {
+    const C = CFG.combat;
+    const dist = Math.hypot(tx - x, ty - y);
+    this.snowballs.push({
+      x0: x, y0: y, tx, ty, x, y, h: 0,
+      t: 0, fly: Math.max(0.15, dist * C.snowballFlyK),
+      dmg, radius, owner,
+    });
+  }
+
   fireBomb(x, y, ang, dist, dmg, radius, fuse, napalm = null, owner = null) {
     const C = CFG.combat;
     const tx = x + Math.cos(ang) * dist;
@@ -148,6 +166,7 @@ export class Combat {
     this._arrows(dt, enemies);
     this._axes(dt, enemies);
     this._bombs(dt, enemies);
+    this._snowballs(dt, enemies);
     this._flames(dt, enemies);
     this._dot(dt);
     for (const p of players) {
@@ -158,6 +177,14 @@ export class Combat {
       const x = this.explosions[i];
       x.t += dt;
       if (x.t >= x.dur) this.explosions.splice(i, 1);
+    }
+    // 12.4: lightning arcs are short-lived visuals living on their owner player
+    for (const p of players) {
+      if (!p._ringBeams) continue;
+      for (let i = p._ringBeams.length - 1; i >= 0; i--) {
+        p._ringBeams[i].t += dt;
+        if (p._ringBeams[i].t >= p._ringBeams[i].dur) p._ringBeams.splice(i, 1);
+      }
     }
   }
 
@@ -344,6 +371,108 @@ export class Combat {
     }
   }
 
+  // 12.3: snowball flight = bomb parabola; on landing it bursts immediately (_snowBurst).
+  _snowballs(dt, enemies) {
+    const C = CFG.combat;
+    for (let i = this.snowballs.length - 1; i >= 0; i--) {
+      const b = this.snowballs[i];
+      b.t += dt;
+      if (b.t < b.fly) {
+        const k = b.t / b.fly;
+        b.x = b.x0 + (b.tx - b.x0) * k;
+        b.y = b.y0 + (b.ty - b.y0) * k;
+        b.h = 4 * C.snowballH * k * (1 - k);
+      } else {
+        this._snowBurst(b, enemies);
+        this.snowballs.splice(i, 1);
+      }
+    }
+  }
+
+  // Small impact AoE: damage + knockback (gentle — the slow is the point) + one slow
+  // stack per hit enemy. Stacks expire independently (enemies._ai); SLOW_FREEZE stacks
+  // → brief freeze (12.5).
+  _snowBurst(b, enemies) {
+    const C = CFG.combat;
+    this.explosions.push({ x: b.tx, y: b.ty, t: 0, dur: C.bombFlash, r: b.radius, frost: true });
+    for (const e of enemies.grid.range(b.tx, b.ty, b.radius)) {
+      if (e.dead) continue;
+      const dx = e.x - b.tx, dy = e.y - b.ty;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d > b.radius + e.r) continue;
+      this.damageEnemy(e, b.dmg, dx / d, dy / d, C.snowballKb, b.owner);
+      if (!e.dead) this.applySlow(e);
+    }
+    if (this.pulse) this.pulse('boom');
+  }
+
+  // 12.5: add one slow stack (refreshed to full TTL) at the enemy; reaching
+  // slowMaxStacks triggers a brief freeze and consumes the stacks.
+  applySlow(e) {
+    const C = CFG.combat;
+    e.slowStacks.push({ t: C.statusStackTtl });
+    if (e.slowStacks.length >= C.slowMaxStacks) {
+      e.freezeT = Math.max(e.freezeT, C.freezeDur);
+      e.slowStacks.length = 0;
+    }
+  }
+
+  // 12.4 Ring of Chain Lightning: one bolt from (x, y) at a target enemy — damage +
+  // one shock stack. The chain count (`jumps`) only matters when the shock proc fires.
+  fireShockBolt(x, y, target, dmg, jumps, owner = null) {
+    if (!target || target.dead) return;
+    if (owner._ringBeams) {
+      owner._ringBeams.push({ x, y, tx: target.x, ty: target.y, t: 0, dur: CFG.combat.ringBeamDur, seed: Math.random() });
+      if (owner._ringBeams.length > 48) owner._ringBeams.splice(0, owner._ringBeams.length - 48);
+    }
+    const dx = target.x - x, dy = target.y - y;
+    const d = Math.hypot(dx, dy) || 1;
+    this.damageEnemy(target, dmg, dx / d, dy / d, CFG.combat.ringKb, owner);
+    if (!target.dead) this.applyShock(target, jumps, owner);
+  }
+
+  // 12.5 shock half: add one shock stack (per-stack TTL expiry in enemies._ai); reaching
+  // shockMaxStacks consumes them → brief stun + branching chain burst (moderate AoE).
+  applyShock(e, jumps = 0, owner = null) {
+    const C = CFG.combat;
+    e.shockStacks.push({ t: C.statusStackTtl });
+    if (e.shockStacks.length >= C.shockMaxStacks) {
+      e.stunT = Math.max(e.stunT, C.stunDur);
+      e.shockStacks.length = 0;
+      this._chainArc(e, jumps, owner);
+    }
+  }
+
+  // 12.4 chain burst: branching lightning from the proc'd enemy to `jumps` fresh foes
+  // within ringJumpR of the last link (greedy nearest — moderate AoE). Chained foes take
+  // a bolt and gain 1 shock stack; they do NOT re-proc (a proc is always chain-outward).
+  _chainArc(from, jumps, owner = null) {
+    const C = CFG.combat;
+    if (!this.enemies || jumps <= 0) return;
+    const hit = [from];
+    let head = from;
+    for (let n = 0; n < jumps; n++) {
+      let best = null, bd = C.ringJumpR * C.ringJumpR;
+      for (const e of this.enemies.list) {
+        if (e.dead || hit.includes(e)) continue;
+        const dx = e.x - head.x, dy = e.y - head.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bd) { bd = d2; best = e; }
+      }
+      if (!best) break;
+      if (owner && owner._ringBeams) {
+        owner._ringBeams.push({ x: head.x, y: head.y, tx: best.x, ty: best.y, t: 0, dur: C.ringBeamDur, seed: Math.random() });
+        if (owner._ringBeams.length > 48) owner._ringBeams.splice(0, owner._ringBeams.length - 48);
+      }
+      const d = Math.sqrt(bd) || 1;
+      this.damageEnemy(best, C.ringDmg, (best.x - head.x) / d, (best.y - head.y) / d, C.ringKb, owner);
+      if (!best.dead) best.shockStacks.push({ t: C.statusStackTtl });
+      hit.push(best);
+      head = best;
+    }
+    if (hit.length > 1 && this.pulse) this.pulse('zap');
+  }
+
   _explode(b, enemies) {
     const C = CFG.combat;
     this.explosions.push({ x: b.x, y: b.y, t: 0, dur: C.bombFlash, r: b.radius });
@@ -526,9 +655,49 @@ export class Combat {
       ctx.globalCompositeOperation = 'lighter';
       for (const x of this.explosions) {
         const k = x.t / x.dur;
-        const s = x.r * 2 * (0.6 + 0.6 * k);
+        // 23.2 visual-vs-damage fix: the old ramp started at 0.60× the damage radius,
+        // so the blast read smaller than what it hurt for its first third. Now the
+        // flash starts AT the true radius and only expands while fading out (≥1.0× floor).
+        const s = x.r * 2 * (1 + 0.25 * k);
         ctx.globalAlpha = 0.85 * (1 - k);
-        ctx.drawImage(this.explosionImg, x.x - s / 2, x.y - s / 2, s, s);
+        ctx.drawImage(x.frost && this.frostImg ? this.frostImg : this.explosionImg, x.x - s / 2, x.y - s / 2, s, s);
+      }
+      ctx.restore();
+    }
+    // 12.3: the snowball itself (ground shadow + ball riding the arc, bomb-style)
+    if (this.snowballImg) for (const b of this.snowballs) {
+      ctx.fillStyle = 'rgba(4,6,12,0.30)';
+      ctx.beginPath();
+      ctx.ellipse(b.x, b.y, 7 + b.h * 0.03, 3.5 + b.h * 0.015, 0, 0, TAU);
+      ctx.fill();
+      const s = this.snowballImg.width;
+      ctx.drawImage(this.snowballImg, b.x - s / 2, b.y - b.h - s / 2, s, s);
+    }
+    // 12.4: Ring of Chain Lightning arcs (jagged bolt from spawn/last-link to target +
+    // a strike spark), drawn additively and fading over ringBeamDur
+    if (this.sparkImg) for (const pl of players || []) {
+      if (!pl._ringBeams || !pl._ringBeams.length) continue;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = 'rgba(210,230,255,0.9)';
+      ctx.lineWidth = 2;
+      for (const b of pl._ringBeams) {
+        const k = b.t / b.dur;
+        ctx.globalAlpha = 1 - k;
+        const dx = b.tx - b.x, dy = b.ty - b.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const nx = -dy / d, ny = dx / d; // perpendicular jag offsets
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y);
+        for (let s2 = 1; s2 <= 3; s2++) {
+          const p = s2 / 4;
+          const off = Math.sin((b.seed + s2) * 12.9898) * 9 * (1 - k);
+          ctx.lineTo(b.x + dx * p + nx * off, b.y + dy * p + ny * off);
+        }
+        ctx.lineTo(b.tx, b.ty);
+        ctx.stroke();
+        const s = 14 * (1 - 0.5 * k);
+        ctx.drawImage(this.sparkImg, b.tx - s / 2, b.ty - s / 2, s, s);
       }
       ctx.restore();
     }

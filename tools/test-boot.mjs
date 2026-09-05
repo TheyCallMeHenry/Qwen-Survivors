@@ -68,7 +68,7 @@ const ctx2d = makeCtx();
 function makeEl(tag = 'div') {
   const el = {
     tag,
-    style: { _props: {}, setProperty(k, v) { this._props[k] = v; } },
+    style: { _props: {}, set transform(v) { this._props.transform = v; }, get transform() { return this._props.transform; }, setProperty(k, v) { this._props[k] = v; } },
     className: '', textContent: '', hidden: false,
     tabIndex: 0, disabled: false,
     offsetWidth: 0, offsetHeight: 0,
@@ -245,6 +245,7 @@ let dashBtnDone = false, dashBtnAsserted = false;
 let soloHudDone = false; // 11.7 solo invariance (11.11): no coop class, TL = local player
 let soloInvDone = false; // 11.11 solo invariance: a 1P run carries NO co-op overhead
 let sawBullets = false, sawBombs = false, sawFlames = false, sawArrows = false;
+let sawBolts = false, sawAxes = false, sawBlades = false, sawGarlic = false; // 22.1: all-weapon E2E observation
 let burnDone = false, burnAsserted = false, burnEnemy = null, burnKills = 0, burnAt = 0;
 let dashIFrameStep = 0, dashIFrameHp0 = 0; // 0 = not started, 1 = in flight, 2 = done
 let synActive = false, synDone = false, synRetries = 0;
@@ -310,7 +311,7 @@ function steer() {
       cards[0].click();
       return;
     }
-    const missing = ['axe', 'garlic', 'blades', 'pistols', 'bombs', 'flame', 'bow'].filter((k) => !game.player.weapons[k]);
+    const missing = ['axe', 'garlic', 'blades', 'pistols', 'bombs', 'flame', 'bow', 'snowball', 'ringLightning'].filter((k) => !game.player.weapons[k]);
     if (missing.length) {
       // the starting weapon is wand (mage default) — force the other weapons
       // through the real pickCard/applyCard pipeline (the click still goes through the card DOM).
@@ -410,6 +411,11 @@ function steer() {
       if (!sawBombs && game.combat.bombs.length > 0) sawBombs = true;
       if (!sawFlames && game.combat.flames.length > 0) sawFlames = true;
       if (!sawArrows && game.combat.arrows.length > 0) sawArrows = true;
+      // 22.1: observe the remaining four weapons in the live run
+      if (!sawBolts && game.combat.bolts.length > 0) sawBolts = true;
+      if (!sawAxes && game.combat.axes.length > 0) sawAxes = true;
+      if (!sawBlades && p.weapons.blades && typeof p._orbitT === 'number' && p._orbitT > 0.1) sawBlades = true;
+      if (!sawGarlic && p.weapons.garlic && typeof p._garlicT === 'number' && p._garlicT > 0) sawGarlic = true;
     }
     if (!stickDone && st === 'PLAYING' && game.t >= 60) {
       stickDone = true; stickT = game.t; stickX0 = p.x;
@@ -768,9 +774,10 @@ probeSnow('run 1 m01 start (16.1)'); // in-game m01 foreground — the user-visi
 
 // run 1: stand still (keep-alive iframes in steer) → kills + level-up cards +
 // heart/pause one-shots → force death through the real damage pipeline
-// (balance-independent) → DYING slow-mo → GAMEOVER. Keep-alive is what makes
-// this window seed- and balance-independent since the 10.5 spawn band: the
-// swarm reaches the player from ~t=2 s, so survival is no longer a given.
+// (balance-independent) → GAMEOVER (immediate; 22.6 dropped the DYING slow-mo).
+// Keep-alive is what makes this window seed- and balance-independent since the
+// 10.5 spawn band: the swarm reaches the player from ~t=2 s, so survival is no
+// longer a given.
 run = 1;
 pump(20 * 60);
 assert(game.kills > 0, 'run 1: player never landed a kill (auto-weapons not firing?)');
@@ -778,8 +785,8 @@ assert(pumpUntil(() => game.state === 'PLAYING', 30 * 60), 'run 1: never returne
 game.player.iframes = 0;
 game.player.hp = 1;
 game.combat.damagePlayer(game.player, 5, game.player.x, game.player.y);
-assert(game.state === 'DYING', `run 1: forced death did not enter DYING (state=${game.state})`);
-assert(pumpUntil(() => game.state === 'GAMEOVER', 8 * 60), `run 1: expected death, got state=${game.state} t=${game.t.toFixed(1)}s`);
+// 22.6: death now ends the run immediately (no DYING transient), so assert GAMEOVER directly.
+assert(game.state === 'GAMEOVER', `run 1: forced death did not end the run (state=${game.state})`);
 assert(!game.victory, 'run 1: death must not be a victory');
 
 // meta flow: run 1's gameover must have persisted the Soulshards profile
@@ -812,6 +819,7 @@ wandOffDone = wandOffAsserted = false; wandOffAt = 0; wandOffKills = 0; wandLv =
 stickDone = stickUp = false; stickT = 0; stickX0 = 0;
 dashBtnDone = dashBtnAsserted = false;
 sawBullets = sawBombs = sawFlames = sawArrows = false;
+sawBolts = sawAxes = sawBlades = sawGarlic = false; // 22.1
 burnDone = burnAsserted = false; burnEnemy = null; burnKills = 0; burnAt = 0;
 dashIFrameStep = 0; dashIFrameHp0 = 0;
 synActive = synDone = false; synRetries = 0;
@@ -992,8 +1000,9 @@ m03RunDone = true;
   const fire162 = () => p2.update(1 / 60, { x: 0, y: 0 }, g2.combat, g2.enemies, g2.world);
   const tick162 = () => g2.combat.update(1 / 60, g2.players, g2.enemies);
   // wand (owned at run start) — the target sits inside every weapon range
-  // (flame L1 range 300 uses a strict <, so keep it comfortably inside)
-  g2.enemies.spawn('rat', p2.x + 250, p2.y);
+  // (flame range is now flat 150 and uses a strict <, so keep it comfortably inside;
+  // still within bombs bombMin/bombDist + pistolRange/wandRange for the others)
+  g2.enemies.spawn('rat', p2.x + 120, p2.y);
   fire162();
   assert(g2.combat.bolts.length > 0 && g2.combat.bolts[0].y === sy162 && g2.combat.bolts[0].x === p2.x,
     `16.2: wand bolt spawned at mid-torso (got y=${g2.combat.bolts[0] && g2.combat.bolts[0].y}, want ${sy162}, feet ${p2.y})`);
@@ -1022,12 +1031,254 @@ m03RunDone = true;
   assert(g2.combat.flames.length > 0 && g2.combat.flames.every((fl) => fl.y === sy162 && fl.x === p2.x),
     '16.2: flame emission origin at mid-torso');
   g2.combat.flames.length = 0; tick162();
-  // bow: arrow spawn origin = mid-torso (12.2)
-  p2.weapons.bow = 1; p2._bowCd = 0;
+
+  // Flame reach vs. VISUAL stream (user report 2026-09-04): acquisition is flat 150,
+  // so an enemy parked beyond the visible stream must never be acquired, ignited or
+  // damaged. Two ISOLATED cases — _nearest picks the CLOSEST foe, so a far target has
+  // to be tested with no nearer one present. Math.random stubbed to 0 → speed =
+  // flameSpeed, life = flameLife (deterministic stream). Enemies are frozen (vx/vy=0,
+  // state 'idle') so they cannot walk and re-baseline the distance mid-probe.
+  {
+    const C150 = CFG.combat;
+    const rm = Math.random;
+    // Flame hits are queried from enemies.grid (HashGrid), which the per-step enemy
+    // update rebuilds. This isolated probe never runs that update, so re-insert here —
+    // shadow() is NOT a rebuild path (its arg is a sprite radius).
+    const clearFoes = () => { g2.enemies.list.length = 0; g2.enemies.grid.clear(); };
+    const regrid = () => { g2.enemies.grid.clear(); for (const e of g2.enemies.list) if (!e.dead) g2.enemies.grid.add(e.x, e.y, e); };
+    p2.weapons.flame = 5; p2._axeCd = p2._pistolCd = p2._bombCd = p2._bowCd = 999;
+    const probe = (dx) => {
+      clearFoes();
+      g2.combat.flames.length = 0; g2.combat._flameCd.clear();
+      const e = g2.enemies.spawn('rat', p2.x + dx, p2.y);
+      e.hp = 1e6; e.vx = e.vy = 0; e.state = 'idle';
+      p2._flame.fuel = CFG.weapons.flame.levels[4].fuel; p2._flame.reloading = false;
+      // rand(a,b) = a + Math.random()*(b-a), so 0.5 pins each spread to its CENTRE
+      // (speed 520 / life 0.33 → reach ~124 px); 0 would give the minimum of every
+      // spread and silently shrink the stream instead.
+      Math.random = () => 0.5;
+      fire162();
+      const emitted = g2.combat.flames.length, acquired = emitted > 0;
+      let touched = false;
+      for (let i = 0; i < 40; i++) {
+        e.vx = e.vy = 0; regrid(); tick162(); // ~0.67 s > flameLife
+        if (e.hp < 1e6 || (e.burnT || 0) > 0) touched = true;
+      }
+      Math.random = rm;
+      return { e, acquired, emitted, dmg: e.hp < 1e6, burn: (e.burnT || 0) > 0, touched };
+    };
+    const inn = probe(120);
+    assert(inn.acquired && inn.touched,
+      `flame: foe at 120 px is acquired + damaged + burning (acquired=${inn.acquired} dmg=${inn.dmg} burn=${inn.burn})`);
+    const out = probe(400); // inside the OLD 300–380 ramp, outside the visible stream
+    assert(!out.acquired && !out.dmg && !out.burn,
+      `flame: foe at 400 px is NOT acquired/damaged (range aligned to visuals) (acquired=${out.acquired} dmg=${out.dmg} burn=${out.burn})`);
+    assert(CFG.weapons.flame.levels.every((s) => s.range === 150), 'flame: acquisition range flat 150 at every level');
+    clearFoes();
+    g2.combat.flames.length = 0;
+    // restore a target for the remaining 16.2 origin checks (wand/axe/pistols/bombs/bow
+    // all aim via _nearest) and put the cooldowns back so they fire again.
+    g2.enemies.spawn('rat', p2.x + 120, p2.y);
+    p2._axeCd = p2._pistolCd = p2._bombCd = 0;
+    p2.weapons.flame = 0;
+  }
+
+  // bow (23.1 charge-up): one fire pass enters the wind-up (no arrow yet), the arrow
+  // looses only after CFG.weapons.bow.charge elapses — then spawn origin = mid-torso (16.2)
+  p2.weapons.bow = 1; p2._bowCd = 0; p2._bowCharge = 0;
   fire162();
+  assert(g2.combat.arrows.length === 0 && p2._bowCharge > 0,
+    '23.1: bow enters the charge-up wind-up before any arrow exists');
+  const chStart = p2._bowCharge;
+  assert(Math.abs(chStart - CFG.weapons.bow.charge) < 1e-9, `23.1: charge starts at CFG.weapons.bow.charge (${CFG.weapons.bow.charge})`);
+  let chargeTicks = 0;
+  while (g2.combat.arrows.length === 0 && chargeTicks < 60) { fire162(); chargeTicks++; }
+  assert(chargeTicks >= Math.round(CFG.weapons.bow.charge * 60) - 1,
+    `23.1: the arrow looses only after the full wind-up (ticks=${chargeTicks})`);
   assert(g2.combat.arrows.length > 0 && g2.combat.arrows[0].y === sy162 && g2.combat.arrows[0].x === p2.x,
     '16.2: arrow spawned at mid-torso');
+  // 23.1 visible draw/telegraph: Player.draw strokes the drawn string WHILE charging, not idle
+  p2._bowCharge = CFG.weapons.bow.charge * 0.5;
+  const st0 = drawOps.stroke;
+  p2.draw(g2.ctx);
+  assert(drawOps.stroke - st0 === 1, '23.1: the drawn-string telegraph renders during the wind-up');
   g2.combat.arrows.length = 0; tick162();
+
+  // 12.3 Snowball Launcher E2E: lob origin at mid-torso (16.2), burst ON impact damages +
+  // applies a slow stack, and emits a frost-tagged explosion (the draw selects frostImg).
+  p2.weapons.snowball = 1; p2._snowCd = 0;
+  // Isolate: _nearest picks the CLOSEST foe, so clear leftovers (the bow block parked a
+  // rat at +120) and use one clean target the snowball will actually lob to.
+  g2.enemies.list.length = 0; g2.enemies.grid.clear();
+  const snowTarget = g2.enemies.spawn('rat', p2.x + 130, p2.y);
+  snowTarget.hp = 1e6; snowTarget.maxHp = 1e6; snowTarget.vx = snowTarget.vy = 0; snowTarget.state = 'idle';
+  const snowHp0 = snowTarget.hp;
+  fire162();
+  assert(g2.combat.snowballs.length === 1 && g2.combat.snowballs[0].y0 === sy162
+    && g2.combat.snowballs[0].x0 === p2.x,
+    '12.3: snowball lob origin at mid-torso (16.2)');
+  const exBefore = g2.combat.explosions.length;
+  // The burst queries enemies.grid.range(); the grid is only rebuilt in enemies.update,
+  // which this isolated probe never runs — re-insert the target every tick (pin geometry
+  // while the snowball flies) so the burst query sees it, exactly as the 23.2 bomb E2E does.
+  const regridSnow = () => { g2.enemies.grid.clear(); for (const e of g2.enemies.list) if (!e.dead) g2.enemies.grid.add(e.x, e.y, e); };
+  let snowTicks = 0;
+  while (g2.combat.snowballs.length && snowTicks < 90) {
+    snowTarget.vx = snowTarget.vy = 0; snowTarget.x = p2.x + 130; snowTarget.y = p2.y;
+    regridSnow();
+    tick162();
+    snowTicks++;
+  }
+  assert(snowTicks < 90 && g2.combat.snowballs.length === 0,
+    `12.3: snowball bursts at its target and is removed (ticks=${snowTicks})`);
+  assert(snowTarget.hp < snowHp0, '12.3: the burst damages the targeted enemy');
+  assert(snowTarget.slowStacks.length === 1, '12.3: the burst applies one slow stack to a hit enemy');
+  const frostEx = g2.combat.explosions.slice(exBefore).find((x) => x.frost);
+  assert(!!frostEx, '12.3: impact emits a frost-tagged explosion (frostImg draw path)');
+  p2.weapons.snowball = 0;
+  g2.combat.explosions.length = 0;
+
+// 12.4 Ring of Chain Lightning E2E: bolt origin mid-torso (16.2), shock stacks → stun +
+// chain burst to a nearby foe (+1 shock stack, no re-proc), drawable arc on the owner.
+{
+  // Silence every weapon NOT under test. Ownership persists across the whole 16.x
+  // probe (wand/axe/pistols/bombs/flame/bow/snowball all still owned), so a live cd
+  // means stray projectiles fly during fire162/tick162 — an in-flight Sunder Bomb
+  // exploding on T2 was exactly this probe's failure (hp −87.6, want 42).
+  p2._snowCd = 999; p2._bombCd = 999;
+  // Clear ALL weapon projectiles still in flight from earlier probes (a bomb mid-arc
+  // explodes during tick162 and damages the pinned pair), then unown everything but
+  // the ring — `if (this.weapons.x)` gates each fire site, so cd values are inert.
+  for (const arr of [g2.combat.bolts, g2.combat.axes, g2.combat.bullets, g2.combat.bombs,
+    g2.combat.flames, g2.combat.arrows, g2.combat.snowballs]) arr.length = 0;
+  for (const k of ['wand', 'axe', 'pistols', 'bombs', 'flame', 'bow', 'snowball']) p2.weapons[k] = 0;
+  p2.weapons.ringLightning = 1; p2._ringCd = 0; p2._ringBeams.length = 0;
+    // Freeze every other pipeline for this probe: the spawn waves (g2 never pumps
+    // game.update, but fire162/tick162 must stay noise-free), contact damage, and DoT.
+    // Restored in the cleanup below.
+    const dmgPLayerBak = g2.combat.damagePlayer;
+    g2.combat.damagePlayer = () => false;
+    const dotBak = g2.combat._dot;
+    g2.combat._dot = () => {};
+    g2.enemies.list.length = 0; g2.enemies.grid.clear();
+    const ringT1 = g2.enemies.spawn('rat', p2.x + 130, p2.y);
+    // Bolt damage must never kill T1 (a dead target → _nearest null → no bolts) but
+    // stay > 2×ringDmg so a chain visit is readable as an hp delta on the capped twin.
+    ringT1.hp = 500; ringT1.maxHp = 500;
+    // Pinned beyond the bolt's hit circle at T1 (130 + ringJumpR, strict <) but within
+    // chain reach: only a proc's chain can ever touch it. Capped HP → a second visit kills.
+    const ringT2 = g2.enemies.spawn('rat', p2.x + CFG.combat.ringJumpR + 30, p2.y);
+    ringT2.hp = 60; ringT2.maxHp = 60;
+    let ringTicks = 0, boltN = 0;
+    const stunTicks = Math.ceil(CFG.combat.stunDur * 60) + 2;
+    const stunHold = stunTicks + 8;
+    // Isolate the probe: _chainArc walks enemies.list directly (not the grid), and
+    // g2.enemies still holds every foe from earlier probes — clear to the pinned pair.
+    const pinRing = () => {
+      // Geometry ONLY — never resurrect dead probe foes (the old push-alive pattern
+      // masked kills and double-counted damage in the hp-delta asserts).
+      g2.enemies.list.length = 0; g2.enemies.grid.clear();
+      for (const e of g2.enemies.list) if (!e.dead) { g2.enemies.list.push(e); g2.enemies.grid.add(e.x, e.y, e); }
+      // list was just emptied above — re-add the pinned pair explicitly
+      g2.enemies.list.push(ringT1, ringT2);
+      for (const e of [ringT1, ringT2]) if (!e.dead) g2.enemies.grid.add(e.x, e.y, e);
+    };
+    pinRing();
+    // Deterministic bolt rhythm (bolt period = ringCd·60 = 54 ticks). Two livelocks
+    // made the original free-running probe fail: (a) a drifting cd phase-locks arrivals
+    // past the stack TTL; (b) bolts mid-stun re-stun T1 and re-chain T2. So: pin cd=0
+    // per fire (exact-period firing), accumulate exactly shockMaxStacks, then HOLD THE
+    // RING SILENT (holdRing) for stunDur + margin so no bolt lands during the drain.
+    let bolts = 0;
+    const fireBolt = () => {
+      p2._ringCd = 0;
+      pinRing(); fire162();
+      assert(p2._ringCd === CFG.combat.ringCd, `12.4: bolt #${bolts + 1} fired at tick ${ringTicks}`);
+      bolts++;
+    };
+    // Hold the ring silent for ≥ n ticks (cd pinned far positive; fireBolt re-pins it).
+    const holdRing = (n) => { p2._ringCd = Math.max(p2._ringCd, n + 1); };
+    // Status timers live in Enemies._ai — the probe must drive enemies.update itself
+    // (the isolated g2 never pumps game.update): stack TTL expiry, stun countdown,
+    // knockback. Pin AFTER the AI pass so the geometry stays exact for fire/chain queries.
+    const advance = (ticks) => {
+      for (let n = 0; n < ticks; n++) {
+        p2.dead = false; p2.hp = p2.maxHp;
+        pinRing();
+        // Drain ONLY the status timers during a stun window (game.js:348 order:
+        // enemies.update before combat.update). If a bolt landed mid-window it would
+        // re-stun T1 and the expiry assert below could never settle.
+        g2.enemies.update(1 / 60, g2.players, g2.world, g2.combat);
+        boltN = g2.enemies.list.reduce((m, e) => m + (e.shockStacks ? e.shockStacks.length : 0), 0);
+        const t2Before = ringT2.shockStacks.length;
+        tick162();
+        pinRing();
+        if (ringT2.shockStacks.length - t2Before > 1) {
+          assert(false, `12.4: one chain visit per tick (Δ=${ringT2.shockStacks.length - t2Before}, tick=${ringTicks}, list=${g2.enemies.list.length})`);
+        }
+        if (p2.dead) { assert(false, `12.4: probe owner died mid-probe (tick=${ringTicks})`); return false; }
+        ringTicks++;
+      }
+      return true;
+    };
+    // Bolts 1..max−1 accumulate without stunning. NO advance() between fires: the only
+    // timer drain is fireBolt's own p2.update (one dt per fire), so stacks sit at
+    // ttl − k·dt (≪ statusStackTtl) and cd lands exactly ≤ 0 for the next pin.
+    for (let b = 0; b < CFG.combat.shockMaxStacks - 1; b++) fireBolt();
+    boltN = g2.enemies.list.reduce((m, e) => m + (e.shockStacks ? e.shockStacks.length : 0), 0);
+    assert(boltN === CFG.combat.shockMaxStacks - 1 && ringT2.shockStacks.length === 0,
+      `${CFG.combat.shockMaxStacks - 1} shocks accumulated, no proc yet, T2 untouched (foe stacks=${boltN}, T2=${ringT2.shockStacks.length})`);
+    // The proc bolt: 3rd stack → stun + chain burst to T2 (chain arcs emit mid-chain).
+    const exArc0 = p2._ringBeams.length;
+    fireBolt();
+    holdRing(stunHold);
+    assert(ringT1.stunT > 0, '12.4: the final shock stack stuns (proc fires)');
+    assert(p2._ringBeams.length >= exArc0 + CFG.weapons.ringLightning.levels[0].jumps,
+      `12.4: the chain burst emits arc beams mid-chain (beams=${p2._ringBeams.length - exArc0})`);
+    // Drain window: ring held silent past stunDur so NO bolt lands while T1 is
+    // stunned (a mid-window bolt would re-stun it and could re-chain T2 — the expiry
+    // assert below must settle with exactly one chain visit on the record).
+    // stunT drains exactly stunDur in enemies.update; drain margin absorbs float residue.
+    holdRing(stunTicks);
+    advance(stunTicks);
+    assert(Math.abs(ringT1.stunT) < 1e-9, `12.4: the stun expires after stunDur (stunT=${ringT1.stunT}, ticks=${stunTicks})`);
+    // T2 was chained exactly once (a second visit would kill it: 60 − 2×ringDmg < 30).
+    // Chain damage = the proc bolt's OWN damage value (`combat._chainArc` uses C.ringDmg,
+    // not the weapon level) — one visit drains exactly ringDmg from the capped twin.
+    assert(!ringT2.dead && Math.abs(ringT2.hp - (60 - CFG.combat.ringDmg)) < 1e-9,
+      `12.4: the chain burst damages a nearby foe exactly once (hp=${ringT2.hp}, want ${60 - CFG.combat.ringDmg})`);
+    // T2 was chained exactly once: it holds exactly 1 shock stack and never procs
+    // from a chain visit (a re-proc would stun it and/or double-hit the hp assert).
+    assert(ringT2.shockStacks.length === 1 && ringT2.stunT === 0,
+      `12.4: chained foe holds 1 stack, never re-procs (stacks=${ringT2.shockStacks.length}, stun=${ringT2.stunT})`);
+    // No immunity after the stun: bolts land again (drain = fireBolt's own dt only;
+    // every stack sits ≪ ttl 300). The drain window advanced cd to ~0.9 − stunHold·dt,
+    // so exactly ONE more bolt fits before the cd gate — stacks=1 proves it landed.
+    // (A second chain burst would re-hit T2, whose hp is asserted to exactly ONE
+    // visit further down — so the probe stops at the shock meter, never past it.)
+    const boltsBeforeP2 = bolts;
+    fireBolt();
+    // stunT hits exactly 0 via float subtraction (never `=== 0` — FP-exactness pitfall).
+    assert(bolts - boltsBeforeP2 === 1
+      && ringT1.shockStacks.length === 1 && Math.abs(ringT1.stunT) < 1e-9,
+      `12.4: shocks land again after the stun (stk=${ringT1.shockStacks.length}, bolts=${bolts - boltsBeforeP2})`);
+    holdRing(999); // probe over — no more bolts, nothing drifts during the draw checks
+    // Beam lifetime = ringBeamDur; every fire emits one bolt beam (+ chain beams).
+    // Freshly pin cd=0 and fire ONE bolt right before the draw checks so a live arc
+    // exists on the owner for combat.draw to stroke.
+    fireBolt();
+    assert(p2._ringBeams.length >= 1, '12.4: bolt arcs emitted on the owner during the probe');
+    const ringBeam = p2._ringBeams.find((b) => b.x === p2.x && b.y === sy162);
+    assert(!!ringBeam, '12.4: bolt arc carries the mid-torso origin (16.2)');
+    const st0r = drawOps.stroke;
+    g2.combat.draw(g2.ctx, g2.t, g2.players);
+    assert(drawOps.stroke - st0r >= 1, '12.4: combat.draw strokes the lightning arcs (sparkImg path live)');
+    p2.weapons.ringLightning = 0; p2._ringBeams.length = 0;
+    g2.combat.damagePlayer = dmgPLayerBak;
+    g2.combat._dot = dotBak;
+    g2.enemies.list.length = 0; g2.enemies.grid.clear();
+  }
+
   // blades: orbit center = mid-torso (16.2) — the feet-level orbit point must NOT
   // be sheared, the mid-torso one must (rad = the level-1 orbit radius; _orbitT
   // starts 0 → after one tick the blade sits ~0.04 rad past +x at radius rad).
@@ -1050,6 +1301,145 @@ m03RunDone = true;
   g2.combat.draw(g2.ctx, g2.t, g2.players);
   assert(drawOps.drawImage - d0 >= CFG.weapons.blades.levels[0].n, '16.2: combat.draw drew the blade sprites (per-player loop live)');
   assert(drawOps.arc - ar0 === 1, '16.2: combat.draw drew the garlic pulse ring (feet-centered, live phase)');
+
+  // 22.1 audit: garlic is the only weapon with a drawn effect but NO in-tree damage
+  // check — assert the pulse lands. Park a rat inside S.r + e.r, force the per-player
+  // timer to fire a pulse, then the real combat.update path must deal S.dmg × dmgMul
+  // with zero knockback (ground pulse = pure tick, kb = 0). The earlier per-weapon
+  // checks left projectiles/orbit armed behind, so clear arrays + disable orbit for a
+  // garlic-only measurement (grid is populated exactly as enemies.update does).
+  {
+    const gS = CFG.weapons.garlic.levels[0];
+    p2.weapons.blades = 0;
+    g2.combat.bolts.length = 0; g2.combat.bullets.length = 0;
+    g2.combat.arrows.length = 0; g2.combat.axes.length = 0;
+    g2.combat.bombs.length = 0; g2.combat.flames.length = 0; g2.combat.explosions.length = 0;
+    const eR = g2.enemies.spawn('rat', p2.x + gS.r, p2.y);
+    g2.enemies.grid.clear();
+    for (const e of g2.enemies.list) if (!e.dead) g2.enemies.grid.add(e.x, e.y, e);
+    const hp0 = eR.hp;
+    p2._garlicT = CFG.combat.garlicTick; // next update fires a pulse
+    tick162();
+    const dealt = hp0 - eR.hp;
+    const want = gS.dmg * p2.dmgMul;
+    assert(dealt > 0 && eR.hp >= 0, `22.1: garlic pulse damaged the foe inside the ring (dealt=${dealt.toFixed(2)}, hp=${eR.hp.toFixed(2)}/${eR.maxHp})`);
+    assert(Math.abs(dealt - want) <= 1e-6, `22.1: garlic pulse damage = level dmg × dmgMul (${want})`);
+    assert(eR.vx === 0 && eR.vy === 0, `22.1: garlic pulse applies zero knockback (kb = 0)`);
+  }
+
+  // 23.2 Sunder Bombs E2E — real lob → fuse → explode pipeline (no direct _explode call):
+  // blast lands within the NEW radius ×1.5, damage = level dmg × dmgMul, knockback is
+  // radial FROM THE BLAST CENTRE with the doubled bombKb magnitude.
+  {
+    const BS = CFG.weapons.bombs.levels[0];
+    p2.weapons.garlic = 0; p2.weapons.blades = 0;
+    for (const k of ['wand', 'axe', 'pistols', 'flame', 'bow']) p2.weapons[k] = 0;
+    g2.combat.bolts.length = 0; g2.combat.bullets.length = 0;
+    g2.combat.arrows.length = 0; g2.combat.axes.length = 0;
+    g2.combat.bombs.length = 0; g2.combat.flames.length = 0; g2.combat.explosions.length = 0;
+    p2.weapons.bombs = 1; p2._bombCd = 0;
+    // enemy due east inside the NEW radius but OUTSIDE the old one (95) — only the
+    // reworked blast can reach it; frozen so it cannot wander off the bearing
+    const eB = g2.enemies.spawn('rat', p2.x + 120, p2.y);
+    eB.hp = 1e6; eB.maxHp = 1e6;
+    const regridB = () => { g2.enemies.grid.clear(); for (const e of g2.enemies.list) if (!e.dead) g2.enemies.grid.add(e.x, e.y, e); };
+    let sawBomb = false, sawExpl = false, bombX = 0, bombY = 0;
+    for (let i = 0; i < 240 && !sawExpl; i++) {
+      eB.vx = eB.vy = 0; eB.x = p2.x + 120; eB.y = p2.y; // pin geometry while flying
+      fire162();
+      if (g2.combat.bombs.length) sawBomb = true;
+      regridB();
+      g2.combat.update(1 / 60, g2.players, g2.enemies);
+      if (g2.combat.explosions.length) {
+        sawExpl = true;
+        bombX = g2.combat.explosions[0].x; bombY = g2.combat.explosions[0].y;
+      }
+    }
+    assert(sawBomb && sawExpl, '23.2: the bomb lobbed, fused, and exploded (explosion record pushed)');
+    assert(Math.hypot(bombX - p2.x, bombY - p2.y) <= CFG.combat.bombDist + 1e-6,
+      `23.2: blast centre within bombDist (${Math.hypot(bombX - p2.x, bombY - p2.y).toFixed(1)})`);
+    const dealt = 1e6 - eB.hp;
+    assert(dealt > 0 && Math.abs(dealt - BS.dmg * p2.dmgMul) <= 1e-6,
+      `23.2: blast damage = level dmg × dmgMul (${dealt.toFixed(2)} vs ${BS.dmg * p2.dmgMul})`);
+    const bdx = eB.x - bombX, bdy = eB.y - bombY;
+    const bd = Math.hypot(bdx, bdy) || 1;
+    const along = (eB.vx * bdx + eB.vy * bdy) / bd; // knockback component along blast→enemy
+    const perp = Math.abs((eB.vx * -bdy + eB.vy * bdx) / bd);
+    assert(along >= CFG.combat.bombKb * 0.95 && perp <= CFG.combat.bombKb * 0.1,
+      `23.2: knockback radial from the blast centre at ≥~full bombKb (along=${along.toFixed(1)} perp=${perp.toFixed(1)}, kb=${CFG.combat.bombKb})`);
+    // visual-vs-damage radius E2E: draw one explosion frame — the drawn sprite must
+    // cover the damage radius (old ramp drew 0.60× at k=0 = the reported defect)
+    const exX = g2.combat.explosions[0];
+    exX.t = 0;
+    const seen = [];
+    const vctx = new Proxy({}, { get(_, p) {
+      if (p === 'drawImage') return (img, dx, dy, dw) => { seen.push(dw); };
+      if (typeof p === 'string') return () => undefined;
+      return undefined; } });
+    g2.combat.draw(vctx, g2.t, g2.players);
+    assert(seen.length > 0 && seen[seen.length - 1] >= exX.r * 2,
+      `23.2: drawn blast width ${seen[seen.length - 1]} ≥ damage diameter ${exX.r * 2} at flash start`);
+    g2.combat.bombs.length = 0; g2.combat.explosions.length = 0;
+    eB.dead = true;
+  }
+
+  // 23.3 Over-heal E2E — full run pipeline: pickups.update collect → game route →
+  // over-health past maxHp, then per-step decay back toward 100%.
+  {
+    p2.weapons.bombs = 0;
+    g2.combat.bombs.length = 0; g2.combat.explosions.length = 0;
+    const pl = g2.player;
+    pl.overHeal = 0; pl.hp = pl.maxHp;
+    // no synergy → the old clamped path (hp stays pinned at maxHp)
+    g2.pickups.heart(pl.x, pl.y);
+    const gotNoSyn = g2.pickups.update(1 / 60, pl, g2._pickupSpots);
+    if (!(pl.hp >= pl.maxHp && pl.applyOverHeal(gotNoSyn.heal))) pl.heal(gotNoSyn.heal);
+    assert(gotNoSyn.heal > 0 && pl.hp === pl.maxHp && pl.overHeal === 0,
+      '23.3: without the synergy, a full-HP heart does nothing (clamped path)');
+    // with synergy → over-health lands via the same route game.js uses
+    pl.synergies.phoenix = 1;
+    g2.pickups.heart(pl.x, pl.y);
+    const gotSyn = g2.pickups.update(1 / 60, pl, g2._pickupSpots);
+    if (!(pl.hp >= pl.maxHp && pl.applyOverHeal(gotSyn.heal))) pl.heal(gotSyn.heal);
+    assert(pl.hp === pl.maxHp + CFG.gems.heartHeal && pl.overHeal === CFG.gems.heartHeal,
+      `23.3: heart at full HP → hp ${pl.hp} over maxHp ${pl.maxHp}`);
+    // ceiling via the real route: repeated hearts never pass 200% of CURRENT max HP
+    for (let i = 0; i < 5; i++) {
+      g2.pickups.heart(pl.x, pl.y);
+      const got = g2.pickups.update(1 / 60, pl, g2._pickupSpots);
+      if (!(pl.hp >= pl.maxHp && pl.applyOverHeal(got.heal))) pl.heal(got.heal);
+    }
+    assert(pl.hp === pl.maxHp * 2 && pl.overHeal === pl.maxHp,
+      `23.3: hearts cap at 200% of current max HP (hp=${pl.hp}, maxHp=${pl.maxHp})`);
+    // decay ticks with the real player.update (regen off so it cannot refill)
+    const regenBak = pl.regen; pl.regen = 0;
+    const ohBefore = pl.overHeal;
+    pl.update(1, { x: 0, y: 0 }, g2.combat, g2.enemies, g2.world);
+    assert(pl.overHeal < ohBefore - pl.maxHp * 0.005,
+      `23.3: over-health decays ~1%/s through the live update (${ohBefore.toFixed(1)} → ${pl.overHeal.toFixed(1)})`);
+    // HUD shows it while any pool exists (pairs with Phase 19 — otherwise "nothing happened").
+    // The main HUD is GAMEOVER here (run-2 ended) and reads game.player (seatPlayer(0)),
+    // so drive the same over-health route on the MAIN player before hud.update().
+    const plM = game.player;
+    const bak = { oh: plM.overHeal, hp: plM.hp, regen: plM.regen, state: game.state };
+    game.state = 'PLAYING'; // hud.update() early-returns unless a run is on screen
+    plM.regen = 0; plM.overHeal = 0; plM.hp = plM.maxHp; plM.synergies.phoenix = 1;
+    { const got = CFG.gems.heartHeal; if (!(plM.hp >= plM.maxHp && plM.applyOverHeal(got))) plM.heal(got); }
+    hud.update();
+    assert(byId['hp-label'].textContent === `${Math.max(0, Math.ceil(plM.hp))} / ${Math.ceil(plM.maxHp + plM.overHeal)}`,
+      `23.3: HUD HP label shows the over-health ceiling (got "${byId['hp-label'].textContent}")`);
+    const ohTf = byId['oh-fill'].style._props.transform;
+    assert(typeof ohTf === 'string' && ohTf.startsWith('scaleX(') && parseFloat(ohTf.slice(7)) > 0,
+      `23.3: HUD over-health segment driven (>0 while the pool exists; got ${JSON.stringify(ohTf)})`);
+    // no pool → label reverts to plain maxHp
+    plM.overHeal = 0; plM.hp = Math.min(plM.hp, plM.maxHp);
+    hud.update();
+    assert(byId['hp-label'].textContent === `${Math.max(0, Math.ceil(plM.hp))} / ${plM.maxHp}`,
+      `23.3: HUD HP label reverts with no pool (got "${byId['hp-label'].textContent}")`);
+    game.state = bak.state;
+    plM.overHeal = bak.oh; plM.hp = bak.hp; plM.regen = bak.regen;
+    pl.synergies = {}; pl.overHeal = 0; pl.hp = Math.min(pl.hp, pl.maxHp); pl.regen = regenBak;
+  }
 }
 
 // 16.3 — Pyre Lance flame: +33% stream length, 2x flow/extension, LEAD-while-moving.
@@ -1848,6 +2238,7 @@ assert(keyPickDone, 'keyboard card pick never exercised');
 assert(heartDone && heartAsserted, 'heart pickup path never exercised');
 assert(wandOffDone && wandOffAsserted, 'wand-off kill window never exercised');
 assert(sawBullets && sawBombs && sawFlames && sawArrows, 'new-weapon projectiles (bullets/bombs/flames/arrows) never observed');
+assert(sawBolts && sawAxes && sawBlades && sawGarlic, `22.1: all-weapon E2E — bolts=${sawBolts} axes=${sawAxes} blades=${sawBlades} garlic=${sawGarlic}`);
 assert(burnDone && burnAsserted, 'burn DoT kill path never exercised');
 assert(dashIFrameStep === 2, 'dash i-frame E2E never completed');
 assert(synDone, 'synergy E2E (blight) never completed');
@@ -1864,6 +2255,6 @@ console.log(
   `PASS boot-sim — runs=4 (death + victory + m02 + m03) · level-ups=${levelUps} · max enemies alive=${maxEnemies} · ` +
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 8 weapons (wand-off kill window) · ` +
-  `pistols/bombs/flame/arrows projectiles · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
+  `all 8 weapons observed live (bolts/axes/blades/garlic/bullets/bombs/flames/arrows) · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
   `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · loop alive throughout`,
 );

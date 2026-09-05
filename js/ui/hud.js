@@ -17,6 +17,7 @@ export function initHud(game) {
   const hud = $('hud');
   const hpBar = hud.querySelector('.hp-bar');
   const hpFill = $('hp-fill');
+  const ohFill = $('oh-fill');
   const hpLabel = $('hp-label');
   const xpFill = $('xp-fill');
   const lvlBadge = $('lvl-badge');
@@ -58,9 +59,11 @@ export function initHud(game) {
     const face = el('canvas', 'seat-face');
     const name = el('div', 'seat-name');
     const pHpBar = el('div', 'bar hp-bar');
+    const pOhFill = el('div', 'bar-fill oh-fill');
     const pHpFill = el('div', 'bar-fill');
     const pHpLabel = el('span', 'bar-label');
-    pHpBar.append(pHpFill, pHpLabel);
+    // 23.3: oh-fill FIRST so hp-fill paints over it (stacking order in the DOM)
+    pHpBar.append(pOhFill, pHpFill, pHpLabel);
     const row = el('div', 'seat-row');
     const lvl = el('div', 'seat-lvl');
     const pXpBar = el('div', 'bar xp-bar');
@@ -70,7 +73,7 @@ export function initHud(game) {
     const dash = el('div', 'seat-dash');
     root.append(face, name, pHpBar, row, dash);
     hud.appendChild(root);
-    return { root, face, name, hpBar: pHpBar, hpFill: pHpFill, hpLabel: pHpLabel, lvl, xpFill: pXpFill, dash, _vis: false, _key: '' };
+    return { root, face, name, hpBar: pHpBar, hpFill: pHpFill, ohFill: pOhFill, hpLabel: pHpLabel, lvl, xpFill: pXpFill, dash, _vis: false, _key: '' };
   };
   const panels = [mkPanel(1), mkPanel(2), mkPanel(3)];
   const ghostSheet = [null, null, null, null]; // seat → tinted ghost sheet cache (D62 per-seat tint)
@@ -95,10 +98,14 @@ export function initHud(game) {
   const syncPanel = (pan, seat, key, pl) => {
     setTxt(pan.name, CFG.characters[key].name);
     syncFace(pan, key, seat);
+    // 23.3: same over-health treatment as the seat-0 panel (bonus segment + ceiling label)
+    const cap = pl.maxHp + (pl.overHeal || 0);
     const frac = pl.hp / pl.maxHp;
     pan.hpFill.style.transform = `scaleX(${clamp(frac, 0, 1)})`;
-    pan.hpBar.classList.toggle('low', frac < CFG.gems.lowHpFrac);
-    setTxt(pan.hpLabel, `${Math.max(0, Math.ceil(pl.hp))} / ${pl.maxHp}`);
+    pan.ohFill.style.transform = `scaleX(${clamp(pl.hp / cap, 0, 1)})`;
+    pan.hpBar.classList.toggle('over', (pl.overHeal || 0) > 0);
+    pan.hpBar.classList.toggle('low', frac < CFG.gems.lowHpFrac && (pl.overHeal || 0) <= 0);
+    setTxt(pan.hpLabel, `${Math.max(0, Math.ceil(pl.hp))} / ${Math.ceil(cap)}`);
     pan.xpFill.style.transform = `scaleX(${clamp(pl.xp / CFG.xpNeed(pl.level), 0, 1)})`;
     setTxt(pan.lvl, `LV ${pl.level}`);
     pan.dash.style.setProperty('--cd', String(clamp(pl.dashCd / CFG.player.dashCd, 0, 1)));
@@ -141,7 +148,7 @@ export function initHud(game) {
   let themeKey = null;
   const update = () => {
     const st = game.state;
-    const show = st === 'PLAYING' || st === 'LEVELUP' || st === 'PAUSED' || st === 'DYING';
+    const show = st === 'PLAYING' || st === 'LEVELUP' || st === 'PAUSED'; // 22.6: no DYING transient — death flips straight to GAMEOVER
     hud.classList.toggle('hidden', !show);
     hud.setAttribute('aria-hidden', show ? 'false' : 'true');
     if (!show) return;
@@ -155,10 +162,16 @@ export function initHud(game) {
     // 11.7: TL (#hud-left) is the SEAT-0 panel — solo seat 0 = local player (invariance);
     // in co-op seat 0 is the host (on the host) or the remote host (on clients).
     const p = seatPlayer(0) || game.player;
+    // 23.3: over-health rides the same bar — hpFill shows hp/maxHp (may exceed 1),
+    // ohFill tints the bonus segment, the bar frame grows to the ceiling while any
+    // over-health pool exists.
+    const cap = p.maxHp + (p.overHeal || 0);
     const frac = p.hp / p.maxHp;
     hpFill.style.transform = `scaleX(${clamp(frac, 0, 1)})`;
-    hpBar.classList.toggle('low', frac < CFG.gems.lowHpFrac);
-    setTxt(hpLabel, `${Math.max(0, Math.ceil(p.hp))} / ${p.maxHp}`);
+    ohFill.style.transform = `scaleX(${clamp(p.hp / cap, 0, 1)})`;
+    hpBar.classList.toggle('over', (p.overHeal || 0) > 0);
+    hpBar.classList.toggle('low', frac < CFG.gems.lowHpFrac && (p.overHeal || 0) <= 0);
+    setTxt(hpLabel, `${Math.max(0, Math.ceil(p.hp))} / ${Math.ceil(cap)}`);
     xpFill.style.transform = `scaleX(${clamp(p.xp / CFG.xpNeed(p.level), 0, 1)})`;
     setTxt(lvlBadge, `LV ${p.level}`);
     setTxt(timer, fmtTime(CFG.run.time - game.t));

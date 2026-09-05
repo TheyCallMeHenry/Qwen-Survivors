@@ -69,6 +69,10 @@ html, body {
    fallback = original red-orange. .hp-bar .bar-fill (NOT #hp-fill) so the co-op
    seat panels' fills get a background too (11.7 left them unstyled). */
 .hp-bar .bar-fill { background: var(--char-grad, linear-gradient(90deg, #e6455f, #ff8f6b)); box-shadow: 0 0 10px var(--char-inset, rgba(255, 90, 110, 0.5)) inset; }
+/* 23.3 — over-health (Phoenix Heart): bonus segment behind the HP fill + gold bar
+   frame while any over-health pool exists (paired HUD work with Phase 19). */
+.hp-bar .oh-fill { background: linear-gradient(90deg, rgba(255, 214, 120, 0.85), rgba(255, 170, 60, 0.6)); }
+.bar.hp-bar.over { border-color: #ffd75e; box-shadow: 0 0 8px rgba(255, 215, 94, 0.5); }
 #xp-fill { background: linear-gradient(90deg, #14b8a6, #6ee7b7); }
 .bar-label {
   position: absolute; inset: 0;

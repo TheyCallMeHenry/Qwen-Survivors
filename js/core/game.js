@@ -1,5 +1,5 @@
 // Game: state machine + run orchestration + render pipeline.
-// States: MENU / PLAYING / LEVELUP / PAUSED / DYING / GAMEOVER.
+// States: MENU / PLAYING / LEVELUP / PAUSED / GAMEOVER.
 // Browser-only instantiation (constructor touches canvas APIs via art modules).
 // Update order (PLAYING): input edges → player → spawns → enemies → combat →
 // pickups → level-up gate → ambience/camera → victory check.
@@ -76,6 +76,9 @@ export class Game {
     this.combat.onDeath = (pl) => this._onDeath(pl);
     this.combat.bulletImg = items.bullet;
     this.combat.arrowImg = items.arrow;
+    this.combat.snowballImg = items.snowball;   // 12.3
+    this.combat.frostImg = items.frostBurst;    // 12.3
+    this.combat.sparkImg = items.spark;         // 12.4
     this.combat.bombImg = items.bomb;
     this.combat.flameImg = items.flame;
     this.combat.explosionImg = items.explosion;
@@ -109,7 +112,6 @@ export class Game {
     this.levelupQueue = 0;
     this.cards = null;
     this.victory = false;
-    this.deathT = 0;
     this.bossSpawned = false;
     this._ghostT = 0;
 
@@ -180,7 +182,6 @@ export class Game {
     this.levelupQueue = 0;
     this.cards = null;
     this.victory = false;
-    this.deathT = 0;
     this.bossSpawned = false;
     this._ghostT = 0;
     this._ghost = false; // 11.6.3: co-op startRun re-arms it via the ghost flow (D59)
@@ -299,9 +300,6 @@ export class Game {
         this.input.consumeDash();
         this.input.takeCardEdges();
         break;
-      case 'DYING':
-        this._dyingUpdate(dt);
-        break;
       default:
         this._playingUpdate(dt);
     }
@@ -352,7 +350,11 @@ export class Game {
     this.combat.update(dt, this.players, this.enemies);
     for (const pl of this.players) {
       const got = this.pickups.update(dt, pl, this._pickupSpots);
-      if (got.heal > 0) pl.heal(got.heal);
+      // 23.3: at full HP with Phoenix Heart, the heal converts to over-health instead
+      // of vanishing against maxHp.
+      if (got.heal > 0) {
+        if (!(pl.hp >= pl.maxHp && pl.applyOverHeal(got.heal))) pl.heal(got.heal);
+      }
       if (got.xp > 0) {
         this.bus.emit('gem');
         const ups = pl.gainXp(got.xp);
@@ -378,16 +380,7 @@ export class Game {
     if (i >= 0) this.pickCard(i);
   }
 
-  _dyingUpdate(dt) {
-    this.deathT += dt;
-    const p = this.player;
-    this.enemies.update(dt, this.players, this.world, this.combat);
-    this.combat.update(dt, this.players, this.enemies);
-    this.particles.update(dt);
-    this.snow.update(dt);
-    this.camera.update(dt, p.x, p.y, p.vx, p.vy);
-    if (this.deathT >= CFG.run.deathDelay) this._gameOver(false);
-  }
+
 
   _spawns(dt) {
     const R = CFG.run;
@@ -505,11 +498,6 @@ export class Game {
     // never strand its gem — drop it at the spot's outer edge instead.
     const gp = escapeFromSpots(e.x, e.y, this._pickupSpots, CFG.gems.escapePad);
     this.pickups.gem(gp.x, gp.y, e.xp);
-    if (p.synergies && p.synergies.phoenix) {
-      p._phoenixKills = (p._phoenixKills || 0) + 1;
-      const S = CFG.synergies.phoenix.levels[0];
-      if (p._phoenixKills % S.every === 0) p.heal(S.heal);
-    }
     const lowHp = p.hp / p.maxHp < CFG.gems.lowHpFrac;
     if (Math.random() < (lowHp ? CFG.gems.heartChanceLowHp : CFG.gems.heartChance)) this.pickups.heart(e.x, e.y);
     this.particles.soul(e.x, e.y, e.boss ? 14 : 5);
@@ -534,11 +522,12 @@ export class Game {
       // co-op: the run continues while any player is alive (11.2)
       if (this.players.some((q) => !q.dead)) return;
     }
-    this.state = 'DYING';
-    this.deathT = 0;
-    this.loop.timescale = CFG.run.deathTimescale;
+    // 22.6: no slow-mo death beat — immediate Game Over. The 0.3x slow-mo was
+    // useless without a dying animation, so death now ends the run at once
+    // (death shake + 'death' bus retained). timescale is already 1 in PLAYING.
     this.camera.addShake(1);
     this.bus.emit('death');
+    this._gameOver(false);
   }
 
   _gameOver(victory) {
@@ -711,7 +700,6 @@ export class Game {
     }
     this._applyChar(pl, key, seat); // 11.6.4: the seat's ASSIGNED char (D56/D57) — base stats + starting weapon + sheet
     pl._mx = 0; pl._my = 0; pl._dash = false;
-    pl._phoenixKills = 0;
     // _assign stays unset — _applyAssign applies/deals this seat (ghost pair included).
     return pl;
   }
@@ -836,7 +824,6 @@ export class Game {
     this.victory = false;
     this.levelupQueue = 0;
     this.cards = null;
-    this.deathT = 0;
     this._ghostT = 0;
     this._snapBuf = [];
     this._enemySid = new Map();

@@ -228,9 +228,9 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   let flaOk = true;
   for (let i = 1; i < 5; i++) {
     const a = L('flame')[i - 1], b = L('flame')[i];
-    if (b.tick < a.tick || b.dot < a.dot || b.range < a.range || b.fuel < a.fuel || b.recharge > a.recharge) flaOk = false;
+    if (b.tick < a.tick || b.dot < a.dot || b.range !== a.range || b.fuel < a.fuel || b.recharge > a.recharge) flaOk = false;
   }
-  ok(flaOk, 'weapons.flame: tick↑ dot↑ range↑ fuel↑ recharge↓');
+  ok(flaOk, 'weapons.flame: tick↑ dot↑ range FLAT fuel↑ recharge↓');
   let bowOk = true;
   for (let i = 1; i < 5; i++) {
     const a = L('bow')[i - 1], b = L('bow')[i];
@@ -304,13 +304,16 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     '11.5.2: other-owned weapons never offered (pool = bombs/flame + phoenix only)');
   // Cap drives the new-weapon slots. Owned weapons MAXED (no upgrade cards) with incomplete synergy
   // pairs (no garlic/blades/flame → no weapon synergies); passives maxed (phoenix IS gated — the only
-  // non-weapon pool item). Cap 5: pool = {garlic:1, blades:1, flame:1, bow:1, phoenix} (12.2: bow
-  // joins the roster). Cap 4 (2P): new-weapon slots closed → pool = {phoenix} only.
+  // non-weapon pool item). Cap 5: pool = {garlic, blades, flame, bow, snowball} new-weapon L1 + phoenix.
+  // Cap 5: pool = {garlic, blades, flame, bow, snowball, ringLightning} new-weapon L1 + phoenix.
+  // (12.2: bow joins; 12.3: snowball joins; 12.4: ringLightning joins → 6 new-weapon keys now
+  // compete for the 3 offer slots.)
+  // Cap 4 (2P): new-weapon slots closed → pool = {phoenix} only.
   const w4 = { wand: 5, axe: 5, pistols: 5, bombs: 5 };
+  const NEW_W = ['garlic', 'blades', 'flame', 'bow', 'snowball', 'ringLightning'];
   for (let seed = 1; seed <= 3; seed++) {
     const draw = cardOffers(w4, allPassMax, {}, mulberry32(seed), 5);
-    ok(draw.length === 3 && draw.every((c) => (c.kind === 'weapon' && c.level === 1
-        && (c.key === 'garlic' || c.key === 'blades' || c.key === 'flame' || c.key === 'bow'))
+    ok(draw.length === 3 && draw.every((c) => (c.kind === 'weapon' && c.level === 1 && NEW_W.includes(c.key))
         || (c.kind === 'synergy' && c.key === 'phoenix')), `11.5.2: cap 5 → new-weapon slots open (seed ${seed})`);
   }
   const cap4 = cardOffers(w4, allPassMax, {}, mulberry32(1), 4);
@@ -371,9 +374,10 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 
 // --- Phase 10.2: exact-effect card text (pure, player.js) ---
 {
-  ok(cardEffectText('weapon', 'wand', 1) === '1 bolt · every 0.60 s · 12 dmg · no pierce',
+  // 23.1 rebaseline: wand rate raised very slightly (pistols < wand < bow at every level)
+  ok(cardEffectText('weapon', 'wand', 1) === '1 bolt · every 0.64 s · 12 dmg · no pierce',
     'cardEffectText: wand L1 = full stat line');
-  ok(cardEffectText('weapon', 'wand', 2) === 'rate 0.60→0.50 s · dmg 12→16 · pierce 0→1',
+  ok(cardEffectText('weapon', 'wand', 2) === 'rate 0.64→0.54 s · dmg 12→16 · pierce 0→1',
     'cardEffectText: wand L2 = changed-field deltas only (count 1→1 skipped)');
   ok(cardEffectText('passive', 'hp', 1) === '+25 max HP + heal 25 now → total +25 max HP',
     'cardEffectText: hp passive L1 increment + total');
@@ -381,6 +385,9 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     'cardEffectText: speed passive L2 float-safe pct (0.1×2 → 20%)');
   ok(cardEffectText('synergy', 'blight', 1) === 'Moonbolts apply Blight — 14 dmg/s for 3.0 s',
     'cardEffectText: blight synergy states numbers');
+  // 23.3 rebaseline: phoenix card text = over-heal (old "Heal 10 HP every 8 kills" deleted)
+  ok(cardEffectText('synergy', 'phoenix', 1) === 'Hearts at full health grant over-health up to 200% max HP — diminishes 1%/s',
+    '23.3: phoenix card text = over-heal effect');
   ok(cardEffectText('meta', 'maxHp', 1) === '+20 max HP → total +20 max HP',
     'cardEffectText: maxHp meta L1');
   ok(cardEffectText('meta', 'dash', 1) === '−8% dash cooldown → total −8%',
@@ -405,8 +412,9 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 {
   const C = CFG.combat;
   ok(CFG.weapons.bow.levels.length === 5, '12.2: bow has a 5-level table');
-  ok(cardEffectText('weapon', 'bow', 1) === 'every 0.55 s · 16 dmg', '12.2: bow L1 exact-effect line');
-  ok(cardEffectText('weapon', 'bow', 2) === 'rate 0.55→0.48 s · dmg 16→21', '12.2: bow L2 delta line');
+  // 23.1 rebaseline: bow rate table raised (charge-up added); old rates were identical to pistols
+  ok(cardEffectText('weapon', 'bow', 1) === 'every 0.68 s · draw 0.25 s · 16 dmg', '23.1: bow L1 exact-effect line');
+  ok(cardEffectText('weapon', 'bow', 2) === 'rate 0.68→0.60 s · dmg 16→21', '23.1: bow L2 delta line (charge flat — never a delta)');
   const c = new Combat();
   const owner = { x: 0, y: 0, vx: 0, vy: 0 };
   const mkEnemy = (x) => ({ x, y: 100, r: 12, hp: 100, maxHp: 100, flash: 0, vx: 0, vy: 0, dead: false });
@@ -438,6 +446,157 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ]);
   ok([...iconNames].every((n) => new RegExp(`icons\\.${n}\\s*=`).test(src)),
     '12.2: every CFG icon name (incl. bow) exists in buildIcons()');
+}
+
+// --- 12.3: Snowball Launcher — lobbed AoE + accumulating slow → freeze (Combat/Enemies, Node-safe) ---
+{
+  const C = CFG.combat;
+  const SB = CFG.weapons.snowball;
+  ok(SB.levels.length === 5, '12.3: snowball has a 5-level table');
+  // Monotonic growth shape: cd↓ dmg↑ r↑ across all levels (matches the weapon-card contract).
+  const L = SB.levels;
+  let mono = true;
+  for (let i = 1; i < L.length; i++) {
+    if (!(L[i].cd < L[i - 1].cd && L[i].dmg > L[i - 1].dmg && L[i].r > L[i - 1].r)) mono = false;
+  }
+  ok(mono, '12.3: snowball per-level scaling shape cd↓ dmg↑ r↑ holds');
+  // Exact-effect card lines (10.2 rule): L1 full-stat, L2 delta.
+  const l1 = cardEffectText('weapon', 'snowball', 1);
+  ok(l1.includes(`every ${L[0].cd}`) && l1.includes(`${L[0].dmg} dmg`) && l1.includes(`blast radius ${L[0].r}`),
+    `12.3: snowball L1 line names cd/dmg/r (${l1})`);
+  const l2 = cardEffectText('weapon', 'snowball', 2);
+  ok(l2.includes(`${L[0].cd}→${L[1].cd}`) && l2.includes(`dmg ${L[0].dmg}→${L[1].dmg}`) && l2.includes(`radius ${L[0].r}→${L[1].r}`),
+    `12.3: snowball L2 delta line shows cd/dmg/r deltas (${l2})`);
+
+  // Flight → burst: the snowball arcs to its target point, then bursts ON impact damaging
+  // + knocking back + applying one slow stack to enemies in radius.
+  const c = new Combat();
+  const owner = { x: 0, y: 0, vx: 0, vy: 0 };
+  const mkEnemy = (x) => ({ x, y: 100, r: 12, hp: 100, maxHp: 100, flash: 0, vx: 0, vy: 0, dead: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0 });
+  const e = mkEnemy(150);      // inside the burst radius at the target point (160)
+  const eFar = mkEnemy(400);   // outside every burst — never touched
+  const grid = { grid: { range: () => [e, eFar] }, list: [e, eFar] };
+  c.fireSnowball(100, 100, 160, 100, 26, 95, owner);
+  ok(c.snowballs.length === 1, '12.3: fireSnowball pushes one snowball');
+  const sb = c.snowballs[0];
+  ok(sb.tx === 160 && sb.ty === 100 && sb.dmg === 26 && sb.radius === 95 && sb.owner === owner,
+    '12.3: snowball carries target point, dmg, radius and owner');
+  ok(sb.fly > 0, '12.3: flight time derived from distance (no fuse pause)');
+  // Step until it lands (> fly seconds); the burst resolves at impact.
+  let steps = 0;
+  while (c.snowballs.length && steps < 60) { c.update(1 / 60, [], grid); steps++; }
+  ok(steps < 60 && c.snowballs.length === 0, '12.3: snowball bursts and is removed at its target');
+  ok(e.hp === 74, '12.3: burst applies full damage to an enemy in radius');
+  // e sits LEFT of the burst centre (dx = -10), so knockback pushes it further left (-x).
+  ok(e.vx < 0 && Math.abs(e.vy) < 1e-9, '12.3: knockback is radial from the burst centre');
+  ok(Math.abs(-e.vx - C.snowballKb) < 1e-9, '12.3: full snowballKb magnitude lands on a centred-bearing enemy');
+  ok(eFar.hp === 100 && eFar.slowStacks.length === 0, '12.3: enemies outside the burst are untouched');
+  ok(e.slowStacks.length === 1, '12.3: one slow stack applied to a hit enemy');
+
+  // A frost-tagged explosion is emitted for the impact visual (draw selects frostImg).
+  const frost = c.explosions.find((x) => x.frost);
+  ok(!!frost && frost.r === 95, '12.3: burst emits a frost-tagged explosion sized to the damage radius');
+
+  // Slow → freeze pipeline (12.5): slowMaxStacks stacks trigger a brief freeze and consume the stacks.
+  const e2 = { x: 0, y: 0, r: 12, hp: 100, maxHp: 100, flash: 0, vx: 0, vy: 0, dead: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0 };
+  c.applySlow(e2);
+  c.applySlow(e2);
+  ok(e2.slowStacks.length === 2 && e2.freezeT === 0, '12.3/12.5: two stacks accumulate without freezing');
+  c.applySlow(e2); // third → freeze
+  ok(e2.slowStacks.length === 0 && e2.freezeT === C.freezeDur,
+    '12.3/12.5: the Nth stack freezes (freezeT = freezeDur) and consumes the stacks');
+
+  // Per-stack TTL expiry (independent): a lone stack lapses after statusStackTtl via Enemies._ai.
+  const es = new Enemies();
+  const one = { x: 0, y: 0, r: 12, hp: 999, maxHp: 999, flash: 0, vx: 0, vy: 0, dead: false,
+    slowStacks: [{ t: 0.05 }], freezeT: 0, shockStacks: [], stunT: 0, speed: 10, fly: true };
+  es.list.push(one);
+  const dummyPlayer = { x: -9999, y: -9999, dead: false }; // far away so the enemy drifts straight
+  const worldStub = { collidersNear: () => [] };
+  for (let i = 0; i < 6 && one.slowStacks.length; i++) es._ai(one, 1 / 60, [dummyPlayer], worldStub, null);
+  ok(one.slowStacks.length === 0, '12.5: an expired slow stack is removed on tick');
+}
+
+// --- 12.4: Ring of Chain Lightning — shock stacks → stun + branching chain burst ---
+{
+  const C = CFG.combat;
+  const RL = CFG.weapons.ringLightning;
+  ok(RL.levels.length === 5, '12.4: ringLightning has a 5-level table');
+  // Scaling shape: cd↓ dmg↑ jumps↑ (levels increase the chain count — the spec's core growth).
+  const L = RL.levels;
+  let mono = true;
+  for (let i = 1; i < L.length; i++) {
+    if (!(L[i].cd < L[i - 1].cd && L[i].dmg > L[i - 1].dmg && L[i].jumps > L[i - 1].jumps)) mono = false;
+  }
+  ok(mono, '12.4: ringLightning per-level scaling shape cd↓ dmg↑ jumps↑ holds');
+  // Exact-effect card lines (10.2 rule): L1 full-stat, L2 delta.
+  const l1 = cardEffectText('weapon', 'ringLightning', 1);
+  ok(l1.includes(`every ${L[0].cd}`) && l1.includes(`${L[0].dmg} dmg`) && l1.includes(`chain ${L[0].jumps} foes`),
+    `12.4: ringLightning L1 line names cd/dmg/chain (${l1})`);
+  const l2 = cardEffectText('weapon', 'ringLightning', 2);
+  ok(l2.includes(`${L[0].cd}→${L[1].cd}`) && l2.includes(`dmg ${L[0].dmg}→${L[1].dmg}`) && l2.includes(`chain ${L[0].jumps}→${L[1].jumps} foes`),
+    `12.4: ringLightning L2 delta line shows cd/dmg/chain deltas (${l2})`);
+
+  // Shock pipeline (12.5): stacks accumulate; the Nth consumes them → stun + chain burst.
+  const c = new Combat();
+  const owner = { x: 0, y: 0, vx: 0, vy: 0, _ringBeams: [] };
+  const mkE = (x) => ({ x, y: 100, r: 12, hp: 100, maxHp: 100, flash: 0, vx: 0, vy: 0, dead: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0 });
+  const e1 = mkE(150);   // the proc'd enemy
+  const cA = mkE(200);   // chain targets, within ringJumpR of the last link
+  const cB = mkE(260);
+  const cFar = mkE(150 + C.ringJumpR + 40); // beyond every jump from the proc point
+  const en = { list: [e1, cA, cB, cFar] };
+  c.enemies = en;
+  c.applyShock(e1, 2, owner);
+  c.applyShock(e1, 2, owner);
+  ok(e1.shockStacks.length === 2 && e1.stunT === 0, '12.4/12.5: two shock stacks accumulate without stunning');
+  c.applyShock(e1, 2, owner); // third → stun + chain
+  ok(e1.shockStacks.length === 0 && e1.stunT === C.stunDur,
+    '12.4/12.5: the Nth shock stack stuns (stunT = stunDur) and consumes the stacks');
+  ok(cA.hp < 100 && cB.hp < 100, '12.4: the chain burst damages jumped-to enemies');
+  ok(cA.shockStacks.length === 1 && cB.shockStacks.length === 1,
+    '12.4: chained enemies gain exactly 1 shock stack (no re-proc)');
+  ok(cFar.hp === 100 && cFar.shockStacks.length === 0,
+    '12.4: enemies beyond the jump radius are untouched');
+  // Chain count = weapon `jumps`: with jumps=2 only the 2 nearest foes are hit.
+  const d1 = mkE(0), h1 = mkE(60), h2 = mkE(120), miss = mkE(180);
+  c.enemies = { list: [d1, h1, h2, miss] };
+  d1.shockStacks.push({ t: C.statusStackTtl }, { t: C.statusStackTtl });
+  c.applyShock(d1, 2, owner);
+  ok(h1.hp < 100 && h2.hp < 100 && miss.hp === 100,
+    '12.4: the chain leaps exactly `jumps` fresh foes (greedy nearest), no more');
+
+  // fireShockBolt: damage + one stack + a drawable arc on the owner player.
+  const c2 = new Combat();
+  c2.enemies = { list: [] };
+  const tgt = mkE(300);
+  c2.fireShockBolt(100, 100, tgt, 30, 2, owner);
+  ok(tgt.hp === 70 && tgt.shockStacks.length === 1, '12.4: a shock bolt damages + applies one stack');
+  const beam = owner._ringBeams[owner._ringBeams.length - 1];
+  ok(owner._ringBeams.length > 0 && beam.x === 100 && beam.y === 100 && beam.tx === 300 && beam.ty === 100
+    && beam.dur === C.ringBeamDur, '12.4: bolt emits a drawable arc (spawn → target) on its owner');
+
+  // Stun lock (enemies._ai): stunned enemies stop moving and suppress weave/ranged/boss timers.
+  const es = new Enemies();
+  const st3 = { x: 0, y: 0, r: 12, hp: 999, maxHp: 999, flash: 0, vx: 0, vy: 0, dead: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0.5, speed: 100, fly: true,
+    weave: true, ranged: true, cd: 0.01, animT: 1, phase: 1 };
+  es.list.push(st3);
+  es.orbs.length = 0;
+  const nearPlayer = { x: 50, y: 0, dead: false };
+  const worldStub = { collidersNear: () => [] };
+  es._ai(st3, 1 / 60, [nearPlayer], worldStub, null);
+  ok(Math.abs(st3.vx) < 1e-9 && Math.abs(st3.vy) < 1e-9, '12.4: a stunned enemy does not move');
+  ok(es.orbs.length === 0, '12.4: stun suppresses ranged firing');
+  // Per-stack TTL expiry mirrors slow (independent 5 s per stack).
+  const one = { x: 0, y: 0, r: 12, hp: 999, maxHp: 999, flash: 0, vx: 0, vy: 0, dead: false,
+    slowStacks: [], freezeT: 0, shockStacks: [{ t: 0.05 }], stunT: 0, speed: 10, fly: true };
+  es.list.length = 1; es.list[0] = one;
+  for (let i = 0; i < 6 && one.shockStacks.length; i++) es._ai(one, 1 / 60, [nearPlayer], worldStub, null);
+  ok(one.shockStacks.length === 0, '12.5: an expired shock stack is removed on tick');
 }
 
 // --- Phase 9: meta progression (pure) ---
@@ -910,8 +1069,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
 
 // --- 11.2 host-authoritative sync: snapshot codec + per-player ownership ---
 {
-  ok(WEAPON_KEYS.length === 8 && PASSIVE_KEYS.length === 5 && SYNERGY_KEYS.length === 5 && ENEMY_KEYS.length === 9,
-    '11.2: key tables follow CFG order/counts');
+  ok(WEAPON_KEYS.length === 10 && PASSIVE_KEYS.length === 5 && SYNERGY_KEYS.length === 5 && ENEMY_KEYS.length === 9,
+    '11.2: key tables follow CFG order/counts (12.4 rebaseline: 10 weapons)');
 
   const p = new Player({});
   p.reset(10, 20);
@@ -920,7 +1079,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   applyCard(p, { kind: 'synergy', key: 'blight', level: 1 });
   p.xp = 12.345; p.hp = 55.55; p.dashT = 0.333; p.dashCd = 1.666; p.flip = true;
   const ps = playerSnap(p);
-  ok(ps.length === 27, '11.2: playerSnap is 27 slots (SNAP_V=2)');
+  ok(ps.length === 29, '11.2: playerSnap is 29 slots (SNAP_V=4, 12.4 rebaseline)');
   const p2 = new Player({});
   p2.reset(0, 0);
   applyPlayerSnap(p2, ps);
@@ -1245,6 +1404,32 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(Math.abs(C.flameSpeedVar / C.flameSpeed - 80 / 260) < 0.005, '16.3: speed spread keeps the pre-16.3 ±ratio');
   ok(Math.abs(C.flameLifeVar / C.flameLife - 0.15 / 0.65) < 0.01, '16.3: life spread keeps the pre-16.3 ±ratio');
   ok(C.flameMomentum > 0 && C.flameMomentum < 1, '16.3: flameMomentum inherits a proper share of the owner velocity (LEAD-while-moving)');
+
+  // Damage reach must track the VISIBLE stream (user report 2026-09-04): the old
+  // 300–380 acquisition ramp hit enemies well past where flame sprites render.
+  // Replay the engine's own _flames recurrence to get max particle travel, then
+  // require every level's range to sit inside the visible envelope.
+  {
+    const dtF = 1 / 60;
+    const travel = (speed, life) => {
+      let x = 0, vx = speed, vy = 0, age = 0, far = 0;
+      while (age < life) {
+        const dr = Math.exp(-C.flameDrag * dtF);
+        vx *= dr; vy = vy * dr - C.flameRise * dtF;
+        x += vx * dtF; age += dtF;
+        const k = age / life, s = C.flameSize * (0.55 + 0.75 * k);
+        far = Math.max(far, x + s / 2); // outer edge of the drawn sprite
+      }
+      return far;
+    };
+    const visMax = travel(C.flameSpeed + C.flameSpeedVar, C.flameLife + C.flameLifeVar);
+    const dmgMax = (C.flameSpeed + C.flameSpeedVar) / C.flameDrag * (1 - Math.exp(-C.flameDrag * (C.flameLife + C.flameLifeVar))) + C.flameR;
+    const ranges = CFG.weapons.flame.levels.map((s) => s.range);
+    ok(ranges.every((r) => r === 150), 'flame range: flat 150 at all 5 levels (visual alignment, 2026-09-04)');
+    ok(Math.max(...ranges) <= visMax, `flame range ≤ max visible sprite reach (${Math.max(...ranges)} ≤ ${visMax.toFixed(1)})`);
+    ok(dmgMax <= visMax + 1, `flame particle damage edge ≤ visible edge (${dmgMax.toFixed(1)} ≤ ${visMax.toFixed(1)})`);
+    ok(ranges[0] >= travel(C.flameSpeed - C.flameSpeedVar, C.flameLife - C.flameLifeVar), 'flame range ≥ min-case visible reach (no dead zone below the stream start)');
+  }
 }
 
 // --- 11.9 co-op minimap + buttons (CSS-only change; content asserts on main.css) ---
@@ -1339,6 +1524,107 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(HEART_PAL.m01.top === '#ff7d90' && HEART_PAL.m01.low === '#d42a4c' &&
      HEART_PAL.m02.top === '#ffb3a0' && HEART_PAL.m02.low === '#e0446e',
     '22.3: m01/m02 heart palettes untouched (only m03 retuned)');
+}
+
+// --- 23.1 Bow charge-up + projectile cadence ordering (config invariants) ---
+{
+  const L = (k) => CFG.weapons[k].levels;
+  ok(typeof CFG.weapons.bow.charge === 'number' && CFG.weapons.bow.charge > 0 && CFG.weapons.bow.charge <= 0.5,
+    '23.1: bow charge scalar present + sane (0 < charge ≤ 0.5 s — a "brief" wind-up)');
+  // The reported bug: bow rate was numerically identical to pistols. Ordering invariant:
+  // bow > wand > pistols at EVERY level (strict).
+  let ordOk = true;
+  for (let i = 0; i < 5; i++) {
+    if (!(L('bow')[i].rate > L('wand')[i].rate && L('wand')[i].rate > L('pistols')[i].rate)) ordOk = false;
+  }
+  ok(ordOk, '23.1: cadence ordering pistols < wand < bow at every level');
+  // User rule: unnamed weapons leave as-is — pistols/axe/bomb tables are exactly the pre-23 values.
+  ok(JSON.stringify(L('pistols').map((s) => s.rate)) === JSON.stringify([0.55, 0.48, 0.42, 0.36, 0.3]),
+    '23.1: pistols cadence untouched (user: "feels fine")');
+  ok(JSON.stringify(L('axe').map((s) => s.cd)) === JSON.stringify([1.4, 1.25, 1.1, 0.95, 0.8]),
+    '23.1: axe cadence untouched');
+  ok(JSON.stringify(L('bombs').map((s) => s.cd)) === JSON.stringify([2.2, 2.0, 1.8, 1.6, 1.4]),
+    '23.2: bomb cd untouched (only radius/damage changed)');
+}
+
+// --- 23.2 Sunder Bombs rework: radius ×1.5, damage ×2, kb magnitude up, visual ≈ damage ---
+{
+  const R = CFG.weapons.bombs.levels.map((s) => s.r);
+  ok(JSON.stringify(R) === JSON.stringify([142, 157, 172, 192, 210]), '23.2: blast radii = old ×1.5 (142/157/172/192/210)');
+  ok(CFG.weapons.bombs.levels[0].dmg === 80, '23.2: base damage ×2 (40 → 80)');
+  let shapeOk = true;
+  for (let i = 1; i < 5; i++) {
+    const a = CFG.weapons.bombs.levels[i - 1], b = CFG.weapons.bombs.levels[i];
+    if (!(b.dmg > a.dmg && b.r > a.r && b.cd < a.cd && b.fuse < a.fuse)) shapeOk = false;
+  }
+  ok(shapeOk, '23.2: per-level scaling shape dmg↑ r↑ cd↓ fuse↓ still holds');
+  ok(CFG.combat.bombKb > 260, '23.2: bombKb magnitude increased (very strong push-back)');
+  // Knockback direction stays radial from the blast centre: an enemy east of the blast
+  // must gain +vx only (dx/d, dy/d unchanged pipeline).
+  const c = new Combat();
+  const eE = { x: 60, y: 0, r: 12, hp: 1e6, maxHp: 1e6, flash: 0, vx: 0, vy: 0, dead: false };
+  const grid = { grid: { range: () => [eE] }, list: [eE] };
+  c.fireBomb(0, 0, 0, 50, 10, 200, 0.01, null, null);
+  const b0 = c.bombs[0];
+  c._explode(b0, grid); // blast centre (0,0); eE due east
+  ok(eE.vx > 0 && Math.abs(eE.vy) < 1e-9, '23.2: knockback still radial from the blast centre');
+  ok(Math.abs(eE.vx - CFG.combat.bombKb) < 1e-9, '23.2: full bombKb magnitude lands on a centred-bearing enemy');
+  // Visual-vs-damage radius invariant (draw source): the sprite must never shrink below
+  // the damage radius (old ramp started at 0.60× — the reported defect).
+  const csrc = readFileSync(fileURLToPath(new URL('../js/entities/combat.js', import.meta.url)), 'utf8');
+  const ex = csrc.match(/const s = x\.r \* 2 \* \(([^)]+)\);/);
+  ok(!!ex, '23.2: explosion sprite scale driven from x.r (true damage radius)');
+  ok(!!ex && parseFloat(ex[1].split('+')[0]) >= 1, '23.2: blast visual starts at ≥1.0× the damage radius');
+}
+
+// --- 23.3 Over-heal synergy (replaces Phoenix Heart kill-heal in place) ---
+{
+  const S = CFG.synergies.phoenix.levels[0];
+  ok(S.ceiling === 2 && near(S.decay, 0.01), '23.3: ceiling 200% current max HP + 1%/s decay scalars');
+  // Old machinery DELETED, not moved (user instruction) — no _phoenixKills anywhere in js/.
+  const gsrc = readFileSync(fileURLToPath(new URL('../js/core/game.js', import.meta.url)), 'utf8');
+  const plyr = readFileSync(fileURLToPath(new URL('../js/entities/player.js', import.meta.url)), 'utf8');
+  ok(!gsrc.includes('_phoenixKills') && !plyr.includes('_phoenixKills'),
+    '23.3: _phoenixKills fully deleted (game.js + player.js)');
+
+  const mk = () => { const p = new Player({}); p.reset(0, 0); return p; };
+  // No synergy → applyOverHeal refuses (normal clamped heal path stays).
+  const p0 = mk();
+  ok(p0.applyOverHeal(20) === false && p0.hp === p0.maxHp && p0.overHeal === 0,
+    '23.3: no synergy → over-heal never applies');
+  // Below full HP with synergy → still refuses (game routes to pl.heal).
+  const p1 = mk(); p1.synergies.phoenix = 1; p1.hp = 50;
+  ok(p1.applyOverHeal(20) === false && p1.hp === 50, '23.3: below full HP → normal heal path');
+  // At full HP → over-health up to ceiling.
+  const p2 = mk(); p2.synergies.phoenix = 1;
+  p2.applyOverHeal(CFG.gems.heartHeal);
+  ok(p2.hp === p2.maxHp + CFG.gems.heartHeal && p2.overHeal === CFG.gems.heartHeal,
+    '23.3: heart at full HP → hp past maxHp by heartHeal');
+  // Ceiling: repeated pickups never exceed 200% of CURRENT max HP.
+  for (let i = 0; i < 20; i++) p2.applyOverHeal(CFG.gems.heartHeal);
+  ok(p2.hp === p2.maxHp * 2 && p2.overHeal === p2.maxHp, '23.3: ceiling = 200% of current max HP');
+  // Ceiling follows CURRENT max HP (Heart of Oak mid-run raise → re-evaluated live).
+  const p3 = mk(); p3.synergies.phoenix = 1; p3.hp = p3.maxHp;
+  applyCard(p3, { kind: 'passive', key: 'hp', level: 1 }); // +25 max (recomputeStats)
+  for (let i = 0; i < 40; i++) p3.applyOverHeal(CFG.gems.heartHeal);
+  ok(p3.hp === p3.maxHp * 2, '23.3: ceiling re-evaluated after max HP rises mid-run');
+  // Decay: ~1% of max HP per second back toward 100%; hp pinned at maxHp when pool drains.
+  const p4 = mk(); p4.synergies.phoenix = 1; p4.hp = p4.maxHp; p4.regen = 0;
+  p4.applyOverHeal(20);
+  const before = p4.hp;
+  p4._overHeal(1); // 1 s ≈ −maxHp×0.01
+  ok(near(p4.hp, before - p4.maxHp * S.decay, 1e-9) && near(p4.overHeal, 20 - p4.maxHp * S.decay, 1e-9),
+    '23.3: decay ≈ 1% of max HP per second');
+  for (let i = 0; i < 60 * 60; i++) p4._overHeal(1 / 60);
+  ok(p4.hp === p4.maxHp && near(p4.overHeal, 0, 1e-9), '23.3: decay settles at exactly 100% (no undershoot)');
+  // Second heart re-applies and out-runs the diminishment.
+  const p5 = mk(); p5.synergies.phoenix = 1; p5.hp = p5.maxHp;
+  p5.applyOverHeal(20);
+  for (let i = 0; i < 60; i++) p5._overHeal(1 / 60); // ~−maxHp×0.01 of decay
+  const mid = p5.hp;
+  p5.applyOverHeal(CFG.gems.heartHeal);
+  ok(p5.hp === mid + CFG.gems.heartHeal && p5.overHeal > 20 - p5.maxHp * S.decay,
+    '23.3: second heart re-applies over-health (cancels the diminishment)');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

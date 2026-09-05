@@ -9,8 +9,6 @@ export const CFG = {
     victoryBonus: 10000,
     timeScorePerSec: 15,
     maxWeapons: 5,      // base standard-weapon slots per player (co-op cap = base − (N−1), 11.5)
-    deathDelay: 1.8,    // slow-mo seconds before game over
-    deathTimescale: 0.3,
   },
 
   player: {
@@ -72,11 +70,11 @@ export const CFG = {
       desc: 'Auto-fires spectral bolts at the nearest enemy.',
       icon: 'wand',
       levels: [
-        { rate: 0.60, dmg: 12, count: 1, pierce: 0 },
-        { rate: 0.50, dmg: 16, count: 1, pierce: 1 },
-        { rate: 0.45, dmg: 20, count: 2, pierce: 1 },
-        { rate: 0.38, dmg: 26, count: 2, pierce: 2 },
-        { rate: 0.32, dmg: 34, count: 3, pierce: 2 },
+        { rate: 0.64, dmg: 12, count: 1, pierce: 0 },
+        { rate: 0.54, dmg: 16, count: 1, pierce: 1 },
+        { rate: 0.49, dmg: 20, count: 2, pierce: 1 },
+        { rate: 0.42, dmg: 26, count: 2, pierce: 2 },
+        { rate: 0.36, dmg: 34, count: 3, pierce: 2 },
       ],
     },
     garlic: {
@@ -124,36 +122,74 @@ export const CFG = {
       name: 'Sunder Bombs',
       desc: 'Lob cartoon bombs that land, pause, then boom in an AOE.',
       icon: 'bombs',
+      // 23.2 rework (user): blast radius ×1.5, base damage ×2 (scaling shape kept).
       levels: [
-        { cd: 2.2, dmg: 40, r: 95, fuse: 1.1 },
-        { cd: 2.0, dmg: 52, r: 105, fuse: 0.95 },
-        { cd: 1.8, dmg: 66, r: 115, fuse: 0.8 },
-        { cd: 1.6, dmg: 82, r: 128, fuse: 0.65 },
-        { cd: 1.4, dmg: 100, r: 140, fuse: 0.5 },
+        { cd: 2.2, dmg: 80, r: 142, fuse: 1.1 },
+        { cd: 2.0, dmg: 104, r: 157, fuse: 0.95 },
+        { cd: 1.8, dmg: 132, r: 172, fuse: 0.8 },
+        { cd: 1.6, dmg: 164, r: 192, fuse: 0.65 },
+        { cd: 1.4, dmg: 200, r: 210, fuse: 0.5 },
       ],
     },
     flame: {
       name: 'Pyre Lance',
       desc: 'A streaming geyser of flame that ignites foes. Limited fuel, slow refill.',
       icon: 'flame',
+      // range = aim/acquisition radius. Flat 150 at every level (2026-09-04): the
+      // visible stream reaches ~85–200 px (mean ~136 incl. sprite extent), so the old
+      // 300–380 ramp damaged enemies in an invisible gap far past the flame's end.
+      // Level growth stays in tick/dot/fuel/recharge — never in range again.
       levels: [
-        { tick: 6, dot: 4, dotDur: 2.5, range: 300, fuel: 4.0, recharge: 7.0 },
-        { tick: 8, dot: 5, dotDur: 2.8, range: 320, fuel: 5.0, recharge: 6.5 },
-        { tick: 10, dot: 6, dotDur: 3.0, range: 340, fuel: 6.0, recharge: 6.0 },
-        { tick: 13, dot: 8, dotDur: 3.3, range: 360, fuel: 7.0, recharge: 5.5 },
-        { tick: 16, dot: 10, dotDur: 3.6, range: 380, fuel: 8.0, recharge: 5.0 },
+        { tick: 6, dot: 4, dotDur: 2.5, range: 150, fuel: 4.0, recharge: 7.0 },
+        { tick: 8, dot: 5, dotDur: 2.8, range: 150, fuel: 5.0, recharge: 6.5 },
+        { tick: 10, dot: 6, dotDur: 3.0, range: 150, fuel: 6.0, recharge: 6.0 },
+        { tick: 13, dot: 8, dotDur: 3.3, range: 150, fuel: 7.0, recharge: 5.5 },
+        { tick: 16, dot: 10, dotDur: 3.6, range: 150, fuel: 8.0, recharge: 5.0 },
+      ],
+    },
+    // 12.3 Snowball Launcher (weapon #9). Lobbed snowball → small impact AoE on the
+    // targeted enemy + accumulating slow stacks; SLOW_FREEZE stacks → brief freeze.
+    // `cd` = fire interval; `speed`/arc feed the lob flight (see combat.fireSnowball).
+    snowball: {
+      name: 'Snowball Launcher',
+      desc: 'Lobs a packed snowball that bursts in a small blast, slowing foes. 3 slows → freeze.',
+      icon: 'snowball',
+      levels: [
+        { cd: 1.60, dmg: 26, r: 95 },
+        { cd: 1.45, dmg: 34, r: 102 },
+        { cd: 1.30, dmg: 44, r: 110 },
+        { cd: 1.15, dmg: 56, r: 118 },
+        { cd: 1.00, dmg: 70, r: 128 },
+      ],
+    },
+    ringLightning: {
+      name: 'Ring of Chain Lightning',
+      desc: 'A jeweled ring arcs lightning at nearby foes. 3 shocks → stun + chain burst.',
+      icon: 'ringLightning',
+      // `jumps` = enemies the chain burst leaps to when shock stacks hit max
+      // (12.4: weapon levels increase the chain count).
+      levels: [
+        { cd: 1.70, dmg: 30, jumps: 2 },
+        { cd: 1.55, dmg: 38, jumps: 3 },
+        { cd: 1.40, dmg: 50, jumps: 4 },
+        { cd: 1.25, dmg: 64, jumps: 5 },
+        { cd: 1.10, dmg: 82, jumps: 6 },
       ],
     },
     bow: {
       name: 'Bow & Arrow',
       desc: 'Looses a fast arrow at the nearest foe.',
       icon: 'bow',
+      // 23.1 (user): charge = the drawn-string wind-up before the arrow looses (s, flat
+      // at every level). Cadence raised so bow > wand > pistols at EVERY level — the old
+      // rate table was numerically identical to Twin Fangs (the "doesn't feel unique" bug).
+      charge: 0.25,
       levels: [
-        { rate: 0.55, dmg: 16 },
-        { rate: 0.48, dmg: 21 },
-        { rate: 0.42, dmg: 27 },
-        { rate: 0.36, dmg: 34 },
-        { rate: 0.30, dmg: 42 },
+        { rate: 0.68, dmg: 16 },
+        { rate: 0.60, dmg: 21 },
+        { rate: 0.53, dmg: 27 },
+        { rate: 0.46, dmg: 34 },
+        { rate: 0.39, dmg: 42 },
       ],
     },
   },
@@ -186,11 +222,14 @@ export const CFG = {
       icon: 'napalm', requires: ['bombs', 'flame'],
       levels: [{ dps: 18, dur: 3.0 }],
     },
+    // 23.3 (user DECIDED): the old kill-heal effect is REPLACED in place by over-heal.
+    // ceiling = fraction of CURRENT max HP the over-health bar may reach; decay = how
+    // fast the bonus shrinks back to 100% (fraction of max HP per second).
     phoenix: {
       name: 'Phoenix Heart',
-      desc: 'Reclaim your vitality — heal 10 HP every 8 kills.',
+      desc: 'Hearts at full health grant over-health up to 200% max — decays 1%/s.',
       icon: 'phoenix', requires: ['hp', 'regen'],
-      levels: [{ heal: 10, every: 8 }],
+      levels: [{ ceiling: 2, decay: 0.01 }],
     },
   },
 
@@ -247,10 +286,28 @@ export const CFG = {
     // Twin Fangs rounds (small, fast, short-lived — distinct from the cyan bolt)
     bulletSpeed: 720, bulletLife: 0.8, bulletR: 4, bulletKb: 120, pistolRange: 520,
     // Sunder Bombs (lob arc + fuse pause before AOE)
-    bombDist: 240, bombMin: 120, bombFly: 0.55, bombH: 70, bombKb: 260, bombFlash: 0.4,
+    // bombKb 260→520 (23.2): "very strong push-back" — magnitude only; direction stays
+    // radial from the blast centre (_explode dx/d, dy/d — unchanged).
+    bombDist: 240, bombMin: 120, bombFly: 0.55, bombH: 70, bombKb: 520, bombFlash: 0.4,
     // Bow & Arrow (12.2): fast single-target arrow at the nearest foe — straight
     // flight, one hit (no pierce; Heart-Piercer 12.6 adds that), mid-torso origin (16.2)
     arrowSpeed: 640, arrowLife: 1.4, arrowR: 4, arrowKb: 150,
+    // Snowball Launcher (12.3): lobbed snowball — arcs to the targeted enemy, bursts in a
+    // small impact AoE there, applies slow stacks. Bomb-style flight (fly time + parabola),
+    // NO fuse pause: it bursts ON impact.
+    snowballSpeed: 460, snowballFlyK: 1 / 460, snowballH: 56, snowballR: 9, snowballKb: 90,
+    // Status pipeline (12.5): slow/shock stacks with independent per-stack 5 s expiry
+    // (config scalar — expected playtest tuning). slowPct = movement speed reduction per
+    // stack (multiplicative: speed × (1 − slowPct·stacks)); SLOW_FREEZE stacks → freezeDur
+    // movement lock. Shock/stun fields land with 12.4.
+    statusStackTtl: 5,
+    slowPct: 0.16, slowMaxStacks: 3, freezeDur: 0.8,
+    // Shock → stun (12.4): the ring's bolts apply shock stacks; shockMaxStacks → stunDur
+    // full lock + a branching chain burst (jumps from the weapon level) to nearby foes.
+    shockMaxStacks: 3, stunDur: 0.6,
+    // Ring of Chain Lightning (12.4): periodic bolt at the nearest foe + one shock stack;
+    // on proc the burst chains to `jumps` fresh foes within jumpR of the last hit.
+    ringCd: 0.9, ringDmg: 18, ringJumpR: 260, ringKb: 40, ringBeamDur: 0.16,
     // Pyre Lance flame sprites (flow-y drag/rise + wobble, grow-then-fade)
     // 16.3: front speed exactly 2x the pre-16.3 build (260/80) + lifetime trimmed
     // 0.65 -> 0.33 => mean stream reach exactly +33% (94.6 -> 125.8 px, drag

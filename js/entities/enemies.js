@@ -52,6 +52,9 @@ export class Enemies {
       state: 'chase', stateT: 0, cd: rand(1, 2.5),
       flip: false, frame: 0, dead: false,
       burnT: 0, burnDps: 0, blightT: 0, blightDps: 0,
+      // 12.5 status pipeline: slow→freeze + shock→stun (12.4). Each stack entry expires
+      // independently after CFG.combat.statusStackTtl.
+      slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0,
     };
     if (e.boss) e.cd = CFG.ai.wraithWindup * 2; // first charge comes sooner
     this.list.push(e);
@@ -86,19 +89,46 @@ export class Enemies {
   _ai(e, dt, players, world, combat) {
     const A = CFG.ai;
     if (e.flash > 0) e.flash -= dt;
+    // 12.5: slow-stack expiry (independent per-stack TTL) + freeze lock tick.
+    if (e.slowStacks.length) {
+      for (let i = e.slowStacks.length - 1; i >= 0; i--) {
+        e.slowStacks[i].t -= dt;
+        if (e.slowStacks[i].t <= 0) e.slowStacks.splice(i, 1);
+      }
+    }
+    if (e.freezeT > 0) e.freezeT -= dt;
+    // 12.4: shock-stack expiry + stun lock tick
+    if (e.shockStacks.length) {
+      for (let i = e.shockStacks.length - 1; i >= 0; i--) {
+        e.shockStacks[i].t -= dt;
+        if (e.shockStacks[i].t <= 0) e.shockStacks.splice(i, 1);
+      }
+    }
+    if (e.stunT > 0) e.stunT -= dt;
     const player = nearestPlayer(e, players); // nearest LIVE player (solo: the only one)
     const dx = player.x - e.x, dy = player.y - e.y;
     const d = Math.hypot(dx, dy) || 1;
     const ux = dx / d, uy = dy / d;
     let tvx = ux * e.speed, tvy = uy * e.speed;
+    // 12.3/12.5: slow stacks cut movement (capped so 4+ stacks can't fully stop before
+    // the freeze lands); a frozen enemy does not move at all.
+    if (e.slowStacks.length) {
+      const C = CFG.combat;
+      tvx *= 1 - Math.min(e.slowStacks.length, C.slowMaxStacks) * C.slowPct;
+      tvy *= 1 - Math.min(e.slowStacks.length, C.slowMaxStacks) * C.slowPct;
+    }
+    if (e.freezeT > 0 || e.stunT > 0) { tvx = 0; tvy = 0; }
 
-    if (e.weave) {
+    // Stunned/frozen foes hold pattern: no weave, and ranged firing is suppressed too.
+    const locked = e.freezeT > 0 || e.stunT > 0;
+
+    if (e.weave && !locked) {
       const w = Math.sin(e.phase + e.animT * A.weaveFreq) * A.weaveAmp;
       tvx += -uy * w;
       tvy += ux * w;
     }
 
-    if (e.ranged) {
+    if (e.ranged && !locked) {
       e.cd -= dt;
       const inRange = d >= A.cultistRange[0] && d <= A.cultistRange[1];
       if (inRange) {
@@ -113,7 +143,7 @@ export class Enemies {
       }
     }
 
-    if (e.boss) {
+    if (e.boss && !locked) {
       // wraith: slow chase → windup → charge through the crowd
       e.cd -= dt;
       if (e.state === 'chase') {
@@ -246,6 +276,52 @@ export class Enemies {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.drawImage(this.blightImg, e.x + 7 - s / 2, e.y - def.h - 6 - s / 2, s, s);
+      ctx.restore();
+    }
+    // 12.3/12.5 status tells: frozen = solid ice cap over the foe; else slow stacks =
+    // one frost pip above the HP bar each (≤ slowMaxStacks).
+    if (e.freezeT > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = '#bfe8ff';
+      ctx.beginPath();
+      ctx.arc(e.x, e.y - def.h * 0.55, def.w * 0.42, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    } else if (e.slowStacks.length) {
+      ctx.save();
+      ctx.fillStyle = '#8fd4ff';
+      for (let i = 0; i < e.slowStacks.length; i++) {
+        ctx.beginPath();
+        ctx.arc(e.x - 8 + i * 8, e.y - def.h - 16, 2.4, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    // 12.4/12.5 shock tell: yellow spark pips above the HP bar (right of frost pips);
+    // stunned = a crackling arc over the head
+    if (e.shockStacks.length) {
+      ctx.save();
+      ctx.fillStyle = '#ffe06a';
+      for (let i = 0; i < e.shockStacks.length; i++) {
+        ctx.beginPath();
+        ctx.arc(e.x + 4 + i * 8, e.y - def.h - 16, 2.4, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    if (e.stunT > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = 'rgba(255,236,140,0.85)';
+      ctx.lineWidth = 1.6;
+      const a0 = t * 9 + e.phase;
+      ctx.beginPath();
+      ctx.moveTo(e.x - 10, e.y - def.h - 4);
+      ctx.lineTo(e.x - 3 + Math.sin(a0) * 2, e.y - def.h - 10);
+      ctx.lineTo(e.x + 2, e.y - def.h - 5);
+      ctx.lineTo(e.x + 10, e.y - def.h - 11 + Math.cos(a0) * 2);
+      ctx.stroke();
       ctx.restore();
     }
     if (e.hp < e.maxHp) {

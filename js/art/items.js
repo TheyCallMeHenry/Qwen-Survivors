@@ -222,6 +222,72 @@ function bombSprite() {
   return c;
 }
 
+function snowballSprite() {
+  // 12.3: packed snow ball — bright core, bumpy frost rim, cold speckles
+  const c = makeCanvas(22, 22);
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(9, 9, 1, 11, 11, 10);
+  grad.addColorStop(0, '#f4fbff');
+  grad.addColorStop(0.6, '#cfe8fa');
+  grad.addColorStop(1, '#8fb8d8');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(11, 11, 9, 0, TAU); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.85)';
+  for (const [x, y, r] of [[6, 8, 2.2], [14, 6, 1.8], [16, 13, 2.0], [9, 15, 1.7]]) {
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+  g.strokeStyle = 'rgba(140,190,225,0.6)';
+  g.lineWidth = 1;
+  g.beginPath(); g.arc(11, 11, 9, 0, TAU); g.stroke();
+  return c;
+}
+
+function frostBurstSprite() {
+  // 12.3: snowball impact — cold white/cyan flash, drawn additively and scaled to the
+  // damage radius at runtime (same ≥1.0× ramp as the bomb flash, 23.2 rule)
+  const c = makeCanvas(64, 64);
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 31);
+  grad.addColorStop(0, 'rgba(245,252,255,0.95)');
+  grad.addColorStop(0.45, 'rgba(170,225,250,0.65)');
+  grad.addColorStop(0.8, 'rgba(110,180,230,0.28)');
+  grad.addColorStop(1, 'rgba(90,160,220,0)');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(32, 32, 31, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(235,248,255,0.7)';
+  g.lineWidth = 2;
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * TAU + 0.4;
+    g.beginPath();
+    g.moveTo(32 + Math.cos(a) * 10, 32 + Math.sin(a) * 10);
+    g.lineTo(32 + Math.cos(a) * 26, 32 + Math.sin(a) * 26);
+    g.stroke();
+  }
+  return c;
+}
+
+function sparkSprite() {
+  // 12.4: lightning strike point — additive cyan-white star burst
+  const c = makeCanvas(20, 20);
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(10, 10, 1, 10, 10, 9);
+  grad.addColorStop(0, 'rgba(245,250,255,0.95)');
+  grad.addColorStop(0.4, 'rgba(180,215,255,0.6)');
+  grad.addColorStop(1, 'rgba(140,190,255,0)');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(10, 10, 9, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(235,245,255,0.9)';
+  g.lineWidth = 1.4;
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * TAU + 0.35;
+    g.beginPath();
+    g.moveTo(10 + Math.cos(a) * 2, 10 + Math.sin(a) * 2);
+    g.lineTo(10 + Math.cos(a) * 9, 10 + Math.sin(a) * 9);
+    g.stroke();
+  }
+  return c;
+}
+
 function flameSprite() {
   // Soft radial flame blob — drawn additively ('lighter') at runtime
   const c = makeCanvas(24, 24);
@@ -414,6 +480,60 @@ export function buildIcons() {
     g.moveTo(24.5, 36); g.lineTo(29.5, 39.5);
     g.stroke();
   });
+  icons.ringLightning = make((g) => {
+    // 12.4: jeweled finger ring with a lightning bolt visible inside the gem
+    g.strokeStyle = '#e8c66a'; g.lineWidth = 6;
+    g.beginPath(); g.arc(36, 44, 19, 0, TAU); g.stroke();
+    g.strokeStyle = 'rgba(255,244,200,0.55)'; g.lineWidth = 2;
+    g.beginPath(); g.arc(36, 44, 22, Math.PI * 1.05, Math.PI * 1.55); g.stroke();
+    // gem setting
+    g.fillStyle = '#8a6a3a';
+    g.beginPath(); g.moveTo(36, 12); g.lineTo(48, 22); g.lineTo(48, 34); g.lineTo(36, 42); g.lineTo(24, 34); g.lineTo(24, 22); g.closePath(); g.fill();
+    const gem = g.createRadialGradient(33, 22, 1, 36, 27, 12);
+    gem.addColorStop(0, '#eef7ff'); gem.addColorStop(0.55, '#7fb8ff'); gem.addColorStop(1, '#2a4f9e');
+    g.fillStyle = gem;
+    g.beginPath(); g.moveTo(36, 16); g.lineTo(45, 24); g.lineTo(45, 33); g.lineTo(36, 39); g.lineTo(27, 33); g.lineTo(27, 24); g.closePath(); g.fill();
+    // bolt inside the gem
+    g.fillStyle = '#fdf6c8';
+    g.beginPath();
+    g.moveTo(38, 18);
+    g.lineTo(31, 29); g.lineTo(35.5, 29);
+    g.lineTo(33, 37);
+    g.lineTo(42, 25); g.lineTo(37, 25);
+    g.closePath(); g.fill();
+    // prongs
+    g.strokeStyle = '#c9a35c'; g.lineWidth = 2.4;
+    g.beginPath();
+    g.moveTo(26, 21); g.lineTo(22, 17);
+    g.moveTo(46, 21); g.lineTo(50, 17);
+    g.stroke();
+  });
+  icons.snowball = make((g) => {
+    // 12.3: frozen rocket launcher — a stubby tube angled up with a packed snowball
+    // riding the muzzle and frost puffs at the rim.
+    g.save(); g.translate(34, 42); g.rotate(-0.6);
+    const tube = g.createLinearGradient(0, -8, 0, 8);
+    tube.addColorStop(0, '#9fc4dd'); tube.addColorStop(0.5, '#5f7f9c'); tube.addColorStop(1, '#33465c');
+    g.fillStyle = tube;
+    roundRectPath(g, -22, -9, 40, 18, 6); g.fill();
+    g.fillStyle = '#22303f';
+    roundRectPath(g, 14, -11, 7, 22, 3); g.fill();
+    g.fillStyle = '#4a5f75';
+    roundRectPath(g, -26, -6, 8, 12, 3); g.fill();
+    g.restore();
+    const ball = g.createRadialGradient(40, 20, 1, 43, 23, 11);
+    ball.addColorStop(0, '#f6fcff'); ball.addColorStop(0.7, '#cfe8fa'); ball.addColorStop(1, '#8fb8d8');
+    g.fillStyle = ball;
+    g.beginPath(); g.arc(43, 23, 10, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.9)';
+    for (const [x, y, r] of [[38, 20, 2.2], [47, 19, 1.8], [45, 27, 2.0]]) {
+      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    }
+    g.strokeStyle = 'rgba(190,230,255,0.8)'; g.lineWidth = 1.6;
+    for (const [x, y] of [[24, 12], [56, 14], [30, 4]]) {
+      g.beginPath(); g.arc(x, y, 3, 0, TAU); g.stroke();
+    }
+  });
   icons.bombs = make((g) => {
     g.strokeStyle = '#c9a35c'; g.lineWidth = 3; g.lineCap = 'round';
     g.beginPath(); g.moveTo(36, 22); g.quadraticCurveTo(40, 12, 50, 10); g.stroke();
@@ -582,6 +702,9 @@ export function buildItems() {
     blade: bladeSprite(),
     bullet: bulletSprite(),
     arrow: arrowSprite(),
+    snowball: snowballSprite(),
+    frostBurst: frostBurstSprite(),
+    spark: sparkSprite(),
     bomb: bombSprite(),
     flame: flameSprite(),
     explosion: explosionSprite(),
