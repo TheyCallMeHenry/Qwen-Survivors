@@ -640,6 +640,97 @@ export function buildIcons() {
       g.fill();
     }
   });
+  // 12.6: five new synergy icons (fire-tipped arrow / pierced heart / blue flame /
+  // round+bolt / heart-on-magnet-orbit) — same 72x72 card style as the legacy five.
+  icons.flamingArrows = make((g) => {
+    g.strokeStyle = '#8a6a44'; g.lineWidth = 4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(16, 54); g.lineTo(46, 24); g.stroke();
+    g.fillStyle = '#e8f2ff';
+    poly(g, [[46, 14], [58, 22], [48, 30]]);
+    g.fill();
+    g.fillStyle = 'rgba(255,140,59,0.9)';
+    for (const [x, s] of [[22, 1], [32, 0.8]]) {
+      g.beginPath();
+      g.moveTo(x, 46);
+      g.bezierCurveTo(x + 6 * s, 38, x + 7 * s, 30, x + 2 * s, 24);
+      g.bezierCurveTo(x - 2 * s, 32, x - 4 * s, 40, x, 46);
+      g.fill();
+    }
+  });
+  icons.heartPiercer = make((g) => {
+    g.save(); g.translate(12, 16); g.scale(2.0, 2.0);
+    g.beginPath();
+    g.moveTo(11, 18.5);
+    g.bezierCurveTo(1.5, 10.5, 0.5, 4.5, 5.5, 3.5);
+    g.bezierCurveTo(9, 2.8, 11, 5.5, 11, 7);
+    g.bezierCurveTo(11, 5.5, 13, 2.8, 16.5, 3.5);
+    g.bezierCurveTo(21.5, 4.5, 20.5, 10.5, 11, 18.5);
+    g.closePath();
+    const hg = g.createLinearGradient(0, 2, 0, 19);
+    hg.addColorStop(0, '#ff7a6a'); hg.addColorStop(1, '#b03040');
+    g.fillStyle = hg; g.fill();
+    g.restore();
+    g.strokeStyle = '#e8f2ff'; g.lineWidth = 4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(14, 52); g.lineTo(58, 20); g.stroke();
+    g.fillStyle = '#eafffb';
+    g.beginPath(); g.arc(58, 20, 3.4, 0, TAU); g.fill();
+  });
+  icons.blueFlame = make((g) => {
+    const grad = g.createRadialGradient(36, 44, 3, 36, 42, 26);
+    grad.addColorStop(0, 'rgba(210,240,255,0.95)');
+    grad.addColorStop(0.55, 'rgba(70,160,255,0.6)');
+    grad.addColorStop(1, 'rgba(30,80,220,0)');
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(36, 42, 26, 0, TAU); g.fill();
+    for (const [x, s] of [[28, 1], [40, 0.75]]) {
+      g.fillStyle = 'rgba(120,190,255,0.9)';
+      g.beginPath();
+      g.moveTo(x, 52);
+      g.bezierCurveTo(x + 7 * s, 42, x + 8 * s, 32, x + 2 * s, 22);
+      g.bezierCurveTo(x - 3 * s, 34, x - 4 * s, 44, x, 52);
+      g.fill();
+    }
+    g.strokeStyle = 'rgba(220,245,255,0.85)'; g.lineWidth = 2; g.lineCap = 'round';
+    for (const [x, y] of [[18, 26], [54, 32], [24, 54]]) {
+      g.beginPath();
+      for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI; g.moveTo(x, y); g.lineTo(x + Math.cos(a) * 5, y + Math.sin(a) * 5); }
+      g.stroke();
+    }
+  });
+  icons.stormVolley = make((g) => {
+    g.fillStyle = '#4a5266';
+    for (const x of [18, 30]) { g.beginPath(); g.arc(x, 52, 6, 0, TAU); g.fill(); }
+    g.strokeStyle = '#ffe9a8'; g.lineWidth = 2.4;
+    g.beginPath(); g.moveTo(14, 44); g.lineTo(26, 36); g.stroke();
+    const bolt = (x) => {
+      g.beginPath();
+      g.moveTo(x, 10); g.lineTo(x - 7, 30); g.lineTo(x - 1, 30); g.lineTo(x - 5, 46);
+      g.lineTo(x + 7, 24); g.lineTo(x + 1, 24); g.lineTo(x + 6, 10);
+      g.closePath();
+      const bg = g.createLinearGradient(0, 10, 0, 46);
+      bg.addColorStop(0, '#fff7e6'); bg.addColorStop(1, '#8fb8ff');
+      g.fillStyle = bg; g.fill();
+    };
+    bolt(44); bolt(24);
+  });
+  icons.heartMagnet = make((g) => {
+    g.strokeStyle = 'rgba(159,178,224,0.6)'; g.lineWidth = 2.2;
+    g.beginPath(); g.arc(36, 38, 21, 0, TAU); g.stroke();
+    g.save(); g.translate(26, 30); g.scale(1.5, 1.5);
+    g.beginPath();
+    g.moveTo(11, 18.5);
+    g.bezierCurveTo(1.5, 10.5, 0.5, 4.5, 5.5, 3.5);
+    g.bezierCurveTo(9, 2.8, 11, 5.5, 11, 7);
+    g.bezierCurveTo(11, 5.5, 13, 2.8, 16.5, 3.5);
+    g.bezierCurveTo(21.5, 4.5, 20.5, 10.5, 11, 18.5);
+    g.closePath();
+    g.fillStyle = '#ff7a8a'; g.fill();
+    g.restore();
+    g.strokeStyle = '#c9d6ff'; g.lineWidth = 4; g.lineCap = 'round';
+    g.beginPath(); g.arc(52, 50, 9, Math.PI * 0.15, Math.PI * 1.35); g.stroke();
+    g.fillStyle = '#ff6b6b';
+    g.fillRect(45, 44, 7, 5); g.fillRect(45, 54, 7, 5);
+  });
   icons.phoenix = make((g) => {
     const grad = g.createRadialGradient(36, 40, 4, 36, 38, 28);
     grad.addColorStop(0, 'rgba(255,200,120,0)');

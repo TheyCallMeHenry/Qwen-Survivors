@@ -231,6 +231,59 @@ export const CFG = {
       icon: 'phoenix', requires: ['hp', 'regen'],
       levels: [{ ceiling: 2, decay: 0.01 }],
     },
+    // 12.6: the four spec'd synergies + Heart of Oak × Lodestone (user scoped in 2026-09-05).
+    // All five are 5-level cards (PLAN Phase 12 rule) — offered when their OWN two sources max.
+    flamingArrows: {
+      name: 'Flaming Arrows',
+      desc: 'Arrows leave the string alight, burning every foe they strike.',
+      icon: 'flamingArrows', requires: ['bow', 'flame'],
+      levels: [
+        { dps: 8, dur: 2.0 }, { dps: 11, dur: 2.2 }, { dps: 14, dur: 2.5 },
+        { dps: 18, dur: 2.8 }, { dps: 22, dur: 3.0 },
+      ],
+    },
+    heartPiercer: {
+      name: 'Heart-Piercer',
+      desc: 'Channel your vitality into the bow — heavier arrows that skewer onward foes.',
+      icon: 'heartPiercer', requires: ['bow', 'hp'],
+      // bonus = flat extra damage per arrow; pierce = EXTRA enemies an arrow passes through
+      levels: [
+        { bonus: 10, pierce: 1 }, { bonus: 14, pierce: 2 }, { bonus: 18, pierce: 3 },
+        { bonus: 22, pierce: 4 }, { bonus: 26, pierce: 5 },
+      ],
+    },
+    blueFlame: {
+      name: 'Blue Flame',
+      desc: 'Snowball bursts flash-freeze foes while blue fire eats at them.',
+      icon: 'blueFlame', requires: ['snowball', 'flame'],
+      // freeze = seconds frozen in place; dps/dur = the simultaneous fire DoT (12.5 blue-flame half)
+      levels: [
+        // L5 freeze matches combat.freezeDur (0.8) — a card promising "freeze in place"
+        // must actually lock the foe, not merely refresh under the slow-proc cap.
+        { freeze: 0.3, dps: 8, dur: 2.0 }, { freeze: 0.4, dps: 11, dur: 2.2 },
+        { freeze: 0.5, dps: 14, dur: 2.5 }, { freeze: 0.6, dps: 18, dur: 2.8 },
+        { freeze: 0.8, dps: 22, dur: 3.0 },
+      ],
+    },
+    stormVolley: {
+      name: 'Storm Volley',
+      desc: 'Every fourth round calls a lightning strike that arcs to nearby foes.',
+      icon: 'stormVolley', requires: ['pistols', 'ringLightning'],
+      // every = rounds per strike; jumps = chain links (also grants 1 shock stack each)
+      levels: [
+        { dmg: 45, jumps: 2 }, { dmg: 60, jumps: 3 }, { dmg: 75, jumps: 4 },
+        { dmg: 90, jumps: 5 }, { dmg: 110, jumps: 6 },
+      ],
+    },
+    heartMagnet: {
+      name: 'Heart Compass',
+      desc: 'Hearts feel the Lodestone — healing hearts are pulled to you.',
+      icon: 'heartMagnet', requires: ['hp', 'magnet'],
+      // pull = radius multiplier on the gem magnet range for HEARTS
+      levels: [
+        { pull: 1.0 }, { pull: 1.25 }, { pull: 1.5 }, { pull: 1.75 }, { pull: 2.0 },
+      ],
+    },
   },
 
   passives: {

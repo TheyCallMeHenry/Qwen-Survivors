@@ -86,26 +86,31 @@ export class Combat {
     }
   }
 
-  fireBullet(x, y, ang, dmg, inferno = null, owner = null) {
+  // `storm` (12.6 Storm Volley level row): this round carries a lightning strike —
+  // resolves on its first hit (_strike, at the impact point).
+  fireBullet(x, y, ang, dmg, inferno = null, owner = null, storm = null) {
     const C = CFG.combat;
     this.bullets.push({
       x, y,
       vx: Math.cos(ang) * C.bulletSpeed,
       vy: Math.sin(ang) * C.bulletSpeed,
-      rot: ang, dmg, inferno, owner,
+      rot: ang, dmg, inferno, owner, storm,
       hit: new Set(),
       life: C.bulletLife,
     });
   }
 
-  // 12.2: fast single-target arrow (no pierce — Heart-Piercer 12.6 adds that).
-  fireArrow(x, y, ang, dmg, owner = null) {
+  // 12.2: fast single-target arrow. 12.6 rides the synergy level rows on the arrow:
+  // `flaming` (Flaming Arrows) applies burn on hit; `piercer` (Heart-Piercer) adds
+  // flat damage and an extra-enemies pierce budget (null/null = the plain 12.2 arrow).
+  fireArrow(x, y, ang, dmg, owner = null, flaming = null, piercer = null) {
     const C = CFG.combat;
     this.arrows.push({
       x, y,
       vx: Math.cos(ang) * C.arrowSpeed,
       vy: Math.sin(ang) * C.arrowSpeed,
-      rot: ang, dmg, owner,
+      rot: ang, dmg: dmg + (piercer ? piercer.bonus : 0), owner, flaming,
+      pierce: piercer ? piercer.pierce : 0,
       hit: new Set(),
       life: C.arrowLife,
     });
@@ -113,13 +118,14 @@ export class Combat {
 
   // 12.3 Snowball Launcher: lob to a target POINT, burst ON impact (no fuse pause) in a
   // small AoE that damages + slows (12.5 stack pipeline). Flight mirrors fireBomb.
-  fireSnowball(x, y, tx, ty, dmg, radius, owner = null) {
+  // `blue` (12.6 Blue Flame synergy level row): the burst also flash-freezes + burns.
+  fireSnowball(x, y, tx, ty, dmg, radius, owner = null, blue = null) {
     const C = CFG.combat;
     const dist = Math.hypot(tx - x, ty - y);
     this.snowballs.push({
       x0: x, y0: y, tx, ty, x, y, h: 0,
       t: 0, fly: Math.max(0.15, dist * C.snowballFlyK),
-      dmg, radius, owner,
+      dmg, radius, owner, blue,
     });
   }
 
@@ -233,8 +239,12 @@ export class Combat {
           if (dx * dx + dy * dy >= rr * rr) continue;
           a.hit.add(e);
           this.damageEnemy(e, a.dmg, a.vx / C.arrowSpeed, a.vy / C.arrowSpeed, C.arrowKb, a.owner);
-          gone = true;
-          break;
+          if (a.flaming) {
+            e.burnT = Math.max(e.burnT || 0, a.flaming.dur);
+            e.burnDps = Math.max(e.burnDps || 0, a.flaming.dps);
+          }
+          // 12.6 Heart-Piercer: keep flying until the pierce budget is spent
+          if (a.hit.size > a.pierce) { gone = true; break; }
         }
       }
       if (gone) this.arrows.splice(i, 1);
@@ -343,6 +353,7 @@ export class Combat {
             e.burnT = Math.max(e.burnT || 0, b.inferno.dur);
             e.burnDps = Math.max(e.burnDps || 0, b.inferno.dps);
           }
+          if (b.storm) this._strike(e, b.storm, b.owner); // 12.6 Storm Volley
           gone = true; // rounds do not pierce
           break;
         }
@@ -401,16 +412,23 @@ export class Combat {
       const d = Math.hypot(dx, dy) || 1;
       if (d > b.radius + e.r) continue;
       this.damageEnemy(e, b.dmg, dx / d, dy / d, C.snowballKb, b.owner);
-      if (!e.dead) this.applySlow(e);
+      if (!e.dead) this.applySlow(e, b.blue);
     }
     if (this.pulse) this.pulse('boom');
   }
 
   // 12.5: add one slow stack (refreshed to full TTL) at the enemy; reaching
   // slowMaxStacks triggers a brief freeze and consumes the stacks.
-  applySlow(e) {
+  // blue (12.6 Blue Flame, optional): flash-freeze NOW + apply the fire DoT at the
+  // same instant — the frozen-in-place + burning state that defines blue flame.
+  applySlow(e, blue = null) {
     const C = CFG.combat;
     e.slowStacks.push({ t: C.statusStackTtl });
+    if (blue) {
+      e.freezeT = Math.max(e.freezeT, blue.freeze);
+      e.burnT = Math.max(e.burnT || 0, blue.dur);
+      e.burnDps = Math.max(e.burnDps || 0, blue.dps);
+    }
     if (e.slowStacks.length >= C.slowMaxStacks) {
       e.freezeT = Math.max(e.freezeT, C.freezeDur);
       e.slowStacks.length = 0;
@@ -471,6 +489,14 @@ export class Combat {
       head = best;
     }
     if (hit.length > 1 && this.pulse) this.pulse('zap');
+  }
+
+  // 12.6 Storm Volley strike: direct damage at the struck foe (no knockback — the
+  // stun is the tell), then the ring's chain arc from it (greedy nearest, `jumps`
+  // links; each chained foe gains 1 shock stack via _chainArc). Reuses ring visuals.
+  _strike(e, S, owner = null) {
+    this.damageEnemy(e, S.dmg, 0, 0, 0, owner);
+    if (this.enemies) this._chainArc(e, S.jumps, owner);
   }
 
   _explode(b, enemies) {

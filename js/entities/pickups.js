@@ -37,7 +37,8 @@ export class Pickups {
     }
     this.hearts = [];
     for (let i = 0; i < CFG.gems.heartPool; i++) {
-      this.hearts.push({ on: false, x: 0, y: 0, ph: 0 });
+      // vx/vy ride the 12.6 heartMagnet pull (0 = no magnet — hearts stay put)
+      this.hearts.push({ on: false, x: 0, y: 0, ph: 0, vx: 0, vy: 0 });
     }
     this.gemNext = 0;
     this.heartNext = 0;
@@ -70,6 +71,7 @@ export class Pickups {
     }
     if (!slot) { slot = this.hearts[this.heartNext]; this.heartNext = (this.heartNext + 1) % n; }
     slot.on = true; slot.x = x; slot.y = y;
+    slot.vx = slot.vy = 0;
     slot.ph = (x * 0.11 + y * 0.09) % TAU;
   }
 
@@ -110,10 +112,29 @@ export class Pickups {
         out.xp += g.val;
       }
     }
+    // 12.6 heartMagnet (Heart of Oak × Lodestone): hearts ride the SAME magnet flight
+    // path as gems, over a radius of magnetR × the synergy's pull (hearts have no
+    // magnet logic at all without it — collect-radius only, unchanged below).
+    const hmLvl = (player.synergies && player.synergies.heartMagnet) || 0;
+    const heartMagR = hmLvl > 0 ? magR * CFG.synergies.heartMagnet.levels[hmLvl - 1].pull : 0;
     for (const h of this.hearts) {
       if (!h.on) continue;
       const dx = player.x - h.x, dy = player.y - h.y;
-      if (Math.hypot(dx, dy) < CFG.gems.collectR + player.r) {
+      const d = Math.hypot(dx, dy);
+      // `d <=` matters: a heart sitting exactly ON the pull radius must be pulled, not
+      // wait forever — that is precisely the L1 "within range" case.
+      if (heartMagR > 0 && d <= heartMagR) {
+        const inv = d > 0.001 ? 1 / d : 0;
+        const sp = Math.min(900, 220 + (heartMagR - d) * 6);
+        h.vx = dx * inv * sp;
+        h.vy = dy * inv * sp;
+      } else if (h.vx || h.vy) {
+        h.vx *= Math.exp(-3 * dt);
+        h.vy *= Math.exp(-3 * dt);
+      }
+      h.x += (h.vx || 0) * dt;
+      h.y += (h.vy || 0) * dt;
+      if (d < CFG.gems.collectR + player.r) {
         h.on = false;
         out.heal += CFG.gems.heartHeal;
       }

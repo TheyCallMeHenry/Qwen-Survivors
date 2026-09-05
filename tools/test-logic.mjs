@@ -271,13 +271,14 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   const legalKeys = new Set(['hp', 'dmg', 'regen', 'blight', 'tempest']);
   ok(maxed.length === 3 && maxed.every((c) => c.kind === 'passive' || c.kind === 'synergy')
     && maxed.every((c) => legalKeys.has(c.key)), 'cardOffers: exhausted pool → remaining passives + gated synergies only');
-  // Phase 9 (11.5: cap 4→5): deterministic pool. 5 maxed weapons push ownedW to the cap with
-  // no garlic (blight stays gated); all passives maxed → the pool is exactly {inferno, tempest,
-  // phoenix} and the draw takes all three.
+  // Phase 9 (11.5: cap 4→5; 12.6 rebaseline): 5 maxed weapons push ownedW to the cap with
+  // no garlic (blight stays gated); all passives maxed → the pool is exactly the synergies whose
+  // own sources are in hand {inferno, tempest, phoenix, heartMagnet}. cardOffers caps the draw
+  // at 3 cards (unchanged), so assert 3 DISTINCT members of that exact set.
   const trio = cardOffers({ pistols: 5, flame: 5, wand: 5, axe: 5, blades: 5 }, { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3 }, {}, mulberry32(4));
-  ok(trio.length === 3 && trio.every((c) => c.kind === 'synergy')
-    && new Set(trio.map((c) => c.key)).size === 3
-    && trio.every((c) => c.key === 'inferno' || c.key === 'phoenix' || c.key === 'tempest'), 'cardOffers: 3-candidate pool {inferno, tempest, phoenix}');
+  const trioSet = new Set(['inferno', 'tempest', 'phoenix', 'heartMagnet']);
+  ok(trio.length === 3 && trio.every((c) => c.kind === 'synergy' && trioSet.has(c.key))
+    && new Set(trio.map((c) => c.key)).size === 3, 'cardOffers: gated pool {inferno, tempest, phoenix, heartMagnet} → 3 distinct drawn (12.6)');
 }
 
 // --- 11.5.1: base maxWeapons 4→5 + per-player co-op equip cap (pure) ---
@@ -303,22 +304,21 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     && new Set(two.map((c) => c.kind + ':' + c.key)).size === 3,
     '11.5.2: other-owned weapons never offered (pool = bombs/flame + phoenix only)');
   // Cap drives the new-weapon slots. Owned weapons MAXED (no upgrade cards) with incomplete synergy
-  // pairs (no garlic/blades/flame → no weapon synergies); passives maxed (phoenix IS gated — the only
-  // non-weapon pool item). Cap 5: pool = {garlic, blades, flame, bow, snowball} new-weapon L1 + phoenix.
-  // Cap 5: pool = {garlic, blades, flame, bow, snowball, ringLightning} new-weapon L1 + phoenix.
-  // (12.2: bow joins; 12.3: snowball joins; 12.4: ringLightning joins → 6 new-weapon keys now
-  // compete for the 3 offer slots.)
-  // Cap 4 (2P): new-weapon slots closed → pool = {phoenix} only.
+  // pairs; passives maxed. 12.6 rebaseline: w4 = {wand,axe,pistols,bombs} maxed → the hp+magnet
+  // passive pair is complete, so heartMagnet joins phoenix in the gated-synergy pool. Cap 5 pool:
+  // {garlic, blades, flame, bow, snowball, ringLightning} new-weapon L1 + {phoenix, heartMagnet}.
+  // Cap 4 (2P): new-weapon slots closed → pool = {phoenix, heartMagnet} only.
   const w4 = { wand: 5, axe: 5, pistols: 5, bombs: 5 };
   const NEW_W = ['garlic', 'blades', 'flame', 'bow', 'snowball', 'ringLightning'];
+  const GATED_S = ['phoenix', 'heartMagnet'];
   for (let seed = 1; seed <= 3; seed++) {
     const draw = cardOffers(w4, allPassMax, {}, mulberry32(seed), 5);
     ok(draw.length === 3 && draw.every((c) => (c.kind === 'weapon' && c.level === 1 && NEW_W.includes(c.key))
-        || (c.kind === 'synergy' && c.key === 'phoenix')), `11.5.2: cap 5 → new-weapon slots open (seed ${seed})`);
+        || (c.kind === 'synergy' && GATED_S.includes(c.key))), `11.5.2: cap 5 → new-weapon slots open (seed ${seed})`);
   }
   const cap4 = cardOffers(w4, allPassMax, {}, mulberry32(1), 4);
-  ok(cap4.length === 1 && cap4[0].kind === 'synergy' && cap4[0].key === 'phoenix',
-    '11.5.2: cap 4 (2P) → no new-weapon cards (pool = phoenix only)');
+  ok(cap4.length === 2 && cap4.every((c) => c.kind === 'synergy' && GATED_S.includes(c.key)),
+    '11.5.2: cap 4 (2P) → no new-weapon cards (pool = {phoenix, heartMagnet})');
   // Passives are NEVER locked — offered even with every weapon excluded by other owners.
   const passivesOnly = cardOffers({}, {}, {}, mulberry32(5), 2, new Set(Object.keys(CFG.weapons)));
   ok(passivesOnly.length === 3 && passivesOnly.every((c) => c.kind === 'passive'),
@@ -351,11 +351,14 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     '11.6b: excluding a synergy does not shift the weapon draw (same rng)');
 }
 
-// --- Phase 9: synergy table shape + gating ---
+// --- Phase 9: synergy table shape + gating (12.6 rebaseline: the five NEW synergies are
+// 5-level cards per the Phase 12 rule; the legacy five (incl. phoenix) stay single-level) ---
 {
+  const LEGACY_S = new Set(['blight', 'tempest', 'inferno', 'napalm', 'phoenix']);
   for (const [k, S] of Object.entries(CFG.synergies)) {
-    ok(S.levels.length === 1 && S.requires.length >= 2
-      && S.requires.every((r) => CFG.weapons[r] || CFG.passives[r]), `synergies.${k}: single level, valid requires`);
+    const wantLv = LEGACY_S.has(k) ? 1 : 5;
+    ok(S.levels.length === wantLv && S.requires.length >= 2
+      && S.requires.every((r) => CFG.weapons[r] || CFG.passives[r]), `synergies.${k}: ${wantLv} level(s), valid requires`);
   }
   ok(!cardOffers({ wand: 4, garlic: 5 }, {}, {}, mulberry32(7)).some((c) => c.key === 'blight'),
     'synergy gating: absent below max (wand 4/5)');
@@ -367,7 +370,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(syn.length === 3 && syn.every((c) => c.kind === 'synergy') && new Set(syn.map((c) => c.key)).size === 3,
     'synergy gating: all-max pool → only the 5 synergies remain (3 drawn)');
   const allOwned = {};
-  for (const k of Object.keys(CFG.synergies)) allOwned[k] = 1;
+  for (const k of Object.keys(CFG.synergies)) allOwned[k] = CFG.synergies[k].levels.length; // 12.6: max every synergy at its OWN level count
   ok(cardOffers(allW, allP, allOwned, mulberry32(9)).length === 0,
     'cardOffers: all owned → empty pool (first-class case)');
 }
@@ -414,7 +417,8 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(CFG.weapons.bow.levels.length === 5, '12.2: bow has a 5-level table');
   // 23.1 rebaseline: bow rate table raised (charge-up added); old rates were identical to pistols
   ok(cardEffectText('weapon', 'bow', 1) === 'every 0.68 s · draw 0.25 s · 16 dmg', '23.1: bow L1 exact-effect line');
-  ok(cardEffectText('weapon', 'bow', 2) === 'rate 0.68→0.60 s · dmg 16→21', '23.1: bow L2 delta line (charge flat — never a delta)');
+  // fmtS pads to two decimals then strips ONE trailing zero → 0.6 renders "0.6" (never "0.60").
+  ok(cardEffectText('weapon', 'bow', 2) === 'rate 0.68→0.6 s · dmg 16→21', `23.1: bow L2 delta line (charge flat — never a delta) (${cardEffectText('weapon', 'bow', 2)})`);
   const c = new Combat();
   const owner = { x: 0, y: 0, vx: 0, vy: 0 };
   const mkEnemy = (x) => ({ x, y: 100, r: 12, hp: 100, maxHp: 100, flash: 0, vx: 0, vy: 0, dead: false });
@@ -1069,8 +1073,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
 
 // --- 11.2 host-authoritative sync: snapshot codec + per-player ownership ---
 {
-  ok(WEAPON_KEYS.length === 10 && PASSIVE_KEYS.length === 5 && SYNERGY_KEYS.length === 5 && ENEMY_KEYS.length === 9,
-    '11.2: key tables follow CFG order/counts (12.4 rebaseline: 10 weapons)');
+  ok(WEAPON_KEYS.length === 10 && PASSIVE_KEYS.length === 5 && SYNERGY_KEYS.length === 10 && ENEMY_KEYS.length === 9,
+    '11.2: key tables follow CFG order/counts (12.6 rebaseline: 10 synergies)');
 
   const p = new Player({});
   p.reset(10, 20);
@@ -1079,7 +1083,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   applyCard(p, { kind: 'synergy', key: 'blight', level: 1 });
   p.xp = 12.345; p.hp = 55.55; p.dashT = 0.333; p.dashCd = 1.666; p.flip = true;
   const ps = playerSnap(p);
-  ok(ps.length === 29, '11.2: playerSnap is 29 slots (SNAP_V=4, 12.4 rebaseline)');
+  ok(ps.length === 34, '11.2: playerSnap is 34 slots (SNAP_V=5, 12.6 rebaseline: 10 synergies)');
   const p2 = new Player({});
   p2.reset(0, 0);
   applyPlayerSnap(p2, ps);
@@ -1625,6 +1629,151 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   p5.applyOverHeal(CFG.gems.heartHeal);
   ok(p5.hp === mid + CFG.gems.heartHeal && p5.overHeal > 20 - p5.maxHp * S.decay,
     '23.3: second heart re-applies over-health (cancels the diminishment)');
+}
+
+// --- 12.6 New synergies (Flaming Arrows / Heart-Piercer / Blue Flame / Storm Volley /
+// Heart Compass) — tables + card text + effect pipelines, Node-safe ---
+{
+  const SY = CFG.synergies;
+  const NEW_S = ['flamingArrows', 'heartPiercer', 'blueFlame', 'stormVolley', 'heartMagnet'];
+  for (const k of NEW_S) {
+    ok(SY[k] && SY[k].levels.length === 5, `12.6: synergies.${k} is a 5-level card`);
+    const reqOK = { flamingArrows: ['bow', 'flame'], heartPiercer: ['bow', 'hp'], blueFlame: ['snowball', 'flame'],
+      stormVolley: ['pistols', 'ringLightning'], heartMagnet: ['hp', 'magnet'] }[k];
+    ok(JSON.stringify(SY[k].requires) === JSON.stringify(reqOK), `12.6: ${k} requires ${reqOK.join('+')}`);
+  }
+  // Monotonic scaling per synergy (the Phase 12 "levels like a standard weapon" contract).
+  ok(SY.flamingArrows.levels.every((s, i) => i === 0 || (s.dps > SY.flamingArrows.levels[i - 1].dps && s.dur >= SY.flamingArrows.levels[i - 1].dur)),
+    '12.6: flamingArrows dps↑ dur↑');
+  ok(SY.heartPiercer.levels.every((s, i) => i === 0 || (s.bonus > SY.heartPiercer.levels[i - 1].bonus && s.pierce > SY.heartPiercer.levels[i - 1].pierce)),
+    '12.6: heartPiercer bonus↑ pierce↑ (pierce scales with the synergy level)');
+  ok(SY.blueFlame.levels.every((s, i) => i === 0 || (s.freeze > SY.blueFlame.levels[i - 1].freeze && s.dps > SY.blueFlame.levels[i - 1].dps)),
+    '12.6: blueFlame freeze↑ dps↑');
+  ok(SY.stormVolley.levels.every((s, i) => i === 0 || (s.dmg > SY.stormVolley.levels[i - 1].dmg && s.jumps > SY.stormVolley.levels[i - 1].jumps)),
+    '12.6: stormVolley dmg↑ jumps↑');
+  ok(SY.heartMagnet.levels.every((s, i) => i === 0 || s.pull > SY.heartMagnet.levels[i - 1].pull),
+    '12.6: heartMagnet pull↑');
+  // Exact-effect card text (10.2 rule) at BOTH levels — the granted level's numbers show.
+  ok(cardEffectText('synergy', 'flamingArrows', 1) === 'Arrows ignite foes — 8 dmg/s burn for 2.0 s', `12.6: flamingArrows L1 line (${cardEffectText('synergy', 'flamingArrows', 1)})`);
+  ok(cardEffectText('synergy', 'flamingArrows', 5) === 'Arrows ignite foes — 22 dmg/s burn for 3.0 s', '12.6: flamingArrows L5 line shows level-5 numbers');
+  ok(cardEffectText('synergy', 'heartPiercer', 1) === '+10 arrow damage — arrows pierce 1 extra foe' && cardEffectText('synergy', 'heartPiercer', 3) === '+18 arrow damage — arrows pierce 3 extra foes', '12.6: heartPiercer L1/L3 lines');
+  ok(cardEffectText('synergy', 'blueFlame', 5) === 'Snowball bursts freeze foes for 0.8 s and burn them for 22 dmg/s over 3.0 s', `12.6: blueFlame L5 line (${cardEffectText('synergy', 'blueFlame', 5)})`);
+  ok(cardEffectText('synergy', 'stormVolley', 1) === 'Every 4th round strikes for 45 lightning damage, arcing to 2 nearby foes' && cardEffectText('synergy', 'stormVolley', 5) === 'Every 4th round strikes for 110 lightning damage, arcing to 6 nearby foes', '12.6: stormVolley L1/L5 lines');
+  ok(cardEffectText('synergy', 'heartMagnet', 1) === 'Hearts are pulled toward you from 100% of your pickup range' && cardEffectText('synergy', 'heartMagnet', 5) === 'Hearts are pulled toward you from 200% of your pickup range', '12.6: heartMagnet L1/L5 lines');
+
+  // Gating: each new synergy is offered the moment its OWN two sources max, and not before.
+  ok(!cardOffers({ bow: 4, flame: 5 }, {}, {}, mulberry32(7)).some((c) => c.key === 'flamingArrows'),
+    '12.6 gating: flamingArrows absent below source max (bow 4/5)');
+  const gateDraw = (weapons, passives, key) => {
+    for (let seed = 1; seed <= 3; seed++) {
+      if (!cardOffers(weapons, passives, {}, mulberry32(seed), 10).some((c) => c.kind === 'synergy' && c.key === key)) return false;
+    }
+    return true;
+  };
+  const W5 = (k) => ({ [k]: 5 });
+  const P_MAX = {}; for (const k of Object.keys(CFG.passives)) P_MAX[k] = CFG.passives[k].max;
+  ok(gateDraw({ ...W5('bow'), ...W5('flame') }, {}, 'flamingArrows'), '12.6 gating: flamingArrows surfaces with bow+flame maxed');
+  ok(gateDraw({ ...W5('bow') }, { hp: CFG.passives.hp.max }, 'heartPiercer'), '12.6 gating: heartPiercer surfaces with bow + hp passive maxed');
+  ok(gateDraw({ ...W5('snowball'), ...W5('flame') }, {}, 'blueFlame'), '12.6 gating: blueFlame surfaces with snowball+flame maxed');
+  ok(gateDraw({ ...W5('pistols'), ...W5('ringLightning') }, {}, 'stormVolley'), '12.6 gating: stormVolley surfaces with pistols+ring maxed');
+  ok(gateDraw({}, { hp: CFG.passives.hp.max, magnet: CFG.passives.magnet.max }, 'heartMagnet'), '12.6 gating: heartMagnet surfaces with hp+magnet maxed');
+
+  // Flaming Arrows pipeline: fireArrow carries the burn row; hit applies burnT/burnDps.
+  const c = new Combat();
+  const owner = { x: 0, y: 0, vx: 0, vy: 0 };
+  const mkE = (x) => ({ x, y: 100, r: 12, hp: 500, maxHp: 500, flash: 0, vx: 0, vy: 0, dead: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0 });
+  const fa = SY.flamingArrows.levels[1];
+  c.fireArrow(100, 100, 0, 16, owner, fa);
+  ok(c.arrows[0].flaming === fa && c.arrows[0].pierce === 0, '12.6: fireArrow carries the flaming row (no pierce without piercer)');
+  let e = mkE(160);
+  let grid = { grid: { near: () => [e] }, list: [e] };
+  for (let i = 0; i < 30 && c.arrows.length; i++) c.update(1 / 60, [], grid);
+  ok(e.burnT > 0 && e.burnDps === fa.dps, '12.6: flaming arrow applies burn on hit');
+
+  // Heart-Piercer pipeline: bonus damage folded in + pierce budget (hits N+1 foes).
+  const hpS = SY.heartPiercer.levels[0]; // bonus 10, pierce 1 → hits 2 enemies
+  c.fireArrow(100, 100, 0, 16, owner, null, hpS);
+  ok(c.arrows[0].dmg === 26 && c.arrows[0].pierce === 1, '12.6: piercer row adds bonus dmg + pierce budget');
+  e = mkE(160); const e2 = mkE(176);
+  grid = { grid: { near: () => [e, e2] }, list: [e, e2] };
+  for (let i = 0; i < 30 && c.arrows.length; i++) c.update(1 / 60, [], grid);
+  ok(e.hp === 500 - 26 && e2.hp === 500 - 26, '12.6: pierce 1 → arrow hits BOTH foes on the path');
+
+  // Blue Flame pipeline: applySlow(e, blue) = frozen-in-place + burn simultaneously (12.5).
+  const bf = SY.blueFlame.levels[0]; // freeze 0.3 dps 8 dur 2.0
+  e = mkE(150);
+  c.applySlow(e, bf);
+  ok(e.freezeT === bf.freeze && e.burnT === bf.dur && e.burnDps === bf.dps && e.slowStacks.length === 1,
+    '12.6: blue-flame applySlow freezes AND burns at the same instant');
+  // …and via the snowball burst route (fireSnowball carries `blue`).
+  c.reset(); // otherwise the arrow still in flight above hits this fresh foe too
+  c.fireSnowball(100, 100, 160, 100, 26, 95, owner, bf);
+  e = mkE(150); const eFar = mkE(400);
+  grid = { grid: { range: () => [e, eFar] }, list: [e, eFar] };
+  for (let i = 0; i < 60 && c.snowballs.length; i++) c.update(1 / 60, [], grid);
+  // outside the radius: never touched — burnT stays UNSET (mkE never initialises it), so
+  // assert falsy, not === 0.
+  ok(e.freezeT > 0 && e.burnDps === bf.dps && eFar.freezeT === 0 && !eFar.burnT,
+    '12.6: snowball burst applies blue freeze+burn inside the radius only');
+
+  // Storm Volley pipeline: fireBullet carries `storm`; first hit strikes for S.dmg and chains.
+  const sv = SY.stormVolley.levels[0]; // dmg 45 jumps 2
+  c.reset();
+  e = mkE(160); const eB = mkE(180); const eC = mkE(200);
+  grid = { grid: { near: () => [e, eB, eC] }, list: [e, eB, eC] };
+  c.enemies = grid;
+  c.fireBullet(100, 100, 0, 9, null, owner, sv);
+  ok(c.bullets[0].storm === sv, '12.6: fireBullet carries the storm row');
+  for (let i = 0; i < 30 && c.bullets.length; i++) c.update(1 / 60, [], grid);
+  ok(e.hp <= 500 - 9 - 45, '12.6: struck foe takes bullet dmg + the lightning strike dmg');
+  const chained = [eB, eC].filter((x) => x.shockStacks.length === 1);
+  ok(chained.length >= 1 && chained.every((x) => x.hp < 500), '12.6: strike chains to nearby foes (shock stack + chain dmg via _chainArc)');
+
+  // Storm Volley shot cadence (player fire site): every 4th round carries the row.
+  const p = new Player({}); p.reset(0, 0);
+  p.weapons = { pistols: 5 }; p.synergies.stormVolley = 1; // ONLY pistols — a default char
+  // start weapon would fire through the same spy and hit an unstubbed method (session-12 trap)
+  const fired = []; const cSpy = { fireBullet: (x, y, a, d, inf, own, storm) => fired.push(!!storm), pulse: null };
+  const foe = { x: 60, y: 0, r: 10 };
+  const foeList = { _nearest: null };
+  for (let i = 0; i < 60 * 8; i++) p._weapons(1 / 60, { list: [foe], grid: { near: () => [foe] } }, cSpy);
+  // Cadence is per VOLLEY (the twin-round pair, one trigger): counter advances once per
+  // volley and on the 4th BOTH rounds carry the strike → storm-flagged rounds = volleys/2.
+  ok(fired.length >= 8 && fired.filter(Boolean).length === Math.floor(fired.length / 2 / 4) * 2,
+    `12.6: storm cadence = every 4th volley strikes both rounds (${fired.filter(Boolean).length}/${fired.length})`);
+
+  // Heart Compass pipeline (pickups): no synergy → hearts sit still; with it → magnet flight.
+  const pk = new Pickups();
+  pk.reset();
+  pk.heart(300, 0);
+  const plNo = { x: 0, y: 0, r: 14, magnet: 1, synergies: {} };
+  for (let i = 0; i < 60; i++) pk.update(1 / 60, plNo, null);
+  ok(pk.hearts.some((h) => h.on && h.x === 300), '12.6 heartMagnet: without the synergy hearts never move');
+  // "Within range" = inside the L1 pull radius (magnetBase × pull 1.0 = 70 px).
+  pk.reset();
+  pk.heart(60, 0);
+  const plHM = { x: 0, y: 0, r: 14, magnet: 1, synergies: { heartMagnet: 1 } }; // pull 1.0 → magR 70…
+  let moved = false;
+  for (let i = 0; i < 6; i++) { pk.update(1 / 60, plHM, null); const h = pk.hearts.find((hh) => hh.on); if (!h || h.x < 60) moved = true; }
+  ok(moved || pk.hearts.every((h) => !h.on), '12.6 heartMagnet L1: within range the heart starts flying to the player');
+  // Out of range at L1 (pull 1.0 → magR = magnetBase × 1): stays put.
+  pk.reset();
+  pk.heart(CFG.gems.magnetBase * 1 + 60, 0);
+  for (let i = 0; i < 6; i++) pk.update(1 / 60, plHM, null);
+  ok(pk.hearts.some((h) => h.on && h.x === CFG.gems.magnetBase + 60), '12.6 heartMagnet L1: beyond the pull radius the heart waits');
+  // L5 (pull 2.0) reaches it.
+  const plHM5 = { x: 0, y: 0, r: 14, magnet: 1, synergies: { heartMagnet: 5 } };
+  for (let i = 0; i < 6; i++) pk.update(1 / 60, plHM5, null);
+  ok(pk.hearts.some((h) => h.on && h.x < CFG.gems.magnetBase + 60), '12.6 heartMagnet L5: doubled pull radius reaches the far heart');
+
+  // Sync wire: synergy LEVELS ride the snapshot (SNAP_V=5, 34 slots).
+  const pSnap = new Player({}); pSnap.reset(0, 0);
+  pSnap.synergies.heartPiercer = 3;
+  const snapSlots = playerSnap(pSnap);
+  const S_OFF = 9 + WEAPON_KEYS.length + PASSIVE_KEYS.length; // mirrors sync.js header offsets
+  ok(snapSlots.length === 34 && snapSlots[S_OFF + SYNERGY_KEYS.indexOf('heartPiercer')] === 3,
+    '12.6 sync: heartPiercer level 3 survives the wire (34-slot snap)');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

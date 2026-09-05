@@ -13,6 +13,28 @@
 
 ## Entries (newest first)
 
+### 2026-09-05 — Critical session hand-off: documentation-only turn (twice) + new rule: never delete the previous session's Session Log entry
+- **Received:** 2026-09-05 (no time in messages; date only)
+- **Classification:** `process rule` (both) · `answer/approval` (the "yes" authorizing Session-Log pruning)
+- **Context:** Two back-to-back compaction-safety asks during session 12, plus the agent-side Session-Log deletion incident that produced the new no-delete rule. 12.6 code state at hand-off = IN PROGRESS, UNCOMMITTED.
+- **Verbatim input:**
+
+  ```
+  Update all pertinent/relevant project documentation to ensure a complete and accurate representation of the current project, including all determinations, findings, research, testing, troubleshooting approaches/attempts/resolutions, and any-and-all other data which needs to be carried over into future sessions and/or across context compaction.
+
+  **DO THIS IMMEDIATELY; COMPACTION IS IMMINENT! DO NOT THINK/REASON, PLAN, OR TAKE ANY FURTHER DEVELOPMENT/IMPLEMENTATION ACTION UNTIL *AFTER* UPDATING THE DOCUMENTATION. THIS IS ABSOLUTELY CRITICAL!**
+  ```
+
+  ```
+  Do nothing other than finalize critical session hand-off documentation updating.
+  ```
+
+  ```
+  yes - but going forward DO NOT EVER DELETE LAST SESSION'S LOG ENTRY!!!
+  ```
+
+- **Consequence:** new binding rule recorded as AGENTS.md non-negotiable 1 sub-clause + PROGRESS Decision D78 — Session Log entries are append-only; a prior session's line (including a long one) is NEVER deleted or rewritten, only superseded by newer lines. The 2026-09-05 (session 11) entry that was briefly displaced during a trim has been restored verbatim.
+
 ### 2026-09-05 — Approval batch: commit/push/Pages + Heart of Oak × Lodestone scoped in + env-caveats update + close Phase 12 spine + Phase 24 = dedicated visual session
 - **Received:** 2026-09-05 (no time in message; date only)
 - **Classification:** `answer/approval` (items 1, 4) · `design decision` (item 2) · `process rule` (item 3) · `design decision` (item 5)

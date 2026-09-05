@@ -9,3 +9,8 @@ prof-out.txt
 
 # Human-user local notes (session transcripts etc.) — never commit (public repo)
 human-user-notes_AI-agent-ignore/
+
+# Unsloth Studio session artifacts (scratch/recon notes, temp logs) — not source
+NOTES.md
+STATUS.md
+unsloth-tmp/

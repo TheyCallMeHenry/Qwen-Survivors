@@ -253,6 +253,7 @@ let e107A = false, e107ADone = false, e107B = false, e107BDone = false; // 10.7 
 let benchPhase = 0, benchStartT = 0; // 10.4 one-shot worst-case bench: 0=off · 1=measuring · 2=done
 let bench = null;
 let m02RunDone = false; // 13.3 — M02 real run one-shot
+let syn128Done = false; // 12.8 — per-synergy combat E2Es (flamingArrows/heartPiercer/blueFlame/stormVolley)
 let m03RunDone = false; // 13.5 — M03 real run one-shot
 
 // 16.1 — foreground snow path probe (D70: quantify what actually draws). The ctx
@@ -491,7 +492,8 @@ function steer() {
       for (const k of Object.keys(CFG.weapons)) p.weapons[k] = 5;
       for (const k of Object.keys(CFG.passives)) p.passives[k] = CFG.passives[k].max;
       p.synergies = {};
-      for (const k of Object.keys(CFG.synergies)) p.synergies[k] = 1;
+      // 12.6: multi-level synergies — max each at its OWN level count (bench = worst case)
+      for (const k of Object.keys(CFG.synergies)) p.synergies[k] = CFG.synergies[k].levels.length;
       recomputeStats(p);
       bench = {
         upd: 0, nUpd: 0, ren: 0, nRen: 0, dom: 0, sec: null, ops0: { ...drawOps },
@@ -573,7 +575,9 @@ function steer() {
         game.levelupQueue = 2;
       } else if (game.levelupQueue === 0) {
         e107ADone = true;
-        delete p.synergies.phoenix; // pool = exactly {phoenix}
+        // 12.6 rebaseline: heartMagnet (hp+magnet) also gates once passives max — clear every
+        // gated candidate except phoenix so the pool stays exactly {phoenix}.
+        for (const k of Object.keys(p.synergies)) if (k !== 'phoenix') delete p.synergies[k];
         e107B = true;
         game.levelupQueue = 2;
       }
@@ -1440,6 +1444,186 @@ m03RunDone = true;
     plM.overHeal = bak.oh; plM.hp = bak.hp; plM.regen = bak.regen;
     pl.synergies = {}; pl.overHeal = 0; pl.hp = Math.min(pl.hp, pl.maxHp); pl.regen = regenBak;
   }
+
+  // 12.8 — per-synergy combat E2Es (flamingArrows · heartPiercer · blueFlame · stormVolley).
+  // Isolation per the hot pitfalls: unown everything but the weapon under test + clear ALL
+  // projectile arrays at block entry (ownership persists; in-flight shots damage the pinned
+  // pair), regrid every tick, never resurrect dead probe foes, status timers drained only by
+  // the drives below. Each synergy is compared against a no-synergy control on identical geometry.
+  {
+    p2.weapons.bombs = 0;
+    for (const k of ['wand', 'garlic', 'axe', 'blades', 'pistols', 'bombs', 'flame', 'snowball', 'ringLightning', 'bow']) p2.weapons[k] = 0;
+    for (const arr of [g2.combat.bolts, g2.combat.axes, g2.combat.bullets, g2.combat.bombs,
+      g2.combat.flames, g2.combat.arrows, g2.combat.snowballs, g2.combat.explosions]) arr.length = 0;
+    p2.synergies = {};
+    const dmgBak = g2.combat.damagePlayer; g2.combat.damagePlayer = () => false;
+    const clearFoes128 = () => { g2.enemies.list.length = 0; g2.enemies.grid.clear(); };
+    const regrid128 = () => { g2.enemies.grid.clear(); for (const e of g2.enemies.list) if (!e.dead) g2.enemies.grid.add(e.x, e.y, e); };
+
+    // --- Flaming Arrows + Heart-Piercer (the bow's two synergies, one probe each) ---
+    const BOW = CFG.weapons.bow.levels[0];
+    const arrowProbe = ({ x }) => {
+      clearFoes128();
+      for (const arr of [g2.combat.arrows, g2.combat.bolts]) arr.length = 0;
+      p2.x = x; p2.y = 600; // pin the owner so sy and the geometry are exact every shot
+      const sy = p2.y - p2.def.h * CFG.combat.spawnOriginFrac;
+      const foes = [];
+      for (const dx of [140, 180, 220]) {
+        const e = g2.enemies.spawn('rat', p2.x + dx, sy);
+        // Pooled enemy objects inherit status fields from prior probe foes — zero them
+        // explicitly (never assume a fresh spawn is clean).
+        e.hp = 1e6; e.maxHp = 1e6; e.vx = e.vy = 0; e.state = 'idle';
+        e.burnT = 0; e.burnDps = 0; e.blightT = 0; e.slowStacks = []; e.freezeT = 0;
+        foes.push(e);
+      }
+      regrid128();
+      p2.weapons.bow = 1; p2._bowCd = 0; p2._bowCharge = CFG.weapons.bow.charge * 0.5;
+      let ticks = 0;
+      while (!g2.combat.arrows.length && ticks < 60) { // fire pass until the arrow looses
+        foes[0].x = p2.x + 140; foes[1].x = p2.x + 180; foes[2].x = p2.x + 220;
+        for (const e of foes) { e.y = sy; e.vx = e.vy = 0; }
+        regrid128();
+        fire162(); ticks++;
+      }
+      const arrow = g2.combat.arrows[0];
+      let hits = 0, burnSeen = false;
+      // Drive combat ONLY (never enemies.update — the foes stay exactly where pinned).
+      for (let n = 0; n < 90 && g2.combat.arrows.length; n++) {
+        g2.combat.update(1 / 60, g2.players, g2.enemies);
+        if (arrow.hit.size > hits) hits = arrow.hit.size;
+        if (foes.some((e) => (e.burnT || 0) > 0)) burnSeen = true;
+      }
+      const dealt = foes.map((e) => 1e6 - e.hp);
+      return { arrow, ticks, hits, burnSeen, dealt };
+    };
+    // Control: plain bow — one hit, no burn, base damage
+    p2.synergies = {};
+    const plain = arrowProbe({ x: 900 });
+    assert(plain.arrow && plain.hits === 1 && !plain.burnSeen,
+      `12.8 control: plain arrow hits once, no burn (hits=${plain.hits} burn=${plain.burnSeen})`);
+    assert(Math.abs(plain.dealt[0] - BOW.dmg * p2.dmgMul) < 1e-6 && plain.dealt.slice(1).every((d) => d === 0),
+      `12.8 control: plain arrow damage = base (dealt=${plain.dealt.map((d) => d.toFixed(2))})`);
+    // Flaming Arrows L1: arrow carries the row → hit foe burns with the row's numbers
+    p2.synergies = { flamingArrows: 1 };
+    const FA = CFG.synergies.flamingArrows.levels[0];
+    const fa = arrowProbe({ x: 1500 });
+    assert(fa.arrow.flaming === FA, '12.8 flamingArrows: the fired arrow carries the synergy level row');
+    assert(fa.burnSeen && fa.dealt[0] > 0,
+      `12.8 flamingArrows: struck foe ignites (burnSeen=${fa.burnSeen} dealt=${fa.dealt[0].toFixed(2)})`);
+    const burnFoe = g2.enemies.list.find((e) => (e.burnT || 0) > 0);
+    assert(Math.abs(burnFoe.burnDps - FA.dps) < 1e-9 && Math.abs(burnFoe.burnT - FA.dur) <= 1 / 60,
+      `12.8 flamingArrows: burn = row dps/dur (dps=${burnFoe.burnDps} burnT=${burnFoe.burnT})`);
+    // Heart-Piercer L1: +bonus damage on the FIRST foe, pierces into the second
+    p2.synergies = { heartPiercer: 1 };
+    const HP1 = CFG.synergies.heartPiercer.levels[0];
+    const hpj = arrowProbe({ x: 2100 });
+    assert(hpj.arrow.pierce === HP1.pierce && Math.abs(hpj.arrow.dmg - (BOW.dmg * p2.dmgMul + HP1.bonus)) < 1e-6,
+      `12.8 heartPiercer: arrow carries pierce budget + bonus damage (pierce=${hpj.arrow.pierce} dmg=${hpj.arrow.dmg})`);
+    assert(hpj.hits === 1 + HP1.pierce && hpj.dealt[0] > 0 && hpj.dealt[1] > 0 && hpj.dealt[2] === 0,
+      `12.8 heartPiercer: pierces exactly ${HP1.pierce} extra foe(s) (hits=${hpj.hits} dealt=${hpj.dealt.map((d) => d.toFixed(0))})`);
+    assert(Math.abs(hpj.dealt[0] - (BOW.dmg * p2.dmgMul + HP1.bonus)) < 1e-6,
+      `12.8 heartPiercer: first-foe damage = base + bonus (${hpj.dealt[0].toFixed(2)})`);
+    p2.weapons.bow = 0; p2.synergies = {};
+    for (const arr of [g2.combat.arrows]) arr.length = 0; clearFoes128();
+
+    // --- Blue Flame: the snowball burst flash-freezes + burns on impact ---
+    const snowProbe = () => {
+      // x=500: the ONLY foe inside wandRange (380) must be this probe's target — a
+      // leftover at +140 from an earlier probe sits closer and steals the aim.
+      clearFoes128(); g2.combat.snowballs.length = 0;
+      p2.x = 500; p2.y = 600;
+      const e = g2.enemies.spawn('rat', p2.x + 130, p2.y);
+      // Pool reuse inherits the control burst's slow stack — zero every status field.
+      e.hp = 1e6; e.maxHp = 1e6; e.burnT = 0; e.burnDps = 0; e.blightT = 0;
+      e.slowStacks = []; e.freezeT = 0;
+      let ticks = 0;
+      // Pin cd=0 every fire pass: the control shot sets cd = S.cd, which would delay
+      // this probe's emission past its own first fire pass otherwise.
+      while (g2.combat.snowballs.length === 0 && ticks < 90) { p2._snowCd = 0; fire162(); ticks++; }
+      const ball = g2.combat.snowballs[0];
+      let burstAt = -1;
+      for (let n = 0; n < 180; n++) {
+        e.x = p2.x + 130; e.y = p2.y; regrid128();
+        g2.combat.update(1 / 60, g2.players, g2.enemies); // burst queries the grid we just pinned
+        if (!g2.combat.snowballs.length) { burstAt = n; break; }
+      }
+      return { ball, e, burstAt };
+    };
+    p2.weapons.snowball = 1; p2._snowCd = 0;
+    const plainSnow = snowProbe();
+    assert(plainSnow.ball && !plainSnow.ball.blue && !(plainSnow.e.freezeT > 0) && !(plainSnow.e.burnT > 0),
+      '12.8 control: plain burst freezes/burns nothing');
+    // Synergy level 5 (the D76 card): the probe must set the SAME level it expects on the ball.
+    p2.synergies = { blueFlame: 5 };
+    const BF = CFG.synergies.blueFlame.levels[4]; // L5 row — the card must deliver its freeze (D76)
+    const bf = snowProbe();
+    assert(bf.ball.blue === BF, '12.8 blueFlame: the lobbed snowball carries the synergy level row');
+    assert(bf.e.freezeT > 0 && Math.abs(bf.e.burnDps - BF.dps) < 1e-9 && (bf.e.burnT || 0) > 0,
+      `12.8 blueFlame: burst freezes + burns on impact (freezeT=${bf.e.freezeT} dps=${bf.e.burnDps})`);
+    assert(bf.e.slowStacks.length === 1, '12.8 blueFlame: the burst still lays its slow stack (12.5 pipeline intact)');
+    p2.weapons.snowball = 0; p2.synergies = {};
+    clearFoes128(); g2.combat.snowballs.length = 0; g2.combat.explosions.length = 0;
+
+    // --- Storm Volley: every 4th VOLLEY both twin rounds carry the strike; a lone
+    // second round still spends its slot (D79 cadence) ---
+    p2.synergies = { stormVolley: 1 };
+    const SV = CFG.synergies.stormVolley.levels[0];
+    let volley = 0, loneStrike = -1, both4 = false;
+    const pistolProbe = (oneFoe) => {
+      clearFoes128(); g2.combat.bullets.length = 0;
+      p2.x = 500; p2.y = 600; p2._pistolCd = 0;
+      const e1 = g2.enemies.spawn('rat', p2.x + 140, p2.y);
+      if (!oneFoe) g2.enemies.spawn('rat', p2.x - 140, p2.y);
+      regrid128();
+      let n = 0;
+      while (g2.combat.bullets.length === 0 && n < 90) { fire162(); n++; }
+      const bs = g2.combat.bullets.slice();
+      g2.combat.bullets.length = 0;
+      return bs;
+    };
+    p2.weapons.pistols = 1; p2._bulletShots = 0;
+    let probeGuard = 0;
+    while (volley < 8 && probeGuard++ < 400) {
+      volley++;
+      const loneSecond = volley === 5 || volley === 7; // only ONE foe → second round aims at nothing
+      const bs = pistolProbe(loneSecond);
+      if (bs.length !== 2) continue; // a trigger with no target spends nothing — only count real volleys
+      const struck = bs.filter((b) => b.storm === SV).length;
+      if (volley % 4 === 0) { if (struck === 2) both4 = true; }
+      else if (struck > 0 && loneStrike < 0) loneStrike = volley;
+    }
+    assert(volley === 8, `12.8 stormVolley: probe completed 8 volleys (got ${volley})`);
+    assert(loneStrike < 0, '12.8 stormVolley: no strike before the 4th volley');
+    assert(both4, '12.8 stormVolley: BOTH twin rounds carry the strike on the 4th volley (D79)');
+    // The strike itself: bullet impact → S.dmg damage + chain arc with shock stacks
+    clearFoes128(); g2.combat.bullets.length = 0;
+    p2.x = 500; p2.y = 600;
+    const svT1 = g2.enemies.spawn('rat', p2.x + 140, p2.y);
+    svT1.hp = 1e6; svT1.maxHp = 1e6;
+    // T2 beyond the bullet's hit circle (bulletR=5): only the strike's chain can reach it
+    const svT2 = g2.enemies.spawn('rat', p2.x + 140 + CFG.combat.ringJumpR * 0.6, p2.y);
+    svT2.hp = 1e6; svT2.maxHp = 1e6;
+    regrid128();
+    // Aim straight at T1's center (bullet origin = mid-torso y, foes sit at feet y —
+    // a flat ang=0 shot passes above their hit circles). Then fly the round across
+    // the gap; impact → _strike(SV.dmg) + _chainArc into T2 (1 shock stack, no re-proc).
+    const svAng = Math.atan2(svT1.y - (p2.y - p2.def.h * CFG.combat.spawnOriginFrac), svT1.x - p2.x);
+    g2.combat.fireBullet(p2.x, p2.y - p2.def.h * CFG.combat.spawnOriginFrac, svAng, 1, null, p2, SV);
+    let svTicks = 0;
+    while (svT1.hp >= 1e6 && svTicks < 40) { g2.combat.update(1 / 60, g2.players, g2.enemies); svTicks++; }
+    assert(svT1.hp < 1e6 && svT2.hp < 1e6,
+      `12.8 stormVolley: the strike damages the struck foe + chains (t1=${(1e6 - svT1.hp).toFixed(0)} t2=${(1e6 - svT2.hp).toFixed(0)})`);
+    // Bullet impact damage (1) + the strike (SV.dmg): the round's own dmg resolves first.
+    assert(Math.abs((1e6 - svT1.hp) - (SV.dmg + 1)) < 1e-6, `12.8 stormVolley: struck foe takes bullet dmg + S.dmg (${SV.dmg} + 1)`);
+    assert(svT2.shockStacks.length === 1 && svT2.stunT === 0,
+      '12.8 stormVolley: chained foe gains 1 shock stack, never re-procs');
+    p2.weapons.pistols = 0; p2.synergies = {}; p2._bulletShots = 0;
+    clearFoes128();
+    for (const arr of [g2.combat.bullets, g2.combat.bolts, g2.combat.axes, g2.combat.bombs,
+      g2.combat.flames, g2.combat.arrows, g2.combat.snowballs, g2.combat.explosions]) arr.length = 0;
+    g2.combat.damagePlayer = dmgBak;
+    syn128Done = true;
+  }
 }
 
 // 16.3 — Pyre Lance flame: +33% stream length, 2x flow/extension, LEAD-while-moving.
@@ -2058,14 +2242,16 @@ m03RunDone = true;
     '11.6b: first picker owns the synergy (host pick registered)');
   assert(!hostG._ownerExclusion(hostG.player).has('blight'),
     '11.6b: owner keeps their own synergy (no self-exclusion)');
-  // Max the cap + passives so pl1's pool is exactly the gated synergies {blight, phoenix}:
-  // blight must be absent (host-owned), phoenix (unowned) must be present.
+  // Max the cap + passives so pl1's pool is exactly the gated synergies {blight, phoenix,
+  // heartMagnet} (12.6 rebaseline: hp+magnet maxed also gates heartMagnet): blight must be
+  // absent (host-owned), phoenix + heartMagnet (unowned) must be present.
   const pl1P0 = { ...pl1.passives };
   pl1.weapons = { wand: 5, garlic: 5, axe: 5 }; // 3 maxed = cap 3 filled; gates blight(wand+garlic)+phoenix(passives) only
   pl1.passives = { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3 };
   const pl1Excl = cardOffers(pl1.weapons, pl1.passives, pl1.synergies, hostG.rng, weaponCap(3), hostG._ownerExclusion(pl1));
-  assert(pl1Excl.length === 1 && pl1Excl[0].kind === 'synergy' && pl1Excl[0].key === 'phoenix',
-    '11.6b: owned blight never offered to another seat (pool = phoenix only)');
+  assert(pl1Excl.every((c) => c.kind === 'synergy' && (c.key === 'phoenix' || c.key === 'heartMagnet'))
+    && !pl1Excl.some((c) => c.key === 'blight') && pl1Excl.some((c) => c.key === 'phoenix'),
+    '12.6: owned blight never offered to another seat (pool = {phoenix, heartMagnet})');
   pl1.weapons = { garlic: 1 }; pl1.passives = pl1P0; recomputeStats(pl1); // restore the warden baseline
   for (let i = 0; i < 40; i++) {
     keepAlive(hostG); keepAlive(c1G); keepAlive(c2G);
@@ -2242,6 +2428,7 @@ assert(sawBolts && sawAxes && sawBlades && sawGarlic, `22.1: all-weapon E2E — 
 assert(burnDone && burnAsserted, 'burn DoT kill path never exercised');
 assert(dashIFrameStep === 2, 'dash i-frame E2E never completed');
 assert(synDone, 'synergy E2E (blight) never completed');
+assert(syn128Done, '12.8 per-synergy combat E2Es never completed');
 assert(e107ADone && e107BDone, '10.7 empty-pool guard E2E never completed');
 assert(gemDone && gemAsserted, 'gem pickup SFX event never exercised');
 assert(benchPhase === 2, '10.4 worst-case bench never completed');
@@ -2255,6 +2442,6 @@ console.log(
   `PASS boot-sim — runs=4 (death + victory + m02 + m03) · level-ups=${levelUps} · max enemies alive=${maxEnemies} · ` +
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 8 weapons (wand-off kill window) · ` +
-  `all 8 weapons observed live (bolts/axes/blades/garlic/bullets/bombs/flames/arrows) · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
+  `all 8 weapons observed live (bolts/axes/blades/garlic/bullets/bombs/flames/arrows) · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 12.8 per-synergy E2Es (flamingArrows burn-on-hit · heartPiercer bonus+pierce exactly 1 extra · blueFlame freeze+burn on burst · stormVolley 4th-volley both-rounds strike + chain shock) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
   `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · loop alive throughout`,
 );

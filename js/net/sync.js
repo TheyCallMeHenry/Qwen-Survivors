@@ -4,21 +4,21 @@
 // only sim outputs (D53). Keys follow CFG order (stable across clients).
 import { CFG } from '../config.js';
 
-export const SNAP_V = 4; // v4 (12.4): playerSnap 28 → 29 slots (ringLightning joins the 10-weapon roster)
+export const SNAP_V = 5; // v5 (12.6): playerSnap 29 → 34 slots (five 5-level synergies join the table; levels ride the same slot per key)
 
 export const WEAPON_KEYS = Object.keys(CFG.weapons);    // 10
 export const PASSIVE_KEYS = Object.keys(CFG.passives);  // 5
-export const SYNERGY_KEYS = Object.keys(CFG.synergies); // 5
+export const SYNERGY_KEYS = Object.keys(CFG.synergies); // 10
 export const ENEMY_KEYS = Object.keys(CFG.enemies);     // 9
 
 export const E_FLAG_FLASH = 1, E_FLAG_BURN = 2, E_FLAG_BLIGHT = 4, E_FLAG_BOSS = 8, E_FLAG_FLIP = 16;
 
 const r1 = (n) => Math.round(n * 10) / 10;
 
-// Player snapshot (29 slots, SNAP_V=4):
+// Player snapshot (34 slots, SNAP_V=5):
 // [0] x  [1] y  [2] hp  [3] maxHp  [4] xp  [5] level
 // [6] dashT  [7] dashCd  [8] flip(0/1)
-// [9..17] weapons (CFG order, 0..5)  [18..22] passives  [23..27] synergies
+// [9..18] weapons (CFG order, 0..5)  [19..23] passives  [24..33] synergies (level 0..5)
 // Offsets are derived from key-table lengths so a roster change can't desync them.
 const W_OFF = 9;
 const P_OFF = W_OFF + WEAPON_KEYS.length;

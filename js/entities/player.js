@@ -36,6 +36,7 @@ export class Player {
     this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0; this._snowCd = 0;
     this._bowCharge = 0; // 23.1: >0 while the string is drawing (charge-up wind-up)
     this._ringCd = 0; this._ringBeams = []; // 12.4: Ring of Chain Lightning tick + live arcs
+    this._bulletShots = 0; // 12.6 Storm Volley: rounds fired since the last strike (every 4th)
     this._garlicT = 0; this._orbitT = 0; this._tempestT = 0;
     this._flame = { fuel: 0, reloading: false };
     this._flameAng = 0;
@@ -57,7 +58,6 @@ export class Player {
     this.iframes = 0; this.flash = 0;
     this.dashT = 0; this.dashCd = 0; this.dashAng = 0; this.aimAng = 0;
     this.level = 1; this.xp = 0;
-    this.weapons = {};
     if (c.weapon) this.weapons[c.weapon] = 1; // 11.6/D34: per-character starting weapon (ghost: none)
     this.passives = {};
     this.synergies = {};
@@ -70,6 +70,7 @@ export class Player {
     this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0; this._snowCd = 0;
     this._bowCharge = 0;
     this._ringCd = 0; this._ringBeams = [];
+    this._bulletShots = 0; // 12.6 Storm Volley shot counter
     this._garlicT = 0; this._orbitT = 0; this._tempestT = 0;
     this._flame = { fuel: 0, reloading: false };
     this._flameAng = 0;
@@ -238,8 +239,19 @@ export class Player {
           const a1 = Math.atan2(n1.y - sy, n1.x - this.x);
           const a2 = n2 ? Math.atan2(n2.y - sy, n2.x - this.x) : a1 + S.spread;
           const inf = this.synergies.inferno ? CFG.synergies.inferno.levels[0] : null;
-          combat.fireBullet(this.x, sy, a1, S.dmg * this.dmgMul, inf, this);
-          combat.fireBullet(this.x, sy, a2, S.dmg * this.dmgMul, inf, this);
+          // 12.6 Storm Volley: every 4th ROUND carries the lightning strike — so the
+          // counter advances once per volley (the pair), not once per round: a lone
+          // second round aimed at nothing must still spend its slot, or the cadence
+          // drifts to "every 4th trigger" (26 rounds) instead of every 8.
+          const svLvl = this.synergies.stormVolley || 0;
+          let storm1 = null, storm2 = null;
+          if (svLvl > 0) {
+            const SV = CFG.synergies.stormVolley.levels[svLvl - 1];
+            this._bulletShots++;
+            if (this._bulletShots % 4 === 0) { storm1 = SV; storm2 = SV; }
+          }
+          combat.fireBullet(this.x, sy, a1, S.dmg * this.dmgMul, inf, this, storm1);
+          combat.fireBullet(this.x, sy, a2, S.dmg * this.dmgMul, inf, this, storm2);
           if (combat.pulse) combat.pulse('pistol');
           this._pistolCd = S.rate;
         }
@@ -295,7 +307,10 @@ export class Player {
         const e = this._nearest(enemies, CFG.combat.wandRange);
         if (e) {
           const sy = this._spawnY();
-          combat.fireSnowball(this.x, sy, e.x, e.y, S.dmg * this.dmgMul, S.r, this);
+          // 12.6 Blue Flame: the burst also flash-freezes + burns (blue-flame state, 12.5).
+          const bfLvl = this.synergies.blueFlame || 0;
+          combat.fireSnowball(this.x, sy, e.x, e.y, S.dmg * this.dmgMul, S.r, this,
+            bfLvl > 0 ? CFG.synergies.blueFlame.levels[bfLvl - 1] : null);
           this._snowCd = S.cd;
         }
       }
@@ -325,7 +340,12 @@ export class Player {
           const e = this._nearest(enemies, CFG.combat.wandRange);
           if (e) {
             const sy = this._spawnY();
-            combat.fireArrow(this.x, sy, Math.atan2(e.y - sy, e.x - this.x), S.dmg * this.dmgMul, this);
+            // 12.6 synergies: Flaming Arrows (burn on hit) + Heart-Piercer (bonus dmg + pierce).
+            const faLvl = this.synergies.flamingArrows || 0;
+            const hpLvl = this.synergies.heartPiercer || 0;
+            combat.fireArrow(this.x, sy, Math.atan2(e.y - sy, e.x - this.x), S.dmg * this.dmgMul, this,
+              faLvl > 0 ? CFG.synergies.flamingArrows.levels[faLvl - 1] : null,
+              hpLvl > 0 ? CFG.synergies.heartPiercer.levels[hpLvl - 1] : null);
           }
           this._bowCd = S.rate;
         }
@@ -412,13 +432,20 @@ export class Player {
 export function cardEffectText(kind, key, level) {
   if (kind === 'weapon') return _weaponEffect(key, level);
   if (kind === 'passive') return _passiveEffect(key, level);
-  if (kind === 'synergy') return _synergyEffect(key);
+  if (kind === 'synergy') return _synergyEffect(key, level);
   if (kind === 'meta') return _metaEffect(key, level);
   return '';
 }
 
-// seconds formatting: 0.45 → "0.45", 3 → "3.0", 2.5 → "2.5" (never round a value up)
-const fmtS = (v) => (v < 1 ? v.toFixed(2) : v % 1 === 0 ? v.toFixed(1) : String(v));
+// seconds formatting: 0.45 → "0.45", 3 → "3.0", 2.5 → "2.5" (never round a value up).
+// 12.6 trap: String(v) is NOT the same as v.toFixed(2) — it drops trailing zeros, so
+// 0.8 rendered "0.80" but 0.6 rendered "0.6" (same table, different shape). Pad to two
+// decimals first, then only ever strip down to one decimal (3 → "3.0", never "3").
+const fmtS = (v) => {
+  let s = v.toFixed(2);
+  if (s.endsWith('0')) s = s.slice(0, -1); // "3.00"→"3.0", "0.60"→"0.6"
+  return s;
+};
 const round3 = (x) => Math.round(x * 1000) / 1000; // float totals (0.8*3 = 2.4000000000000004)
 const pct = (f) => `${Math.round(f * 1000) / 10}%`; // 0.1 → "10%", 0.30000000000000004 → "30%"
 
@@ -522,13 +549,22 @@ const SYNERGY_EFFECT = {
   napalm: (s) => `Bomb blasts ignite foes — ${s.dps} dmg/s burn for ${fmtS(s.dur)} s`,
   // 23.3: over-heal in place of the old kill-heal (machinery deleted, not moved)
   phoenix: (s) => `Hearts at full health grant over-health up to ${Math.round(s.ceiling * 100)}% max HP — diminishes ${pct(s.decay)}/s`,
+  // 12.6: five new synergies, 5 levels each — cards state the granted level's numbers
+  flamingArrows: (s) => `Arrows ignite foes — ${s.dps} dmg/s burn for ${fmtS(s.dur)} s`,
+  heartPiercer: (s) => `+${s.bonus} arrow damage — arrows pierce ${s.pierce} extra foe${s.pierce > 1 ? 's' : ''}`,
+  blueFlame: (s) => `Snowball bursts freeze foes for ${fmtS(s.freeze)} s and burn them for ${s.dps} dmg/s over ${fmtS(s.dur)} s`,
+  stormVolley: (s) => `Every 4th round strikes for ${s.dmg} lightning damage, arcing to ${s.jumps} nearby foe${s.jumps > 1 ? 's' : ''}`,
+  heartMagnet: (s) => `Hearts are pulled toward you from ${pct(s.pull)} of your pickup range`,
 };
 
-function _synergyEffect(key) {
+// 12.6: multi-level synergies — `level` selects the row whose numbers the card states
+// (a pick grants level N, so the card shows what that level does). Legacy 1-level
+// synergies always show levels[0].
+function _synergyEffect(key, level = 1) {
   const def = CFG.synergies[key];
   const fn = SYNERGY_EFFECT[key];
   if (!def || !fn) return '';
-  return fn(def.levels[0]);
+  return fn(def.levels[Math.min(Math.max(level, 1), def.levels.length) - 1]);
 }
 
 const META_EFFECT = {
