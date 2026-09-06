@@ -17,7 +17,7 @@ Rules for every future edit — this file is loaded at every session start; its 
 
 - **Active: Phase 15 COMPLETE (level-up offer coverage — uniform draw D81)** (session 18, 2026-09-05). All 15.1–15.4 done + committed `a0f456e` on `overnight-2026-08-22` (user explicit ask). **NEXT = Phase 17** (run durations + boss schedule, PLAN §3.10 D65).
 - **Gates (green 2026-09-05 session 18):** `node tools/check.mjs` **33/33** · `node tools/test-logic.mjs` **663/663** · `node tools/test-boot.mjs` **PASS boot-sim runs=4**. Full baseline: Resume Notes §Gates.
-- **Git:** `overnight-2026-08-22` = origin at **`a0f456e`** (Phase 15 pushed to work branch). `main` = `8852e67` (Pages carries Phase 20; NOT advanced this session — Pages refresh awaits explicit ff-merge + push). Two-checkout reconciliation done: sandbox authoritative; `D:\Apps\Qwen-Survivors` fast-forwarded to `a0f456e`, trees byte-identical, its obsolete local edits stashed recoverable (`stash@{0}`). Pages = the user's test channel; deploys from `main` only on explicit ask.
+- **Git:** `overnight-2026-08-22` = `main` = origin at **`c27f101`** (Phase 15 PUBLISHED to Pages 2026-09-05 via ff-merge work branch → main + push on explicit user ask). Two-checkout reconciliation done: sandbox authoritative; `D:\Apps\Qwen-Survivors` fast-forwarded to match, trees byte-identical, its obsolete local edits stashed recoverable (`stash@{0}`). Pages = the user's test channel; deploys from `main` only on explicit ask.
 - **Server:** DOWN (port 47893 not listening as of last check); recipe in `docs/ENV.md`.
 
 ## Master Checklist
