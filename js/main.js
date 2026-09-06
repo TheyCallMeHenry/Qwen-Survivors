@@ -51,7 +51,7 @@ function boot() {
 
   // Order matters: hud before sfx ('mute' bus event: hud writes LS, sfx reads it — insertion order),
   // sfx before music (ctx must exist before music ticks).
-  const hud = initHud(game);
+  const hud = initHud(game, { icons });
   const screens = initScreens(game, { icons });
   const sfx = initSfx(game);
   const music = initMusic(game, sfx);

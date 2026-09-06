@@ -10,9 +10,10 @@
 import { CFG } from '../config.js';
 import { clamp, fmtTime } from '../utils/math.js';
 import { buildGhost } from '../art/characters.js';
+import { drawIconScaled } from '../art/items.js';
 import { charAccent, ghostColor, resolveChars } from '../net/coop.js';
 
-export function initHud(game) {
+export function initHud(game, { icons } = {}) {
   const $ = (id) => document.getElementById(id);
   const hud = $('hud');
   const hpBar = hud.querySelector('.hp-bar');
@@ -31,9 +32,55 @@ export function initHud(game) {
   const setZoomVal = $('set-zoom-val');
   const setMute = $('set-mute');
   const setMuteVal = $('set-mute-val');
+  const equipRow = $('equip-row');
   const input = game.input;
 
   const setTxt = (el, s) => { if (el.textContent !== s) el.textContent = s; };
+
+  // --- 19.1: equipment row — every equipped weapon / synergy / passive shown as an icon
+  // chip with its current level, live all run. Rebuilt only when the loadout signature
+  // changes (a pick), never per frame. Order: weapons → synergies → passives.
+  const equipDpr = Math.min(
+    (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1),
+    (game.input && game.input.isTouch ? CFG.perf.dprCapMobile : CFG.perf.dprCapDesktop),
+  );
+  const equipSig = new WeakMap(); // player → last signature string
+  const buildChip = (icon, level) => {
+    const chip = document.createElement('div');
+    chip.className = 'equip-chip';
+    chip.setAttribute('role', 'listitem');
+    const cv = document.createElement('canvas');
+    cv.className = 'equip-icon';
+    if (icons && icon) drawIconScaled(cv, icon, 34, equipDpr);
+    const num = document.createElement('span');
+    num.className = 'equip-lvl';
+    num.textContent = String(level);
+    chip.append(cv, num);
+    return { chip, num };
+  };
+  // Ordered loadout entries for a player: weapons (CFG order), then synergies, passives.
+  const loadoutEntries = (pl) => {
+    const out = [];
+    for (const k in CFG.weapons) if (pl.weapons[k]) out.push({ kind: 'weapon', key: k, level: pl.weapons[k] });
+    for (const k in CFG.synergies) if (pl.synergies && pl.synergies[k]) out.push({ kind: 'synergy', key: k, level: pl.synergies[k] });
+    for (const k in CFG.passives) if (pl.passives[k]) out.push({ kind: 'passive', key: k, level: pl.passives[k] });
+    return out;
+  };
+  const syncEquip = (pl) => {
+    const entries = loadoutEntries(pl);
+    const sig = entries.map((e) => `${e.key}:${e.level}`).join(',');
+    if (equipSig.get(pl) === sig) return; // unchanged since last build
+    equipSig.set(pl, sig);
+    equipRow.innerHTML = ''; // matches screens.js list-rebuild convention
+    for (const e of entries) {
+      const def = CFG.weapons[e.key] || CFG.synergies[e.key] || CFG.passives[e.key];
+      const icon = icons && def ? icons[def.icon] : null;
+      const { chip, num } = buildChip(icon, e.level);
+      chip.title = `${def ? def.name : e.key} · Lv ${e.level}`;
+      chip.setAttribute('aria-label', `${def ? def.name : e.key}, level ${e.level}`);
+      equipRow.appendChild(chip);
+    }
+  };
 
   // 11.8 — per-character UI theming (D62 channel): sets the --char* vars on a themed
   // root; main.css consumes them with legacy fallbacks. Roster char = its accent, ghost
@@ -70,10 +117,11 @@ export function initHud(game) {
     const pXpFill = el('div', 'bar-fill');
     pXpBar.append(pXpFill);
     row.append(lvl, pXpBar);
+    const equip = el('div', 'seat-equip'); // 19.3: per-seat equipment chips (co-op parity)
     const dash = el('div', 'seat-dash');
-    root.append(face, name, pHpBar, row, dash);
+    root.append(face, name, pHpBar, row, equip, dash);
     hud.appendChild(root);
-    return { root, face, name, hpBar: pHpBar, hpFill: pHpFill, ohFill: pOhFill, hpLabel: pHpLabel, lvl, xpFill: pXpFill, dash, _vis: false, _key: '' };
+    return { root, face, name, hpBar: pHpBar, hpFill: pHpFill, ohFill: pOhFill, hpLabel: pHpLabel, lvl, xpFill: pXpFill, equip, dash, _vis: false, _key: '', _sig: '' };
   };
   const panels = [mkPanel(1), mkPanel(2), mkPanel(3)];
   const ghostSheet = [null, null, null, null]; // seat → tinted ghost sheet cache (D62 per-seat tint)
@@ -108,6 +156,18 @@ export function initHud(game) {
     setTxt(pan.hpLabel, `${Math.max(0, Math.ceil(pl.hp))} / ${Math.ceil(cap)}`);
     pan.xpFill.style.transform = `scaleX(${clamp(pl.xp / CFG.xpNeed(pl.level), 0, 1)})`;
     setTxt(pan.lvl, `LV ${pl.level}`);
+    // 19.3: per-seat equipment chips (rebuilt only when this seat's loadout changes).
+    const entries = loadoutEntries(pl);
+    const sig = entries.map((e) => `${e.key}:${e.level}`).join(',');
+    if (pan._sig !== sig) {
+      pan._sig = sig;
+      pan.equip.innerHTML = '';
+      for (const e of entries) {
+        const def = CFG.weapons[e.key] || CFG.synergies[e.key] || CFG.passives[e.key];
+        const { chip } = buildChip(icons && def ? icons[def.icon] : null, e.level);
+        pan.equip.appendChild(chip);
+      }
+    }
     pan.dash.style.setProperty('--cd', String(clamp(pl.dashCd / CFG.player.dashCd, 0, 1)));
   };
 
@@ -174,6 +234,7 @@ export function initHud(game) {
     setTxt(hpLabel, `${Math.max(0, Math.ceil(p.hp))} / ${Math.ceil(cap)}`);
     xpFill.style.transform = `scaleX(${clamp(p.xp / CFG.xpNeed(p.level), 0, 1)})`;
     setTxt(lvlBadge, `LV ${p.level}`);
+    syncEquip(p); // 19.1: seat-0 (solo = local) equipment row, rebuilt only on loadout change
     setTxt(timer, fmtTime(CFG.run.time - game.t));
     setTxt(score, String(game.liveScore()));
     const cd = String(clamp(p.dashCd / CFG.player.dashCd, 0, 1));

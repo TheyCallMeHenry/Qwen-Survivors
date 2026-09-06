@@ -90,6 +90,27 @@ html, body {
   padding: 0 4px;
 }
 
+/* 19.1 equipment row — always-visible loadout chips (icon + level), beneath the XP bar.
+   Wraps so cap-5 weapons + synergies + passives never overflow; number badge is high-
+   contrast on a solid pill so it stays legible over any world tile. */
+#equip-row {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  max-width: clamp(160px, 30vw, 280px);
+}
+.equip-chip {
+  position: relative; width: 34px; height: 34px; border-radius: 7px;
+  background: var(--panel); border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
+}
+.equip-icon { width: 34px; height: 34px; display: block; image-rendering: auto; }
+.equip-lvl {
+  position: absolute; right: -3px; bottom: -3px;
+  min-width: 15px; height: 15px; line-height: 15px; padding: 0 3px;
+  border-radius: 8px; text-align: center;
+  background: #0b1220; border: 1px solid var(--accent2);
+  font-size: 10px; font-weight: 800; color: #ffe9b0;
+}
+
 #hud-top {
   position: absolute; top: calc(8px + var(--safe-t));
   left: 50%; transform: translateX(-50%);
@@ -174,6 +195,10 @@ html, body {
     radial-gradient(circle, var(--char-soft, rgba(94, 234, 212, 0.16)) 0 58%, transparent 60%),
     conic-gradient(rgba(2, 8, 16, 0.72) calc(var(--cd, 0) * 1turn), transparent 0);
 }
+/* 19.3 co-op seat panels: compact equipment chips (smaller than the seat-0 row). */
+.seat-equip { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; max-width: 100%; }
+.seat-equip .equip-chip, .seat-equip .equip-icon { width: 24px; height: 24px; }
+.seat-equip .equip-lvl { min-width: 13px; height: 13px; line-height: 13px; font-size: 9px; }
 /* 11.7 + 11.9 — co-op: minimap moves to bottom-center at ~66% of the solo size (it
    would collide with the seat-1 TR panel at 2P); PAUSE relocates beside it (req 6a);
    the DASH button stays top-right with the seat panels (local input, 11.7);

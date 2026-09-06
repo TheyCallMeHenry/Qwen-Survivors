@@ -519,6 +519,17 @@ function snowballBlueSprite() {
   return c;
 }
 
+// 19.1 HUD equipment chip: blit a buildIcons() icon into a target canvas backing store
+// at `css` CSS-px with device-pixel-ratio baked once (crisp on HiDPI, no per-frame work).
+export function drawIconScaled(target, icon, css, dpr) {
+  const px = Math.max(1, Math.round(css * dpr));
+  target.width = px; target.height = px;
+  const g = target.getContext('2d');
+  g.clearRect(0, 0, px, px);
+  g.imageSmoothingEnabled = true;
+  g.drawImage(icon, 0, 0, icon.width, icon.height, 0, 0, px, px);
+}
+
 // Card icons (72x72) for level-up UI.
 export function buildIcons() {
   const icons = {};
