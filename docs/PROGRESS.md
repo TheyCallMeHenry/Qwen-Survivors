@@ -17,7 +17,7 @@ Rules for every future edit — this file is loaded at every session start; its 
 
 - **Active: Phase 19 — In-run HUD equipment icons + fuel bar — ALL DONE (19.1–19.4) this session.** Prior session shipped 19.1 (equip-row chips) + 19.3 (co-op seat chips) uncommitted and hit the cliff; session 21 recovered state from `git diff`, relocated the Pyre Lance fuel bar ABOVE → **beneath the player** (19.2, D68 revises D24; `js/entities/player.js` draw), added the 19.4 boot gate (fuel-bar-below-player E2E + existing equip-row/seat-chip E2Es). Phase 24 visual overhaul COMPLETE + committed (`7c4f01c`).
 - **Gates (green, Phase 19 acceptance):** `node tools/check.mjs` **33/33** · `node tools/test-logic.mjs` **682/682** · `node tools/test-boot.mjs` **PASS boot-sim runs=4**. `[10.4-bench]` drawImage 763–962 across 4 runs (pre-change band 771–847; bench variance, fuel-bar delta = +2 fillRect/frame only).
-- **Git:** `overnight-2026-08-22` = `main` = origin at **`7c4f01c`** (Phase 24 committed+pushed). DIRTY tree = Phase 19 (8 files: index.html, css/main.css, js/main.js, js/art/items.js, js/ui/hud.js, js/entities/player.js, tools/test-boot.mjs, tools/test-logic.mjs). NOT committed (rule 7 — user must ask). Phase 15 (`a0f456e`) already PUBLISHED to Pages.
+- **Git:** `overnight-2026-08-22` = `main` = origin at **`6b9eeda`** — **Phase 19 PUBLISHED 2026-09-06** via ff-merge overnight-2026-08-22 → main + push (Pages test channel refreshed); Phase 24 (`7c4f01c`) and Phase 15 (`a0f456e`) previously published. Tree CLEAN.
 - **Server:** DOWN (port 47893 not listening); not needed for visual work; recipe in `docs/ENV.md`.
 
 ## Master Checklist
@@ -190,7 +190,7 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 
 **Gates (green, final):** check.mjs **33/33** · test-logic **682/682** (679 + 3 new 19.1 asserts) · boot `PASS boot-sim runs=4` · `[10.4-bench]` drawImage 763–962 across 5 runs (pre-change band 771–847 → bench variance, not regression; the change adds only 2 fillRects/frame when flame equipped).
 
-**Git state:** branch `overnight-2026-08-22` = `main` = origin at **`7c4f01c`** (Phase 24 COMPLETE committed + pushed). Tree is **DIRTY** — 8 modified files (`index.html`, `css/main.css`, `js/main.js`, `js/art/items.js`, `js/ui/hud.js`, `js/entities/player.js`, `tools/test-boot.mjs`, `tools/test-logic.mjs`) = the Phase 19 work + `docs/PROGRESS.md`. **NOT committed** (rule 7). Phase 15 (`a0f456e`) already PUBLISHED to Pages.
+**Git state:** branch `overnight-2026-08-22` = `main` = origin at **`6b9eeda`**. Tree **CLEAN** — Phase 19 committed (`eb00702` HUD chips + `6b9eeda` fuel bar/tests/docs) and **PUBLISHED to Pages** 2026-09-06 via ff-merge → main + push. Phases 24 (`7c4f01c`) and 15 (`a0f456e`) previously published.
 
 **What the uncommitted Phase 19 diff contains:**
 - `index.html`: `<div id="equip-row" role="list" aria-label=…>` under the XP bar in the run HUD.
@@ -201,7 +201,7 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 - `js/entities/player.js` (19.2): fuel bar in `Player.draw` moved from above-head (`y - def.h - 12`) to beneath feet (`y + 5`); fuel logic (`_flame` state machine) untouched.
 - Tests: +3 logic asserts (HTML/CSS content, 679→682) · boot E2E blocks for solo equip-row (chips mirror loadout, no rebuild when unchanged, co-op seat chips) · 19.4 fuel-bar-below-player gate (Proxy ctx captures fillRect ys during `Player.draw`, asserts all ≥ feet).
 
-**NEXT = await user direction.** Phase 19 done; tree holds uncommitted Phase 19 work (8 files). Obvious moves: (a) commit/push Phase 19 (needs explicit ask), (b) **Phase 25** — comprehensive performance & optimization pass (dedicated full session, absorbs 10.9), (c) queued feature phases 17 → 18 → 14 → 21. 22.8 needs a device repro; 11.13 impl needs the user's NAS.
+**NEXT = await user direction.** Phase 19 done + published. Obvious moves: (a) **Phase 25** — comprehensive performance & optimization pass (dedicated full session, absorbs 10.9), (b) queued feature phases 17 → 18 → 14 → 21. 22.8 needs a device repro; 11.13 impl needs the user's NAS.
 
 **Key code seams (Phase 19):** `hud.js` syncEquip/seat-sync (signature-gated rebuild); `items.js drawIconScaled`; icons built once in `main.js boot()` via `buildIcons()`. **Perf guardrails unchanged:** no gradients/literals in `draw()` bodies; HUD DOM rebuilds only on loadout-signature change.
 
@@ -317,7 +317,7 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 
 ## Session Log (append-only, newest first)
 
-- **2026-09-06 (session 21) — Phase 19 COMPLETE (cliff recovery + 19.2 + 19.4):** prior session hit token cliff mid-**Phase 19** with no docs update. Recovered from `git diff`: Phase 24 committed+pushed (`7c4f01c`); 19.1+19.3 implemented but unticked (`#equip-row` chips, `drawIconScaled`, signature-gated `syncEquip` + seat chips; boot E2E blocks). Implemented **19.2**: fuel bar relocated above-head → beneath feet (`player.js` draw only; D68 revises D24; logic untouched). Added **19.4** boot gate: Proxy-ctx fillRect-y capture during `Player.draw`, asserts every fuel-bar rect ≥ player feet. Gates final: check 33/33 · logic 682/682 · boot PASS runs=4 (drawImage 763–962 across 5 runs = bench variance; delta = +2 fillRect/frame). All 19.x ticked. No commits (rule 7). NEXT = user direction (commit? Phase 25? phase 17?).
+- **2026-09-06 (session 21) — Phase 19 COMPLETE (cliff recovery + 19.2 + 19.4):** prior session hit token cliff mid-**Phase 19** with no docs update. Recovered from `git diff`: Phase 24 committed+pushed (`7c4f01c`); 19.1+19.3 implemented but unticked (`#equip-row` chips, `drawIconScaled`, signature-gated `syncEquip` + seat chips; boot E2E blocks). Implemented **19.2**: fuel bar relocated above-head → beneath feet (`player.js` draw only; D68 revises D24; logic untouched). Added **19.4** boot gate: Proxy-ctx fillRect-y capture during `Player.draw`, asserts every fuel-bar rect ≥ player feet. Gates final: check 33/33 · logic 682/682 · boot PASS runs=4 (drawImage 763–962 across 5 runs = bench variance; delta = +2 fillRect/frame). All 19.x ticked. Same session: committed (`eb00702` chips + `6b9eeda` fuel bar/tests/docs), ff-merged → main, pushed both branches — **Phase 19 PUBLISHED to Pages**. NEXT = user direction (Phase 25? phase 17?).
 
 - **2026-09-06 (session 20b) — 24.9 solid-metal weapon lighting (completeness):** user asked whether *all* non-UI items got the visual upgrade → audited every sprite. Found genuine gap: `bladeSprite` + `boomerangSprite` (axe — one sprite, `game.js:48`) were opaque metal bodies without `formShade`. Applied it to both (import added to items.js; blade whole-shape shade 0.28, boomerang per-spike 0.26). Confirmed additive energy sprites (`flame`/`explosion`/`spark`/`frostBurst`/`orb`) correctly left unshaded (emit light). +2 boot asserts (24.9); verified assertions execute via deliberate-fail probe (fake-canvas shim can't check pixels, so assert footprint only; a formShade throw fails boot earlier). Gates: check 33/33 · logic 679/679 · boot PASS runs=4. No commits (rule 7).
 
