@@ -248,7 +248,7 @@ let sawBullets = false, sawBombs = false, sawFlames = false, sawArrows = false;
 let sawBolts = false, sawAxes = false, sawBlades = false, sawGarlic = false; // 22.1: all-weapon E2E observation
 let burnDone = false, burnAsserted = false, burnEnemy = null, burnKills = 0, burnAt = 0;
 let dashIFrameStep = 0, dashIFrameHp0 = 0; // 0 = not started, 1 = in flight, 2 = done
-let synActive = false, synDone = false, synRetries = 0;
+let synActive = false, synDone = false, synRetries = 0, _synRngSave = null;
 let passivePickDone = false; // 20.3 (D66): first passive arrived via the real level-up pipeline
 let e107A = false, e107ADone = false, e107B = false, e107BDone = false; // 10.7 empty-pool guard E2E
 let benchPhase = 0, benchStartT = 0; // 10.4 one-shot worst-case bench: 0=off · 1=measuring · 2=done
@@ -301,6 +301,7 @@ function steer() {
       if (game.player.synergies.blight && game.state === 'PLAYING') {
         synDone = true;
         synActive = false;
+        game.rng = _synRngSave; // restore the run's rng after the seeded sub-test
         // E2E done — stop leveling (keeps the pump from cycling through the
         // leftover synergy draws).
         game.player.gainXp = () => 0;
@@ -493,6 +494,12 @@ function steer() {
       for (const k of Object.keys(CFG.weapons)) p.weapons[k] = 5;
       for (const k of Object.keys(CFG.passives)) p.passives[k] = CFG.passives[k].max;
       p.synergies = {};
+      // Flake fix: the offer draw uses game.rng, which startRun seeds from
+      // Math.random — so a crowded pool could miss blight within the ≤2-retry
+      // budget below (observed intermittent FAIL). Pin game.rng to a fixed seed
+      // for the synergy sub-test only; synDone restores the run's original rng.
+      _synRngSave = game.rng;
+      game.rng = mulberry32(1); // seed 1 → blight on draw #1 (verified via unsloth-tmp/syn-seed-scan.mjs)
       synActive = true;
       game.levelupQueue = 1;
     }
@@ -840,7 +847,7 @@ sawBullets = sawBombs = sawFlames = sawArrows = false;
 sawBolts = sawAxes = sawBlades = sawGarlic = false; // 22.1
 burnDone = burnAsserted = false; burnEnemy = null; burnKills = 0; burnAt = 0;
 dashIFrameStep = 0; dashIFrameHp0 = 0;
-synActive = synDone = false; synRetries = 0;
+synActive = synDone = false; synRetries = 0; _synRngSave = null;
 passivePickDone = false; // 20.3 re-arms per run (run 1 asserts below)
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start click did not start run 2');

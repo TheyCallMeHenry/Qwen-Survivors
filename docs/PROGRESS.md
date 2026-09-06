@@ -15,9 +15,9 @@ Rules for every future edit — this file is loaded at every session start; its 
 
 ## Status — 2026-09-05
 
-- **Phase 20 COMPLETE** (session 14, 2026-09-05): passive-start rule (D66) — code already compliant; landed as asserts + comments (logic 661/661, boot first-passive level-up E2E). Phase 12 CLOSED prior. **NEXT = Phase 15 (level-up offer coverage; D80 fix decision lives there).**
-- **Gates (re-run green 2026-09-05 on this tree):** `node tools/check.mjs` **33/33** · `node tools/test-logic.mjs` **661/661** · `node tools/test-boot.mjs` **PASS boot-sim runs=4**. Full baseline: Resume Notes §Gates.
-- **Git:** branch `overnight-2026-08-22` = `main` = origin at `ac80df2` (Phase 20 pushed + **Pages carries Phase 20** as of this commit; user explicit ask). Pages = the user's test channel; deploys from `main` only on explicit ask.
+- **Active: Phase 15 (level-up offer coverage DEFECT)** — 15.1 reproduce + 15.2 root cause **DONE** (session 17, 2026-09-05; numbers on checklist line). **NEXT = 15.3 fix decision (options A/B/C/D in Resume Notes; awaiting user pick)** → implement → 15.4 regression. Phase 20 COMPLETE + Phase 12 CLOSED prior.
+- **Gates (re-run green 2026-09-05 session 17, no code touched):** `node tools/check.mjs` **33/33** · `node tools/test-logic.mjs` **661/661** · `node tools/test-boot.mjs` **PASS boot-sim runs=4**. Full baseline: Resume Notes §Gates.
+- **Git:** branch `overnight-2026-08-22` = `main` = origin at `8852e67` (docs-only; Pages carries Phase 20 from `ac80df2`; user explicit ask). Uncommitted = session-15/16 test/doc carry-over + this session's Phase 15 docs. Pages = the user's test channel; deploys from `main` only on explicit ask.
 - **Server:** DOWN (port 47893 not listening as of last check); recipe in `docs/ENV.md`.
 
 ## Master Checklist
@@ -97,11 +97,14 @@ Rules for every future edit — this file is loaded at every session start; its 
 - [ ] 14.3 Gates: test-logic pure helpers + boot solo/co-op E2E
 
 ### Phase 15 — Level-up offer coverage DEFECT (every roster weapon reachable; user playtest 2026-08-22)
-Root cause NOT determined — **15.1 reproduce/quantify FIRST; do not patch from hypotheses.** Baseline on the post-Phase-20 economy. User data: Pyre Lance never offered in ≥20 runs; pistols often, bombs occasionally. (Snowball/ring "never seen" = pre-Phase-12, expected.)
-- [ ] 15.1 Reproduce + quantify: per-weapon offer frequency across N seeded runs
-- [ ] 15.2 Root cause (candidates UNVERIFIED): 3-of-N pool sample odds · cap-5 slot-fill blocking late new-weapon offers · owner-exclusion asymmetry
-- [ ] 15.3 Fix: offer-pool design guaranteeing reachability without breaking exclusivity/cap (decision documented before implementing)
-- [ ] 15.4 Regression: seeded determinism test + before/after frequency numbers in the tick note
+Root cause **DETERMINED 2026-09-05** (15.1/15.2 done; sims gitignored `unsloth-tmp/offer-sim.mjs` + `offer-probe.mjs`). Baseline = post-Phase-20 economy, 10 weapons / cap 5 / mage starts wand.
+- [x] 15.1 Reproduce + quantify (N=500 seeded solo runs, real `cardOffers`/`applyCard`, 4 pick policies): **~34–40% of runs never offer Pyre Lance at all; ~half never acquire it.** Every non-starter weapon sits in the same 60–86% offered-in-run band → NOT a flame-specific curse, systemic to all new weapons. Starter (wand) = 100%. — 2026-09-05
+- [x] 15.2 Root cause CONFIRMED (two mechanisms, both real, one dominant):
+  - **(B) cap-fill hard-stop = DOMINANT.** `cardOffers` L618 (`lvl===0 && ownedW<cap`): once owned==cap(5), a new weapon can **never** re-enter the pool — measured P=0.0% at cap. Mean weapons-owned = exactly 5.00; **81% of a run's level-up steps happen AT cap**, where new-weapon offers are structurally impossible.
+  - **(A) 3-of-N dilution = compounding.** Below cap, one un-owned weapon competes with every owned-UPGRADE card + all passives (~10-card pool, draw 3): per-step P(a given new weapon appears) only **~14–22%**, shrinking as owned grows (ownedW=4→16%). Player gets ~5 pre-cap steps × ~18% → high never-offered odds, then permanent cap lock.
+  - **(C) owner-exclusion asymmetry = NOT a factor in solo** (`exclude=null` solo; verified).
+- [x] 15.3 Fix SHIPPED (D81, user directive 2026-09-05): **UNIFORM sample-without-replacement** over the legal card pool — every card equal odds, no category weighted. `drawOffers` = partial Fisher-Yates in `js/entities/player.js`; `CFG.offer` reduced to `{ slots: 3 }` (floor + synergyWeight removed). Equal odds hold regardless of roster size (Phase 21 scales evenly). — 2026-09-05
+- [x] 15.4 Regression: +2 logic asserts (uniform weapon-offer-rate equality mean-dev <0.05 over M=4000 · seeded determinism); 6 old "guarantee-this-card-every-draw" asserts → "offerable across seeds" (honest under uniform). **Before/after offer-in-run spread (newfirst L20): defect 60–86% (Pyre Lance 34–40% never-offered) → uniform 61–66%, all weapons equal; acquisition 41–47% (irreducible cap-5-of-10 ceiling).** Gates: check 33/33 · logic **663/663** · boot PASS runs=4 — 2026-09-05
 
 ### Phase 16 — Playtest defects (COMPLETE 2026-08-22, 16.1–16.4)
 - [x] 16.1 m01 snow regression: repro quantified first (probeSnow: 90 fills on EMPTY paths), culprit 13.4 `a8c332b`, arc restored as v1.0.0; non-regression probe at 6 sites
@@ -173,13 +176,17 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 - [ ] 24.1 Scope + spec first: audit current art (player/enemy sprites, VFX, lighting, HUD chrome, per-level identity) → PLAN §3.15 + numbered steps; absorb 22.1 weapon-visibility findings + flame-range visual learnings
 - [ ] 24.x Synergy visual identity (user item 6): every synergized weapon gets a distinct appearance. Verified today: blight/inferno/napalm = pure stat+DoT, NO projectile look change (only `tempest` spawns bolts). Build ONE shared projectile-variant mechanism (procedural art per rule 2; variant tag on projectile records that draw selects) — once, not bespoke per synergy. Spec PLAN §3.14(6)
 
-## Resume Notes — session 14, 2026-09-05 (live state only; rewritten each session per Format contract)
+## Resume Notes — session 18, 2026-09-05 (live state only; rewritten each session per Format contract)
 
-**Where we are:** **Phase 20 COMPLETE + PUBLISHED** (`ac80df2` on `overnight-2026-08-22` = `main` = origin; ff-merge + Pages refreshed on explicit user ask 2026-09-05). Working tree clean.
+**Where we are (session 18, 2026-09-05):** **Phase 15 COMPLETE** (15.1–15.4). Offer-draw rework SHIPPED per user directive: **UNIFORM sample-without-replacement** — every card equal odds, no weighting (`drawOffers` partial Fisher-Yates in `js/entities/player.js`; `CFG.offer = { slots: 3 }`). HEAD `8852e67` = `main` = origin; uncommitted = this session's product-code (`player.js`, `config.js`) + tests (`test-logic.mjs`) + docs. Node v24.11.0 on PATH.
 
-**Gates baseline:** check.mjs **33/33** · test-logic **661/661** · boot `PASS boot-sim runs=4` (death + victory + m02 + m03; all weapon/status/synergy E2Es, co-op 11.x suite incl. ghost/char-sync/HUD/invariance/victory-at-t300, 16.x probes, 23.x E2Es). Run via `"/c/Program Files/nodejs/node.exe"` (node not on PATH — `docs/ENV.md`).
+**Gates (green 2026-09-05 session 18):** check.mjs **33/33** · test-logic **663/663** · boot `PASS boot-sim runs=4`. Sim harnesses gitignored `unsloth-tmp/` (`offer-sim.mjs`, `uniform-proto.mjs`).
 
-**NEXT = Phase 15 — Level-up offer coverage (D80 fix decision lives there):** every roster weapon reachable in offers. Then 17 → 18 → 19 → 14 → 21 → 24/25 (dedicated sessions) → 2.9 browser sign-off.
+**Result:** weapon offer-in-run spread (newfirst L20) defect 60–86% → uniform 61–66%, all equal; acquisition 41–47% = irreducible cap-5-of-10 ceiling. Equal odds scale with roster size → Phase 21 (+9 weapons) safe.
+
+**NEXT = Phase 17** (run durations + boss schedule, spec PLAN §3.10 D65). Then 18 → 19 → 14 → 21 → 24/25 (dedicated sessions) → 2.9 browser sign-off. 22.8 needs device repro; 11.13 impl needs user's NAS.
+
+**Test-mechanism note (D81):** 6 old card-offer asserts pinned "this exact card appears in EVERY draw" — false under uniform sampling (pool > slots). Updated to honest "offerable across seeds" (11.6b control, 12.6 gateDraw ×12 seeds). New asserts: uniform weapon-rate equality + seeded determinism.
 
 **12.8 landed in** `tools/test-boot.mjs` (~L1448–1620, isolated `g2`): 4 synergy probes + controls + `syn128Done`. Debug fixes that mattered: probe must set the SAME synergy level it asserts (`blueFlame: 5` for the L5 row) · strike-impact probe aims at foe center (mid-torso origin ≠ feet y; ang=0 flies above hit circles) and flies the bullet in a while-loop (one tick = 12 px, target 140 px away) · struck foe takes bullet dmg + SV.dmg (both resolve).
 
@@ -188,7 +195,7 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 
 **Queue after Phase 20 (README order):** Phase 15 → 17 → 18 → 19 → 14 → 21 → 24/25 (dedicated sessions) → 2.9 browser sign-off → DONE. 22.8 needs device repro; 11.13 impl needs user's NAS access.
 
-**Note:** `docs/DECISIONS.md`/`docs/ENV.md` were referenced by the Format contract but never created (session 13 lost before writing them). Until they exist, decision full texts live on their checklist line / table row; pitfalls stay here.
+**Note:** `docs/ENV.md` + `docs/DECISIONS.md` CREATED 2026-09-05 (session 16; session 13 planned them but lost them before writing). Decision full texts now have their home; table row remains ≤20 words + pointer. Pitfalls still hot below.
 
 **Pitfall added (session 14):** `pickCard` nulls/rebuilds `game.cards` when the queue drains — capture the card (`const { key } = game.cards[i]`) BEFORE `click()` in steer probes.
 
@@ -278,8 +285,17 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 | 78 | Session Log append-only; this file's Format contract v2 (2026-09-05) |
 | 79 | Storm Volley cadence per VOLLEY; 4th volley both twin rounds carry strike |
 | 80 | Pair-gated synergies ~unreachable at cap-5 (numbers on 12.7 line); fix deferred to Phase 15 |
+| 81 | Offer draw = UNIFORM sample-without-replacement; every card equal odds, no weighting (full text DECISIONS.md) |
 
 ## Session Log (append-only, newest first)
+
+- **2026-09-05 (session 18) — Phase 15 COMPLETE (offer-draw rework SHIPPED, D81):** user directive = all weapons/items near-equal odds every run, not weighted any way, equal regardless of future roster size. Rejected floor+synergyWeight approach; shipped **UNIFORM sample-without-replacement**: `drawOffers` rewritten as partial Fisher-Yates (first `slots` positions) in `js/entities/player.js`; `CFG.offer` collapsed to `{ slots: 3 }` (dropped `newWeaponFloor`, `synergyWeight`). Each card's odds depend only on total pool size → equal across weapons and stable as roster grows (Phase 21). **Numbers** (`unsloth-tmp/offer-sim.mjs` N=500, newfirst L20): weapon offer-in-run spread defect 60–86% (Pyre Lance 34–40% never-offered) → uniform **61–66% all equal**; acquisition 41–47% = irreducible cap-5-of-10 ceiling. **Tests:** +2 asserts (uniform weapon-rate equality mean-dev <0.05 M=4000 · seeded determinism); 6 legacy "guarantee-this-card-every-draw" asserts → honest "offerable across seeds" (11.6b control ×6, 12.6 gateDraw ×12). Gates: check 33/33 · logic **661→663/663** · boot PASS runs=4. No commits (rule 7). NEXT = Phase 17.
+
+- **2026-09-05 (session 17) — Phase 15.1 + 15.2 COMPLETE (offer-coverage defect reproduced + root-caused; NO code change):** built two disposable sims in gitignored `unsloth-tmp/` (`offer-sim.mjs` N=500 seeded solo runs ×4 pick policies on the real `cardOffers`/`applyCard`; `offer-probe.mjs` mechanism decomposition). **15.1:** ~34–40% of runs never OFFER Pyre Lance; ~half never acquire it; all 9 non-starter weapons in one 60–86% band (starter wand=100%) → systemic to new weapons, not flame-specific. **15.2 root cause = two confirmed mechanisms:** (B) cap-fill hard-stop DOMINANT — `cardOffers` L618 gates new-weapon entry on `ownedW<cap`; at cap(5) P(new offer)=0.0%, mean owned=5.00, **81% of run's level-up steps occur AT cap**; (A) 3-of-N dilution compounding — below cap a specific new weapon has only ~14–22%/step (upgrade+passive cards crowd the ~10-card draw-3 pool), shrinking with owned count; (C) owner-exclusion NOT a solo factor (exclude=null). Recorded numbers on Phase 15 checklist line + Resume Notes with 15.3 fix options A/B/C/D + recommendation (B weighted-new-draw, reuses SYNERGY_DRAW_WEIGHT pattern). Gates unchanged (no code): check 33/33 · logic 661/661 · boot runs=4. No commits (rule 7). NEXT = 15.3 fix decision → user pick.
+
+- **2026-09-05 (session 16) — docs/ENV.md + docs/DECISIONS.md created:** Format-contract gap closed (both files referenced since session 13 but never written). ENV.md: node PATH status (resolves directly here, v24.11.0; session 15 saw v24.14.1 — check per shell), push-works + Pages-staleness test-channel trap, server state/D64 NAS recipe, gitignored artifact list + hygiene recipe, no-real-browser note (22.8 needs device). DECISIONS.md: all 80 decision rows migrated/expanded from table + Session Log evidence (D1–D80; revisions and supersessions noted inline) + hot-pitfall index. PROGRESS Resume Notes stale "never created" note updated. Gates re-run green first: check 33/33 · logic 661/661 · boot PASS runs=4. No product-code changes; no commits (rule 7). NEXT = Phase 15.
+
+- **2026-09-05 (session 15) — boot-gate flake FIXED (test-only):** re-ran gates on `8852e67`; check 33/33 · logic 661/661 green but **test-boot FLAKY** — the 9.3a synergy E2E (`steer()` L294 `assert(synRetries < 2, 'blight never appeared in the synergy draws')`) failed intermittently (2/3) because main boot-sim runs seed `game.rng` from unseeded `Math.random`, so a crowded offer pool sometimes misses blight within the ≤2-retry budget (NOT a regression — attempt 3 full-PASSes). **Root-cause fix** (matches prior 11.5/11.6.3 flake fixes): in `steer()` synergy-arm block, pin `game.rng = mulberry32(1)` for the sub-test window only and restore the run's original rng on `synDone` (`_synRngSave`). Seed chosen via gitignored `unsloth-tmp/syn-seed-scan.mjs` (seed 1 → blight draw #1; pool constant across retries so a bad seed fails all draws — seed 93 failed, seed 1 clean). Verified: **boot 6/6 PASS** · check 33/33 · logic 661/661. No commits (rule 7); NEXT = Phase 15.
 
 - **2026-09-05 (session 14) — Phase 20 COMPLETE (passive-start rule, D66):** verification-first — no code granted passives at start (`reset()` already `passives = {}`; meta bonuses ride separate `metaHp/metaDmg/metaSpeed`), so the phase landed as comments + gate coverage. 20.1: D66 comment in `player.js` `reset()` + logic asserts (every char reset → empty passives/synergies + baseline multipliers; +5 checks). 20.2: co-op verified untouched — ghost deal auto-picks a WEAPON only; passives never locked; snapshot slots carry levels (empty at start naturally). 20.3: boot E2E — run-2-start + fresh-`g2` empty-dict asserts + first-passive-via-real-level-up pick in run 1 (`passivePickDone`, asserted ≥1). Trap hit: `pickCard` nulls `game.cards` at queue drain → capture `{key}` before click. Gates: check 33/33 · logic **661/661** · boot PASS runs=4 (×2 stable). No commits (rule 7). NEXT = Phase 15.
 
@@ -389,6 +405,6 @@ See `docs/ENV.md` (moved out of this file 2026-09-05 per Format contract §6 —
 ## How to Resume a Session
 
 1. Read `AGENTS.md` → this file (Status → Master Checklist active phases → **Resume Notes**) → `docs/ENV.md`. Architecture: `docs/PLAN.md` §3–§4; decisions + pitfalls: `docs/DECISIONS.md`; user's own words: `docs/USER-INPUT-LOG.md`. The code is the API record — read the module before changing it.
-2. Work **NEXT** from Resume Notes (currently: finish 12.7 pool review → 12.8 boot E2Es; then Phase 20 → 15 → 17 → 18 → 19 → 14 → 21 → 24/25 dedicated sessions → 2.9). New scope → Master Checklist first.
+2. Work **NEXT** from Resume Notes (currently: Phase 15 → 17 → 18 → 19 → 14 → 21 → 24/25 dedicated sessions → 2.9). New scope → Master Checklist first.
 3. Validate with **all three gates** before any tick: `"/c/Program Files/nodejs/node.exe" tools/check.mjs` (33 modules) · `tools/test-logic.mjs` (**656**) · `tools/test-boot.mjs` (`PASS boot-sim runs=4`).
 4. On completion: tick + date + ≤2-line note in the checklist, ≤10-line Session Log entry, rewrite Resume Notes (≤25 lines), update Status — *before* declaring done (Format contract §1–§4).

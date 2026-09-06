@@ -629,28 +629,29 @@ export function cardOffers(weapons, passives, synergies, rng, cap = CFG.run.maxW
     if (!S.requires.every((r) => reqAtMax(weapons, passives, r))) continue;
     pool.push({ kind: 'synergy', key: k, level: lvl + 1 });
   }
-  // Weighted draw so an eligible synergy surfaces the moment its pair maxes —
-  // it still appears early when the pool is crowded. Weighted by duplication;
-  // dedup keeps an offer from showing the same card twice (synergy is duplicated).
-  const SYNERGY_DRAW_WEIGHT = 8;
-  const weighted = [];
-  for (const c of pool) {
-    const w = c.kind === 'synergy' ? SYNERGY_DRAW_WEIGHT : 1;
-    for (let n = 0; n < w; n++) weighted.push(c);
+  return drawOffers(pool, rng);
+}
+
+// Phase 15 offer-draw rework (D81): UNIFORM sample-without-replacement.
+// Every legal card in the pool has EQUAL odds of appearing; no category is favored
+// (user directive 2026-09-05: "all weapons/items near-equal odds, not weighted any
+// particular way"). The old weight-by-duplication coupled each card's odds to OTHER
+// cards' counts, so passives/upgrades crowded the scarce pre-cap window unevenly per
+// seed and specific weapons starved. A flat Fisher-Yates partial shuffle makes each
+// card's odds depend only on total pool size, which grows evenly as the roster expands
+// (Phase 21) — so equal odds hold regardless of how many weapons/items exist.
+function drawOffers(pool, rng) {
+  const { slots } = CFG.offer;
+  const bag = pool.slice();
+  // Partial Fisher-Yates: only the first `slots` positions need to be randomized.
+  const n = Math.min(slots, bag.length);
+  for (let i = 0; i < n; i++) {
+    const j = i + ((rng() * (bag.length - i)) | 0);
+    const tmp = bag[i];
+    bag[i] = bag[j];
+    bag[j] = tmp;
   }
-  const out = [];
-  const drawn = new Set();
-  const remaining = weighted.slice();
-  while (out.length < 3 && remaining.length) {
-    const i = (rng() * remaining.length) | 0;
-    const card = remaining[i];
-    remaining.splice(i, 1);
-    const tag = `${card.kind}:${card.key}`;
-    if (drawn.has(tag)) continue; // 22.7: skip a duplicate draw from weighting
-    drawn.add(tag);
-    out.push(card);
-  }
-  return out;
+  return bag.slice(0, n);
 }
 
 // Is the synergy requirement `key` (a weapon or passive key) at max level?

@@ -339,10 +339,15 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     ok(draw.every((c) => !(c.kind === 'synergy' && c.key === 'blight')),
       `11.6b: other-owned synergy never offered (sources at max, seed ${seed})`);
   }
-  // Control: the same pool with no owner offers blight.
-  ok(cardOffers(blightMax, allPassMax, {}, mulberry32(1), 5)
-    .some((c) => c.kind === 'synergy' && c.key === 'blight'),
-    '11.6b: control — unowned blight IS offerable');
+  // Control: the same pool with no owner offers blight. Under the uniform draw (D81) the
+  // eligible-synergy pool exceeds 3 slots so a single seed need not surface every card;
+  // offerability = it appears in SOME draw across seeds.
+  let blightSeen = false;
+  for (let seed = 1; seed <= 6 && !blightSeen; seed++) {
+    if (cardOffers(blightMax, allPassMax, {}, mulberry32(seed), 5)
+      .some((c) => c.kind === 'synergy' && c.key === 'blight')) blightSeen = true;
+  }
+  ok(blightSeen, '11.6b: control — unowned blight IS offerable');
   // Excluding an (unoffered) synergy key must not perturb the weapon draw (rng parity).
   const base = { wand: 3, garlic: 1 };
   const a = cardOffers(base, {}, {}, mulberry32(11), 5);
@@ -373,6 +378,30 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   for (const k of Object.keys(CFG.synergies)) allOwned[k] = CFG.synergies[k].levels.length; // 12.6: max every synergy at its OWN level count
   ok(cardOffers(allW, allP, allOwned, mulberry32(9)).length === 0,
     'cardOffers: all owned → empty pool (first-class case)');
+}
+
+// --- Phase 15.4 (D81): uniform offer draw — every card equal odds, scales with roster ---
+{
+  // Equal-odds guarantee: sample the exported path with a controlled synthetic state (own
+  // nothing → pool = all weapons at L1 + passives). Every weapon's offer rate must sit within
+  // tight tolerance of the mean — no weapon favored, and it holds regardless of roster size.
+  const WEAPONS = Object.keys(CFG.weapons);
+  const seen = Object.fromEntries(WEAPONS.map((k) => [k, 0]));
+  const M = 4000;
+  const r2 = mulberry32(99);
+  for (let i = 0; i < M; i++) {
+    const d = cardOffers({}, {}, {}, r2, CFG.run.maxWeapons);
+    for (const c of d) if (c.kind === 'weapon' && c.level === 1) seen[c.key]++;
+  }
+  const rates = WEAPONS.map((k) => seen[k] / M);
+  const mean = rates.reduce((a, b) => a + b, 0) / rates.length;
+  const maxDev = Math.max(...rates.map((r) => Math.abs(r - mean)));
+  ok(mean > 0.15 && maxDev < 0.05,
+    `15.4: uniform draw — weapon offer rates equal (mean ${mean.toFixed(3)}, max dev ${maxDev.toFixed(3)})`);
+  // Determinism: same seed → identical draw.
+  const one = cardOffers({}, {}, {}, mulberry32(7), 5);
+  const two = cardOffers({}, {}, {}, mulberry32(7), 5);
+  ok(JSON.stringify(one) === JSON.stringify(two), '15.4: seeded draw is deterministic');
 }
 
 // --- Phase 10.2: exact-effect card text (pure, player.js) ---
@@ -1669,11 +1698,14 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   // Gating: each new synergy is offered the moment its OWN two sources max, and not before.
   ok(!cardOffers({ bow: 4, flame: 5 }, {}, {}, mulberry32(7)).some((c) => c.key === 'flamingArrows'),
     '12.6 gating: flamingArrows absent below source max (bow 4/5)');
+  // Gating = the synergy is offerable once BOTH sources max. Under the uniform draw (D81)
+  // a single level-up need not surface every eligible card, so offerability is measured as
+  // "appears in SOME draw across seeds" (the pool at cap=10 holds passives + new weapons too).
   const gateDraw = (weapons, passives, key) => {
-    for (let seed = 1; seed <= 3; seed++) {
-      if (!cardOffers(weapons, passives, {}, mulberry32(seed), 10).some((c) => c.kind === 'synergy' && c.key === key)) return false;
+    for (let seed = 1; seed <= 12; seed++) {
+      if (cardOffers(weapons, passives, {}, mulberry32(seed), 10).some((c) => c.kind === 'synergy' && c.key === key)) return true;
     }
-    return true;
+    return false;
   };
   const W5 = (k) => ({ [k]: 5 });
   const P_MAX = {}; for (const k of Object.keys(CFG.passives)) P_MAX[k] = CFG.passives[k].max;
