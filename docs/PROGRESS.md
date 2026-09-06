@@ -15,8 +15,8 @@ Rules for every future edit — this file is loaded at every session start; its 
 
 ## Status — 2026-09-05
 
-- **Phase 12 COMPLETE** (sessions 12–13c, 2026-09-05): 3 weapons + 5 synergies in-tree, SNAP_V 5 / 34-slot snap; 12.7 pool review → **D80** (fix deferred to Phase 15); 12.8 boot per-synergy E2Es green. **NEXT = Phase 20 (passive-start rule).**
-- **Gates (re-run green 2026-09-05 on this tree):** `node tools/check.mjs` **33/33** · `node tools/test-logic.mjs` **656/656** · `node tools/test-boot.mjs` **PASS boot-sim runs=4**. Full baseline: Resume Notes §Gates.
+- **Phase 20 COMPLETE** (session 14, 2026-09-05): passive-start rule (D66) — code already compliant; landed as asserts + comments (logic 661/661, boot first-passive level-up E2E). Phase 12 CLOSED prior. **NEXT = Phase 15 (level-up offer coverage; D80 fix decision lives there).**
+- **Gates (re-run green 2026-09-05 on this tree):** `node tools/check.mjs` **33/33** · `node tools/test-logic.mjs` **661/661** · `node tools/test-boot.mjs` **PASS boot-sim runs=4**. Full baseline: Resume Notes §Gates.
 - **Git:** branch `overnight-2026-08-22` = `main` = origin (pushed + **Pages carries Phase 12 COMPLETE** as of this commit; user explicit ask). Pages = the user's test channel; deploys from `main` only on explicit ask.
 - **Server:** DOWN (port 47893 not listening as of last check); recipe in `docs/ENV.md`.
 
@@ -131,9 +131,9 @@ Screen actions (NOT items/cards/level-able); unlocked + upgraded in the meta sto
 - [ ] 19.4 Gates: boot E2E (icons at run start = starting weapon only per Phase 20; fuel bar under flame owner) + solo invariance
 
 ### Phase 20 — Passive-start rule: runs start with NO passives (D66; queued after 12, before 15)
-- [ ] 20.1 `Player.reset()`: no passive grants (weapons unchanged D34) + recomputeStats baseline + test rebaselines
-- [ ] 20.2 Co-op: passives never locked (D32); ghost flow + exclusivity unaffected — verify
-- [ ] 20.3 Gates: reset = `passives {}` at start; first passive via level-up E2E
+- [x] 20.1 `Player.reset()`: no passive grants (weapons unchanged D34) + recomputeStats baseline + test rebaselines — verified code already compliant (no start-passive grant anywhere); D66 comment added; logic asserts per char (+5) — 2026-09-05
+- [x] 20.2 Co-op: passives never locked (D32); ghost flow + exclusivity unaffected — verified (ghost auto-pick = weapon only; snap slots carry levels, empty at start) — 2026-09-05
+- [x] 20.3 Gates: reset = `passives {}` at start (run-2-start + fresh-g2 asserts); first passive via real level-up pick E2E (`passivePickDone`) — logic 661/661 · boot PASS runs=4 — 2026-09-05
 
 ### Phase 21 — Extended roster: 9 weapons + 2 run items + 5 characters (PLAN §3.13 VERBATIM, D69; queued after 14)
 Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · Gatling · Baseball Bat · Frog Tongue · Cannonball; Mirror Shield · Ice Skates; Werewolf · Stone Golem · Baseball Player · Giant Toad · Wild West Gunslinger. All via D60 data-driven modularity + Decision 21 status pattern.
@@ -173,22 +173,24 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 - [ ] 24.1 Scope + spec first: audit current art (player/enemy sprites, VFX, lighting, HUD chrome, per-level identity) → PLAN §3.15 + numbered steps; absorb 22.1 weapon-visibility findings + flame-range visual learnings
 - [ ] 24.x Synergy visual identity (user item 6): every synergized weapon gets a distinct appearance. Verified today: blight/inferno/napalm = pure stat+DoT, NO projectile look change (only `tempest` spawns bolts). Build ONE shared projectile-variant mechanism (procedural art per rule 2; variant tag on projectile records that draw selects) — once, not bespoke per synergy. Spec PLAN §3.14(6)
 
-## Resume Notes — session 13c, 2026-09-05 (live state only; rewritten each session per Format contract)
+## Resume Notes — session 14, 2026-09-05 (live state only; rewritten each session per Format contract)
 
-**Where we are:** **Phase 12 COMPLETE** (12.1–12.8 all ticked). Committed + pushed to `overnight-2026-08-22`, ff-merged to `main` + pushed (Pages refreshed) on explicit user ask.
+**Where we are:** **Phase 20 COMPLETE** (passive-start rule D66 — verification-only phase: no code change needed, `reset()` never granted passives; asserts + comments landed). Phase 12 work committed/pushed/Pages-live on prior session's explicit user ask; Phase 20 changes UNCOMMITTED (rule 7).
 
-**Gates baseline:** check.mjs **33/33** · test-logic **656/656** · boot `PASS boot-sim runs=4` (death + victory + m02 + m03; all weapon/status/synergy E2Es, co-op 11.x suite incl. ghost/char-sync/HUD/invariance/victory-at-t300, 16.x probes, 23.x E2Es). Run via `"/c/Program Files/nodejs/node.exe"` (node not on PATH — `docs/ENV.md`).
+**Gates baseline:** check.mjs **33/33** · test-logic **661/661** · boot `PASS boot-sim runs=4` (death + victory + m02 + m03; all weapon/status/synergy E2Es, co-op 11.x suite incl. ghost/char-sync/HUD/invariance/victory-at-t300, 16.x probes, 23.x E2Es). Run via `"/c/Program Files/nodejs/node.exe"` (node not on PATH — `docs/ENV.md`).
 
-**NEXT = Phase 20 — Passive-start rule (D66):** runs start with NO passives. Then Phase 15 (D80 fix decision lives there) → 17 → 18 → 19 → 14 → 21 → 24/25 (dedicated sessions) → 2.9 browser sign-off.
+**NEXT = Phase 15 — Level-up offer coverage (D80 fix decision lives there):** every roster weapon reachable in offers. Then 17 → 18 → 19 → 14 → 21 → 24/25 (dedicated sessions) → 2.9 browser sign-off.
 
 **12.8 landed in** `tools/test-boot.mjs` (~L1448–1620, isolated `g2`): 4 synergy probes + controls + `syn128Done`. Debug fixes that mattered: probe must set the SAME synergy level it asserts (`blueFlame: 5` for the L5 row) · strike-impact probe aims at foe center (mid-torso origin ≠ feet y; ang=0 flies above hit circles) and flies the bullet in a while-loop (one tick = 12 px, target 140 px away) · struck foe takes bullet dmg + SV.dmg (both resolve).
 
 **D80 = the numbers live on the 12.7 checklist line** (one home); decision = defer fix to Phase 15.
 
 
-**Queue after Phase 12 (README order):** Phase 20 → 15 → 17 → 18 → 19 → 14 → 21 → 24/25 (dedicated sessions) → 2.9 browser sign-off → DONE. 22.8 needs device repro; 11.13 impl needs user's NAS access.
+**Queue after Phase 20 (README order):** Phase 15 → 17 → 18 → 19 → 14 → 21 → 24/25 (dedicated sessions) → 2.9 browser sign-off → DONE. 22.8 needs device repro; 11.13 impl needs user's NAS access.
 
 **Note:** `docs/DECISIONS.md`/`docs/ENV.md` were referenced by the Format contract but never created (session 13 lost before writing them). Until they exist, decision full texts live on their checklist line / table row; pitfalls stay here.
+
+**Pitfall added (session 14):** `pickCard` nulls/rebuilds `game.cards` when the queue drains — capture the card (`const { key } = game.cards[i]`) BEFORE `click()` in steer probes.
 
 **Pitfalls still hot:** D74 fmtS · D75 fixture `=== 0` · D77 spy weapon-pinning · D79 storm-volley per-volley cadence · 12.4 E2E traps (unown + clear projectiles at probe-block entry; stunT `< 1e-9`; fresh emission before draw asserts) · regrid every tick in isolated probes · `Math.random=()=>0` yields spread MINIMUM (pin 0.5) · 12.8: pooled enemy status fields zeroed on spawn; `_nearest` steals aim → probe player parked at x=500; bow charge-up needs several fire passes (`_bowCharge` pre-seeded); `_bulletShots` reset before storm probe.
 
@@ -258,7 +260,7 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 | 60 | Roster modularity: new chars/weapons/synergies = config + icon builder only |
 | 61 | Select-UI research brief, default full-screen closing on confirm |
 | 62 | Character roster resolved (Mage starter; Warden big+slowest; ghost tints) |
-| 63 | Capture-before-reason user-input log v4 (denylist exact-text + precedence) — AGENTS.md #9 |
+| 63 | Capture-before-reason user-input log v4 (denylist exact-text + precedence) — `docs/USER-INPUT-LOG.md` header (AGENTS.md anchor removed 2026-09-05) |
 | 64 | 11.13 transport = Tailscale on DS124 NAS, unmodified `serve.mjs`, zero code change |
 | 65 | Run durations 5/10/15/20/ENDLESS + boss schedule 4:00/9:00/14:00/19:00/+5:00 |
 | 66 | Players start runs with NO passives |
@@ -278,6 +280,8 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 | 80 | Pair-gated synergies ~unreachable at cap-5 (numbers on 12.7 line); fix deferred to Phase 15 |
 
 ## Session Log (append-only, newest first)
+
+- **2026-09-05 (session 14) — Phase 20 COMPLETE (passive-start rule, D66):** verification-first — no code granted passives at start (`reset()` already `passives = {}`; meta bonuses ride separate `metaHp/metaDmg/metaSpeed`), so the phase landed as comments + gate coverage. 20.1: D66 comment in `player.js` `reset()` + logic asserts (every char reset → empty passives/synergies + baseline multipliers; +5 checks). 20.2: co-op verified untouched — ghost deal auto-picks a WEAPON only; passives never locked; snapshot slots carry levels (empty at start naturally). 20.3: boot E2E — run-2-start + fresh-`g2` empty-dict asserts + first-passive-via-real-level-up pick in run 1 (`passivePickDone`, asserted ≥1). Trap hit: `pickCard` nulls `game.cards` at queue drain → capture `{key}` before click. Gates: check 33/33 · logic **661/661** · boot PASS runs=4 (×2 stable). No commits (rule 7). NEXT = Phase 15.
 
 - **2026-09-05 (session 13c) — 12.8 COMPLETE → Phase 12 CLOSED:** resumed post-cliff, docs current first. Fixed 3 test-only defects in the 12.8 block: blueFlame probe set level 1 but asserted the L5 row (→ `blueFlame: 5`) · stormVolley strike probe fired ang=0 from mid-torso y over foes at feet y + single update tick couldn't cross 140 px (→ aim at center + fly-loop until impact) · struck-foe damage = bullet dmg + SV.dmg (both resolve on impact). Dead `strikes +=` reference removed. Gates: check 33/33 · logic 656/656 · boot PASS runs=4 ×2 consecutive. Zero product-code changes; no commits (rule 7). NEXT = Phase 20.
 

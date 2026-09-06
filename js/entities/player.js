@@ -59,7 +59,7 @@ export class Player {
     this.dashT = 0; this.dashCd = 0; this.dashAng = 0; this.aimAng = 0;
     this.level = 1; this.xp = 0;
     if (c.weapon) this.weapons[c.weapon] = 1; // 11.6/D34: per-character starting weapon (ghost: none)
-    this.passives = {};
+    this.passives = {}; // Phase 20 / D66: runs start with NO passives — level-up picks only
     this.synergies = {};
     this.dmgMul = 1; this.speedMul = 1; this.magnet = 1; this.regen = 0;
     this.xpMul = 1; this.dashCdMul = 1;

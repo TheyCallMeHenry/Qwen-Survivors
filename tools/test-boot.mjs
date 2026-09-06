@@ -249,6 +249,7 @@ let sawBolts = false, sawAxes = false, sawBlades = false, sawGarlic = false; // 
 let burnDone = false, burnAsserted = false, burnEnemy = null, burnKills = 0, burnAt = 0;
 let dashIFrameStep = 0, dashIFrameHp0 = 0; // 0 = not started, 1 = in flight, 2 = done
 let synActive = false, synDone = false, synRetries = 0;
+let passivePickDone = false; // 20.3 (D66): first passive arrived via the real level-up pipeline
 let e107A = false, e107ADone = false, e107B = false, e107BDone = false; // 10.7 empty-pool guard E2E
 let benchPhase = 0, benchStartT = 0; // 10.4 one-shot worst-case bench: 0=off · 1=measuring · 2=done
 let bench = null;
@@ -311,6 +312,19 @@ function steer() {
       // the empty pool (pickCard guard) → silently back to PLAYING.
       cards[0].click();
       return;
+    }
+    // 20.3 (D66): the FIRST passive in a run must arrive through the real level-up pipeline.
+    if (!passivePickDone && game.player.level > 1) {
+      const i = game.cards.findIndex((c) => c.kind === 'passive');
+      if (i >= 0) {
+        const { key } = game.cards[i]; // pickCard may null/rebuild game.cards
+        cards[i].click();
+        assert((game.player.passives[key] || 0) >= 1,
+          `20.3: first passive pick (${key}) not applied via level-up (D66)`);
+        passivePickDone = true;
+        return;
+      }
+      // No passive in this draw — fall through to the normal picks.
     }
     const missing = ['axe', 'garlic', 'blades', 'pistols', 'bombs', 'flame', 'bow', 'snowball', 'ringLightning'].filter((k) => !game.player.weapons[k]);
     if (missing.length) {
@@ -827,9 +841,15 @@ sawBolts = sawAxes = sawBlades = sawGarlic = false; // 22.1
 burnDone = burnAsserted = false; burnEnemy = null; burnKills = 0; burnAt = 0;
 dashIFrameStep = 0; dashIFrameHp0 = 0;
 synActive = synDone = false; synRetries = 0;
+passivePickDone = false; // 20.3 re-arms per run (run 1 asserts below)
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start click did not start run 2');
 assert(game.player.maxHp === 80, 'meta maxHp upgrade not applied at run start (mage 60 + 20 expected)');
+// 20.1 (D66): runs start with NO passives — empty dicts + baseline multipliers
+// (meta bonuses ride metaHp/metaDmg/metaSpeed, untouched by the rule).
+assert(Object.keys(game.player.passives).length === 0 && Object.keys(game.player.synergies).length === 0
+  && game.player.regen === 0 && game.player.magnet === 1,
+  '20.1: run start carries passives/synergies (D66 violated)');
 // Pump UNTIL victory (capped), not a fixed frame count: with the 10.5 spawn
 // band the keep-alive player farms XP near-continuously → back-to-back LEVELUP
 // states freeze the clock, and the victory check (after the level-up return in
@@ -839,6 +859,8 @@ assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
   `run 2: expected victory, got state=${game.state} t=${game.t.toFixed(1)}s`);
 assert(game.bossSpawned, 'wraith boss never spawned');
 assert(dashBtnDone && dashBtnAsserted, 'touch dash button never triggered a dash');
+assert(passivePickDone,
+  '20.3: run 1 reached the weapon-complete state without ever picking a passive via level-up (pool starvation?)');
 
 // high scores: both runs saved via the real gameover bus path, sorted desc
 const lsScores = () => JSON.parse(localStorage.getItem(CFG.scores.storageKey) || '[]');
@@ -998,6 +1020,10 @@ m03RunDone = true;
   g2.resize(1280, 800);
   g2.startRun('m01');
   const p2 = g2.player;
+  // 20.1 (D66): fresh startRun → NO passives; starting weapon only.
+  assert(Object.keys(p2.passives).length === 0 && Object.keys(p2.synergies).length === 0
+    && Object.keys(p2.weapons).length === 1 && p2.weapons.wand === 1,
+    '20.1: startRun passives not empty (D66 violated)');
   const f162 = CFG.combat.spawnOriginFrac;
   const sy162 = p2.y - p2.def.h * f162;
   assert(sy162 < p2.y, '16.2: mid-torso origin is above the feet');

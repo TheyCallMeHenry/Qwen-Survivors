@@ -1212,6 +1212,11 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     pl.setCharacter(k);
     pl.reset(0, 0);
     const w = C[k].weapon;
+    // 20.1 (D66): runs start with NO passives — empty dicts + baseline multipliers.
+    ok(pl.maxHp === C[k].hp && pl.hp === C[k].hp
+      && Object.keys(pl.passives).length === 0 && Object.keys(pl.synergies).length === 0
+      && pl.dmgMul === 1 && pl.speedMul === 1 && pl.magnet === 1 && pl.regen === 0,
+      `20.1: ${k} reset → hp ${C[k].hp} + starting weapon ${w || 'none'} + NO passives (D66)`);
     ok(pl.maxHp === C[k].hp && pl.hp === C[k].hp
       && Object.keys(pl.weapons).length === (w ? 1 : 0)
       && (!w || pl.weapons[w] === 1), `11.6.1: ${k} reset → hp ${C[k].hp} + starting weapon ${w || 'none'}`);
