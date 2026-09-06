@@ -58,6 +58,9 @@ export class Game {
     this.player.setCharacter(this.charKey);
     this.player.flashes = [sheet.idle.map(flashCopy), sheet.run.map(flashCopy)];
     this.playerShadow = shadowSprite(sheet.shadowR, sheet.shadowR, 0.35);
+    // 24.6 shared contact-shadow sprite for standing decor (one ellipse, scaled per decor
+    // width at draw). Grounds trees/ruins/etc. on the ground plane under the top-left key.
+    if (!this.decorShadow) this.decorShadow = shadowSprite(48, 15, 0.32);
     this.players = [this.player]; // live player array (co-op: host sim + remote inputs, 11.2)
     this.remote = [];             // remote Player instances (host sim / client render)
     this.net = null;              // CoopConn (solo: never set → all co-op paths skip)
@@ -82,6 +85,12 @@ export class Game {
     this.combat.bombImg = items.bomb;
     this.combat.flameImg = items.flame;
     this.combat.explosionImg = items.explosion;
+    // 24.3 synergy variant maps (nil on base path → combat.draw falls back to *Img).
+    this.combat.boltVar = items.boltVar;
+    this.combat.bulletVar = items.bulletVar;
+    this.combat.arrowVar = items.arrowVar;
+    this.combat.bombVar = items.bombVar;
+    this.combat.snowballVar = items.snowballVar;
     this.enemies.burnImg = items.burn;
     this.enemies.blightImg = items.blight;
     this.combat.pulse = (n) => this.bus.emit(n);
@@ -1010,6 +1019,13 @@ export class Game {
     const sr = p.def.shadowR;
     for (const pl of this.players) ctx.drawImage(this.playerShadow, pl.x - sr, pl.y - sr * 0.5, sr * 2, sr);
     this.enemies.drawShadows(ctx, x0, y0, x1, y1);
+    // 24.6 contact shadows under standing decor (top-left key → shadow falls down-right).
+    const ds = this.decorShadow;
+    if (ds) for (const d of this.world.decor) {
+      if (d.x < x0 || d.x > x1 || d.y < y0 || d.y > y1) continue;
+      const rw = d.w * 0.62; // ellipse width tracks the decor footprint
+      ctx.drawImage(ds, d.x - rw / 2 + rw * 0.12, d.y - rw * 0.13, rw, rw * 0.32);
+    }
     const items = [];
     for (const d of this.world.decor) {
       if (d.x < x0 || d.x > x1 || d.y < y0 || d.y > y1) continue;

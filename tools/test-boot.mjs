@@ -1420,6 +1420,78 @@ m03RunDone = true;
     eB.dead = true;
   }
 
+  // 24.3 synergy projectile-variant E2E — a synergized projectile draws a DIFFERENT
+  // sprite than its base counterpart. Fire one base + one tagged record per type on the
+  // live combat (variant maps already wired from items in game.constructor), draw with a
+  // recording proxy, and assert the img object handed to drawImage is the variant, not
+  // the base. Base records must still resolve to the base sprite (solo invariance).
+  {
+    const cb = g2.combat;
+    const clearAll = () => {
+      cb.bolts.length = 0; cb.bullets.length = 0; cb.arrows.length = 0;
+      cb.bombs.length = 0; cb.snowballs.length = 0; cb.explosions.length = 0;
+    };
+    // Record the exact sprite object passed for each projectile of a given footprint.
+    const drawPick = (probe) => {
+      let picked = null;
+      const pctx = new Proxy({}, { get(_, p) {
+        if (p === 'drawImage') return (img) => { if (img && img.width === probe.w && img.height === probe.h) picked = img; };
+        if (typeof p === 'string') return () => undefined;
+        return undefined; } });
+      cb.draw(pctx, g2.t, g2.players);
+      return picked;
+    };
+    // bolt (28x12): base vs blight
+    clearAll(); cb.fireBolt(400, 300, 0, 10, 0, null, p2);
+    const boltBase = drawPick({ w: items.bolt.width, h: items.bolt.height });
+    clearAll(); cb.fireBolt(400, 300, 0, 10, 0, CFG.synergies.blight.levels[0], p2);
+    const boltSyn = drawPick({ w: items.bolt.width, h: items.bolt.height });
+    assert(boltBase === items.bolt && boltSyn === items.boltVar.blight,
+      `24.3: blight Moonbolt draws the variant sprite, base draws base (base=${boltBase === items.bolt}, syn=${boltSyn === items.boltVar.blight})`);
+    // bullet (20x10): base vs inferno vs storm
+    clearAll(); cb.fireBullet(400, 300, 0, 5, null, p2, null);
+    const bulBase = drawPick({ w: items.bullet.width, h: items.bullet.height });
+    clearAll(); cb.fireBullet(400, 300, 0, 5, CFG.synergies.inferno.levels[0], p2, null);
+    const bulInf = drawPick({ w: items.bullet.width, h: items.bullet.height });
+    clearAll(); cb.fireBullet(400, 300, 0, 5, null, p2, CFG.synergies.stormVolley.levels[0]);
+    const bulStorm = drawPick({ w: items.bullet.width, h: items.bullet.height });
+    assert(bulBase === items.bullet && bulInf === items.bulletVar.inferno && bulStorm === items.bulletVar.storm,
+      `24.3: inferno + storm bullets draw their variants (inf=${bulInf === items.bulletVar.inferno}, storm=${bulStorm === items.bulletVar.storm})`);
+    // arrow (30x12): base vs flaming vs piercer
+    clearAll(); cb.fireArrow(400, 300, 0, 16, p2, null, null);
+    const arrBase = drawPick({ w: items.arrow.width, h: items.arrow.height });
+    clearAll(); cb.fireArrow(400, 300, 0, 16, p2, CFG.synergies.flamingArrows.levels[0], null);
+    const arrFlame = drawPick({ w: items.arrow.width, h: items.arrow.height });
+    clearAll(); cb.fireArrow(400, 300, 0, 16, p2, null, CFG.synergies.heartPiercer.levels[0]);
+    const arrPierce = drawPick({ w: items.arrow.width, h: items.arrow.height });
+    assert(arrBase === items.arrow && arrFlame === items.arrowVar.flaming && arrPierce === items.arrowVar.piercer,
+      `24.3: flaming + piercer arrows draw their variants (flame=${arrFlame === items.arrowVar.flaming}, piercer=${arrPierce === items.arrowVar.piercer})`);
+    // snowball (22x22): base vs blue
+    clearAll(); cb.fireSnowball(400, 300, 500, 300, 6, 30, p2, null);
+    const snwBase = drawPick({ w: items.snowball.width, h: items.snowball.height });
+    clearAll(); cb.fireSnowball(400, 300, 500, 300, 6, 30, p2, CFG.synergies.blueFlame.levels[0]);
+    const snwBlue = drawPick({ w: items.snowball.width, h: items.snowball.height });
+    assert(snwBase === items.snowball && snwBlue === items.snowballVar.blue,
+      `24.3: blue-flame snowball draws the variant sprite (blue=${snwBlue === items.snowballVar.blue})`);
+    // every variant shares its base footprint → runtime draw geometry unchanged
+    assert(items.boltVar.blight.width === items.bolt.width && items.boltVar.blight.height === items.bolt.height,
+      '24.3: bolt variant shares the base footprint');
+    assert(items.arrowVar.flaming.width === items.arrow.width && items.arrowVar.piercer.width === items.arrow.width,
+      '24.3: arrow variants share the base footprint');
+    clearAll();
+  }
+
+  // 24.9 solid-metal weapon lighting — blade + boomerang (axe) sprites still build after
+  // formShade was added (single top-left key light over every opaque body). The fake
+  // canvas does not track pixels, so assert the sprites exist at their fixed footprints
+  // (a throw during build/formShade would fail boot before reaching here).
+  {
+    assert(items.blade && items.blade.width === 30 && items.blade.height === 30,
+      '24.9: blade sprite builds at footprint after formShade');
+    assert(items.boomerang && items.boomerang.width === 40 && items.boomerang.height === 40,
+      '24.9: boomerang (axe) sprite builds at footprint after formShade');
+  }
+
   // 23.3 Over-heal E2E — full run pipeline: pickups.update collect → game route →
   // over-health past maxHp, then per-step decay back toward 100%.
   {

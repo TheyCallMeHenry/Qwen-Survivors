@@ -30,6 +30,13 @@ export class Combat {
     this.frostImg = null;    // 12.3: small frost burst for the snowball impact
     this.sparkImg = null;    // 12.4: lightning spark at a bolt's strike point
     this.explosionImg = null;
+    // 24.2: per-type synergy variant sprite maps ({ variantKey: img }); empty/absent →
+    // draw falls back to the base *Img above (base path byte-identical, solo invariance).
+    this.boltVar = null;
+    this.bulletVar = null;
+    this.arrowVar = null;
+    this.bombVar = null;
+    this.snowballVar = null;
     this.onKill = null;   // (enemy) — set by game: score/gems/particles/hit-stop
     this.onHurt = null;   // () — set by game: shake/flash
     this.onDeath = null;  // () — set by game: state machine
@@ -66,6 +73,7 @@ export class Combat {
       vx: Math.cos(ang) * C.boltSpeed,
       vy: Math.sin(ang) * C.boltSpeed,
       rot: ang, dmg, pierce, blight, owner,
+      v: blight ? 'blight' : '', // 24.2 draw variant (synergy identity)
       hit: new Set(),
       life: C.boltLife,
     });
@@ -90,11 +98,14 @@ export class Combat {
   // resolves on its first hit (_strike, at the impact point).
   fireBullet(x, y, ang, dmg, inferno = null, owner = null, storm = null) {
     const C = CFG.combat;
+    // storm takes precedence over inferno for the round's look (the lightning round is
+    // rarer + more distinctive than the burning one).
     this.bullets.push({
       x, y,
       vx: Math.cos(ang) * C.bulletSpeed,
       vy: Math.sin(ang) * C.bulletSpeed,
       rot: ang, dmg, inferno, owner, storm,
+      v: storm ? 'storm' : (inferno ? 'inferno' : ''), // 24.2 draw variant
       hit: new Set(),
       life: C.bulletLife,
     });
@@ -111,6 +122,7 @@ export class Combat {
       vy: Math.sin(ang) * C.arrowSpeed,
       rot: ang, dmg: dmg + (piercer ? piercer.bonus : 0), owner, flaming,
       pierce: piercer ? piercer.pierce : 0,
+      v: flaming ? 'flaming' : (piercer ? 'piercer' : ''), // 24.2 draw variant (flaming wins)
       hit: new Set(),
       life: C.arrowLife,
     });
@@ -126,6 +138,7 @@ export class Combat {
       x0: x, y0: y, tx, ty, x, y, h: 0,
       t: 0, fly: Math.max(0.15, dist * C.snowballFlyK),
       dmg, radius, owner, blue,
+      v: blue ? 'blue' : '', // 24.2 draw variant
     });
   }
 
@@ -137,6 +150,7 @@ export class Combat {
       x0: x, y0: y, tx, ty, x, y, h: 0,
       t: 0, fly: C.bombFly, fuse,
       dmg, radius, napalm, owner,
+      v: napalm ? 'napalm' : '', // 24.2 draw variant
     });
   }
 
@@ -610,10 +624,11 @@ export class Combat {
   draw(ctx, t, players) {
     const C = CFG.combat;
     if (this.boltImg) for (const b of this.bolts) {
+      const img = (this.boltVar && this.boltVar[b.v]) || this.boltImg; // 24.2 variant
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(b.rot);
-      ctx.drawImage(this.boltImg, -this.boltImg.width / 2, -this.boltImg.height / 2);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
       ctx.restore();
     }
     if (this.axeImg) for (const a of this.axes) {
@@ -643,17 +658,19 @@ export class Combat {
       }
     }
     if (this.bulletImg) for (const b of this.bullets) {
+      const img = (this.bulletVar && this.bulletVar[b.v]) || this.bulletImg; // 24.2 variant
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(b.rot);
-      ctx.drawImage(this.bulletImg, -this.bulletImg.width / 2, -this.bulletImg.height / 2);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
       ctx.restore();
     }
     if (this.arrowImg) for (const a of this.arrows) {
+      const img = (this.arrowVar && this.arrowVar[a.v]) || this.arrowImg; // 24.2 variant
       ctx.save();
       ctx.translate(a.x, a.y);
       ctx.rotate(a.rot);
-      ctx.drawImage(this.arrowImg, -this.arrowImg.width / 2, -this.arrowImg.height / 2);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
       ctx.restore();
     }
     if (this.bombImg) for (const b of this.bombs) {
@@ -662,8 +679,9 @@ export class Combat {
       ctx.beginPath();
       ctx.ellipse(b.x, b.y, 8 + b.h * 0.03, 4 + b.h * 0.015, 0, 0, TAU);
       ctx.fill();
-      const s = this.bombImg.width;
-      ctx.drawImage(this.bombImg, b.x - s / 2, b.y - b.h - s / 2, s, s);
+      const img = (this.bombVar && this.bombVar[b.v]) || this.bombImg; // 24.2 variant
+      const s = img.width;
+      ctx.drawImage(img, b.x - s / 2, b.y - b.h - s / 2, s, s);
     }
     if (this.flameImg && this.flames.length) {
       ctx.save();
@@ -696,8 +714,9 @@ export class Combat {
       ctx.beginPath();
       ctx.ellipse(b.x, b.y, 7 + b.h * 0.03, 3.5 + b.h * 0.015, 0, 0, TAU);
       ctx.fill();
-      const s = this.snowballImg.width;
-      ctx.drawImage(this.snowballImg, b.x - s / 2, b.y - b.h - s / 2, s, s);
+      const img = (this.snowballVar && this.snowballVar[b.v]) || this.snowballImg; // 24.2 variant
+      const s = img.width;
+      ctx.drawImage(img, b.x - s / 2, b.y - b.h - s / 2, s, s);
     }
     // 12.4: Ring of Chain Lightning arcs (jagged bolt from spawn/last-link to target +
     // a strike spark), drawn additively and fading over ringBeamDur

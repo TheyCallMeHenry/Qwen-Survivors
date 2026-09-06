@@ -248,6 +248,40 @@ User tested the published Pages build. Six asks, scoped below against in-tree co
 - Visual identity of synergies → **Phase 24 — visual upgrade pass** (next session's stated priority), as one shared variant-sprite mechanism.
 - All tuning stays in `js/config.js` (rule 5). Every item needs test-logic invariants (cadence ordering, radius/knockback/damage tables, heart-magnet behaviour) + test-boot E2E. Co-op: all are host-sim-only or snapshot-neutral; the bomb visual and charge-up are draw-only.
 
+### 3.16 Visual upgrade / improvement pass (Phase 24 — DEDICATED FULL SESSION; art direction set by user 2026-09-05)
+
+**User directive (verbatim intent, USER-INPUT-LOG 2026-09-05):** a *complete* visual overhaul; **clean, stylized 2.5D isometric** style; recommended scope approved (player + enemy/boss sprites, weapon/projectile VFX, particles, lighting/glow, per-level atmosphere — **HUD/menus/CSS chrome deferred** to a later pass); perf guardrails held tight; **all** synergies visually distinct via one shared mechanism; run autonomously start→finish with frequent doc writes.
+
+**Non-negotiable constraints for this pass:**
+- Rule 2 unchanged: all art stays procedural in `js/art` (+ the existing draw seams). No image/audio files, no deps, no build step.
+- **NOT a projection rewrite.** The engine is a side-view-on-scrolling-ground hybrid: entities are side-view sprites Y-sorted by `y` (`game.render` L1024), bottom-anchored at entity `(x,y)` = feet, collision = circles. "Isometric" here means **isometric-styled depth cues on that existing 2D frame** — consistent light direction, form-shaded volumes, contact shadows, subtle ground-plane treatment. We do **NOT** convert to a true iso grid/projection (that is a gameplay/physics rewrite, out of a visual pass's scope).
+- **Perf guardrails (user-approved, so Phase 25 isn't created work):** (a) no per-frame allocations in new/edited draw code — no `createLinear/RadialGradient`, array/object literals, or string concat inside `draw()` bodies; bake gradients into pre-rendered sprites at build time. (b) entity/projectile/particle visuals stay **pre-rendered offscreen canvases** drawn via `drawImage` (never live path art per frame). (c) new particle/emitter counts and any added draw-ops stay bounded by existing `CFG.perf` caps; new thresholds become config scalars (rule 5). (d) the `[10.4-bench]` harness stays green; do not regress its draw-op/frame-time baseline.
+
+**Audit findings (2026-09-05 — the "before" state, what to fix):**
+1. **`art/base.js` already ships 2.5D primitives** (`shadowSprite`, `sideShade`, `rimLight`, header literally says "2.5D shading primitives") but they are **near-unused**: `characters.js` calls `sideShade`/`rimLight` ~0×; bodies there are flat solid `fillStyle` fills (e.g. `playerFrame` cloak `#35415a`, torso one flat color). Gradients in characters appear **only** for glow/eye/core accents.
+2. **No consistent light source.** Shading direction, rim-light, and shadow offset are ad-hoc per sprite → nothing reads as lit from one direction → flat, no volume, weak 2.5D read.
+3. **Cast/contact shadows thin:** player + enemies get a soft ellipse (`playerShadow`, `enemies.drawShadows`); projectiles mostly do not (bomb/snowball hand-draw an inline shadow; wand/arrow/pistol/bolt have none). Ground plane = flat base fill + tiled grass with per-tile alpha jitter, no depth gradient.
+4. **Projectile VFX are single-sprite-per-weapon.** `combat.draw` renders each projectile type from one field (`boltImg`, `bulletImg`, `flameImg`, …) — **no variant hook**. Synergies (`blight`, `inferno`, `napalm`, …) change stats/DoT only, never appearance → §3.14(6) unmet across the board.
+5. **Particles** (`particles.js`) are plain additive dots/souls/embers + floating text — functional, minimal shape/color variety; foreground Snow is per-level kind (snow/petal/bubble) already.
+6. **Lighting** (`systems/lighting.js`, 86 ln) = half-res darkness `destination-out` holes + additive glow pass; solid base, tunable via `CFG.lighting`. Room for a subtle ambient/color-grade layer but budget-bound.
+
+**Shared projectile-variant seam (the enabler for synergy identity — build once):**
+- Tag each projectile record with the owning synergy key(s) at fire time (fire sites already know the player's synergies). Record gains `variant` = a stable string (`''` base, else e.g. `'blight'`).
+- Sprite lookup becomes per-type variant maps built in `items.js` (`buildWeaponSprites()` returns `{ bolt: { '': boltImg, blight: boltBlight } , ...}`); `combat.draw` picks `(this.boltVar[b.variant] || this.boltImg)`. Base (no-synergy) sprite path stays byte-identical → solo invariance + existing asserts survive.
+- One mechanism drives **all** synergy looks (recolor + shape accent per synergy palette), not bespoke per-synergy branches. Applies to every weapon that has a synergy; melee/orbiters/garlic get an equivalent tint/aura variant where they have a synergy.
+
+**Numbered steps (→ PROGRESS Phase 24 checklist):**
+- **24.1** Audit + this spec (`PLAN §3.16`) — DONE 2026-09-05.
+- **24.2** Establish the shared projectile-variant seam (§ above) in `items.js`/`combat.js` (base path unchanged) + logic asserts that base sprite selection is byte-identical and variant lookup resolves per synergy key. No visual change yet — plumbing only.
+- **24.3** Apply synergy visual identity to **all** synergies via the seam: distinct palette + shape accent per synergized weapon; boot E2E asserting a synergized projectile draws a different sprite than base.
+- **24.4** Player + character sprites (5 chars): introduce the **global light source** convention (top-left key light, consistent `sideShade` right/bottom + `rimLight` top-left across every frame) + form gradient on bodies; keep footprints/anchor byte-stable (16.2 origin tests). Pre-rendered only.
+- **24.5** Enemy + boss sprites (all m01/m02/m03 skins): same light convention + volume shading + stronger silhouettes/contrast (22.1 weapon/enemy visibility lesson); footprints stable.
+- **24.6** Ground plane + per-level atmosphere: subtle depth treatment on ground/decor (consistent direction, soft contact at decor bases), per-level identity held; budget-bound (no new per-frame gradients).
+- **24.7** VFX/polish pass: projectile trails/impacts + particle shape/color variety (bounded by `CFG.perf`), lighting ambient/color-grade tweak if budget allows.
+- **24.8** Gates + acceptance: all three gates green; `[10.4-bench]` no draw-op/frame-time regression; boot E2Es for variant selection + light-convention content asserts; README/PROGRESS sync. Co-op snapshot-neutral throughout (visuals are host-sim-only/draw-only — no projectile key crosses the wire, 16.2).
+
+**Deferred (explicitly out of this session):** HUD/menu/CSS chrome restyle (recommended deferral, user-approved) → future pass. True isometric projection rework → not a visual change.
+
 ## 4. Phases & Tasks
 
 ### Phase 0 — Scaffold & Docs *(done first, always)*

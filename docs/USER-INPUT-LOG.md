@@ -13,6 +13,23 @@
 
 ## Entries (newest first)
 
+### 2026-09-05 — Phase 24 visual overhaul: direction answers (start 24.1) — clean stylized 2.5D isometric + scope approved + perf guardrails approved + all synergies + autonomous w/ frequent docs
+- **Received:** 2026-09-05 (no time in message; date only)
+- **Classification:** `design decision` (style, synergy scope) · `answer/approval` (scope, perf guardrails, cadence) · directive (autonomous execution)
+- **Context:** Answers the 5 spec-shaping decisions I posed for Phase 24 (visual overhaul); authorizes 24.1 audit+spec now.
+- **Verbatim input:**
+
+  ```
+  yes, proceed with 24.1
+  1. clean, stylized 2.5D isometric visual style
+  2. yes, your recommended scope is approved.
+  3. confirm/approve your recommendation for perf guardrails.
+  4. all.
+  5. run autonomously start to finish with frequent documentation upgrades to ensure cohesive work across likely compactions.
+  ```
+
+- **Consequence:** Phase 24 art direction = clean stylized **2.5D isometric**. Scope = my recommended set (player + enemy/boss sprites, weapon/projectile VFX, particles, lighting/glow, per-level atmosphere; HUD/menus/CSS chrome deferred to a later pass — revisit if time). Perf guardrails held tight (no per-frame allocations in new draw code; entity sprites stay pre-rendered; no live path art) so we don't create Phase 25 work. Synergy visual identity = **all** current synergies via one shared projectile-variant seam. Cadence = autonomous start→finish with frequent PROGRESS/PLAN doc writes for compaction cohesion.
+
 ### 2026-09-05 — Critical session hand-off: documentation-only turn (twice) + new rule: never delete the previous session's Session Log entry
 - **Received:** 2026-09-05 (no time in messages; date only)
 - **Classification:** `process rule` (both) · `answer/approval` (the "yes" authorizing Session-Log pruning)

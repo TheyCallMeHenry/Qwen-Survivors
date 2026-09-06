@@ -1,6 +1,6 @@
 // Pickups, projectiles and card icons — pre-rendered sprites.
 
-import { makeCanvas, glowSprite, shadowSprite, poly, roundRectPath } from './base.js';
+import { makeCanvas, glowSprite, shadowSprite, poly, roundRectPath, formShade } from './base.js';
 import { TAU } from '../utils/math.js';
 
 // Per-level pickup tints (13.10, A5): m01 = original, M02 gold-pink, M03 cyan.
@@ -130,6 +130,7 @@ function boomerangSprite() {
     g.beginPath();
     g.moveTo(x, y - 3.4); g.lineTo(x + 4.4, y); g.lineTo(x, y + 3.4);
     g.closePath(); g.fill();
+    formShade(g, x - 1, y - 3.4, 5.4, 6.8, { shade: 0.26 }); // 24.9 metal spike lit top-left
   }
   return c;
 }
@@ -147,6 +148,9 @@ function bladeSprite() {
   grad.addColorStop(1, '#7fa8d8');
   g.fillStyle = grad;
   g.fill();
+  // 24.9 single top-left key light over the blade (path still current) so metal reads
+  // lit from the same direction as every character/enemy body.
+  formShade(g, 3, 3, 24, 24, { shade: 0.28 });
   g.strokeStyle = 'rgba(94,234,212,0.8)';
   g.lineWidth = 1.4;
   g.stroke();
@@ -340,6 +344,178 @@ function blightSprite() {
   grad.addColorStop(1, 'rgba(60,160,60,0)');
   g.fillStyle = grad;
   g.fillRect(0, 0, 16, 16);
+  return c;
+}
+
+// --- 24.3 synergy projectile variants (Phase 24 visual overhaul) -----------------
+// One distinct sprite per synergy-bearing projectile, built once at load and looked
+// up by the record's `v` tag (combat.draw). Same footprint as the base sprite so the
+// runtime draw geometry stays identical; only palette + a shape accent change. The
+// BASE sprites above are untouched → no-synergy path is byte-identical (rule: solo
+// invariance). Palette per synergy matches its card identity (config.js SYNERGY_EFFECT).
+
+// Shared tracer recolor for bolt/bullet-shaped variants (linear trail + hot head).
+function tracerSprite(w, h, rgbTrail, rgbHead, glowRgb, accent) {
+  const c = makeCanvas(w, h);
+  const g = c.getContext('2d');
+  const midY = h / 2;
+  const grad = g.createLinearGradient(2, 0, w - 2, 0);
+  grad.addColorStop(0, `rgba(${rgbTrail},0)`);
+  grad.addColorStop(0.55, `rgba(${rgbTrail},0.9)`);
+  grad.addColorStop(1, rgbHead);
+  g.strokeStyle = grad;
+  g.lineWidth = 3.4;
+  g.lineCap = 'round';
+  g.beginPath(); g.moveTo(4, midY); g.lineTo(w - 6, midY); g.stroke();
+  // hot core line
+  g.strokeStyle = accent;
+  g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(8, midY); g.lineTo(w - 6, midY); g.stroke();
+  const head = glowSprite(7, glowRgb, 0.9);
+  g.drawImage(head, (w - 6) - 7, midY - 7);
+  return c;
+}
+
+// Blight Moonbolt: violet poison trail + dripping venom glob at the head.
+function boltBlightSprite() {
+  const c = tracerSprite(28, 12, '168,90,255', '#f3e0ff', '190,120,255', 'rgba(243,224,255,0.9)');
+  const g = c.getContext('2d');
+  // venom drip below the head
+  g.fillStyle = 'rgba(150,70,220,0.85)';
+  g.beginPath(); g.arc(20, 9.5, 1.8, 0, TAU); g.fill();
+  return c;
+}
+
+// Inferno bullet: deep ember-orange tracer with a flame flicker behind the head.
+function bulletInfernoSprite() {
+  const c = tracerSprite(20, 10, '255,110,40', '#fff0d0', '255,120,40', 'rgba(255,240,208,0.9)');
+  const g = c.getContext('2d');
+  // small flame lick above the trail
+  g.fillStyle = 'rgba(255,150,60,0.7)';
+  g.beginPath();
+  g.moveTo(9, 5); g.quadraticCurveTo(6, 1.5, 4, 4); g.quadraticCurveTo(6, 5, 9, 5);
+  g.fill();
+  return c;
+}
+
+// Storm Volley bullet: electric blue-white tracer with a zigzag spark across the head.
+function bulletStormSprite() {
+  const c = tracerSprite(20, 10, '120,190,255', '#eaf6ff', '150,200,255', 'rgba(234,246,255,0.95)');
+  const g = c.getContext('2d');
+  // lightning zigzag over the head
+  g.strokeStyle = 'rgba(210,235,255,0.95)';
+  g.lineWidth = 1.4;
+  g.beginPath();
+  g.moveTo(11, 1.5); g.lineTo(14, 4); g.lineTo(12, 5); g.lineTo(16, 8.5);
+  g.stroke();
+  return c;
+}
+
+// Flaming Arrows: base arrow silhouette wrapped in a flame gradient + fire tip.
+function arrowFlamingSprite() {
+  const c = makeCanvas(30, 12);
+  const g = c.getContext('2d');
+  // shaft wrapped in fire
+  const grad = g.createLinearGradient(4, 6, 24, 6);
+  grad.addColorStop(0, '#7a2b0a');
+  grad.addColorStop(0.6, '#ff7a1a');
+  grad.addColorStop(1, '#ffd873');
+  g.strokeStyle = grad;
+  g.lineWidth = 2.8;
+  g.lineCap = 'round';
+  g.beginPath(); g.moveTo(4, 6); g.lineTo(22, 6); g.stroke();
+  // burning head
+  g.fillStyle = '#fff0c8';
+  g.beginPath(); g.moveTo(29, 6); g.lineTo(21, 2.6); g.lineTo(21, 9.4); g.closePath(); g.fill();
+  // flame licks trailing off the shaft
+  g.fillStyle = 'rgba(255,140,40,0.6)';
+  for (const [x, y] of [[8, 3], [13, 9], [17, 3]]) {
+    g.beginPath();
+    g.moveTo(x, y); g.quadraticCurveTo(x - 2, y + (y < 6 ? -3 : 3), x - 4, y);
+    g.quadraticCurveTo(x - 2, y, x, y);
+    g.fill();
+  }
+  return c;
+}
+
+// Heart-Piercer arrow: cold steel/cyan shaft with a longer crystalline head.
+function arrowPiercerSprite() {
+  const c = makeCanvas(30, 12);
+  const g = c.getContext('2d');
+  g.strokeStyle = '#9fd8e6';
+  g.lineWidth = 2.4;
+  g.lineCap = 'round';
+  g.beginPath(); g.moveTo(4, 6); g.lineTo(22, 6); g.stroke();
+  // elongated crystal head (pierces further)
+  const grad = g.createLinearGradient(20, 6, 30, 6);
+  grad.addColorStop(0, '#bff2ff');
+  grad.addColorStop(1, '#ffffff');
+  g.fillStyle = grad;
+  g.beginPath(); g.moveTo(30, 6); g.lineTo(20, 3.4); g.lineTo(20, 8.6); g.closePath(); g.fill();
+  // cold fletching
+  g.strokeStyle = '#7fd0e0';
+  g.lineWidth = 1.6;
+  g.beginPath();
+  g.moveTo(4, 6); g.lineTo(7, 3.2);
+  g.moveTo(6.5, 6); g.lineTo(9.5, 3.2);
+  g.moveTo(4, 6); g.lineTo(7, 8.8);
+  g.moveTo(6.5, 6); g.lineTo(9.5, 8.8);
+  g.stroke();
+  return c;
+}
+
+// Napalm bomb: dark crimson casing + burning dripping fuse (fire replaces the spark).
+function bombNapalmSprite() {
+  const c = makeCanvas(30, 34);
+  const g = c.getContext('2d');
+  // burning fuse
+  g.strokeStyle = '#8a3a1c';
+  g.lineWidth = 2.4;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(15, 9);
+  g.quadraticCurveTo(17, 3, 23, 2.5);
+  g.stroke();
+  // flame at the fuse tip (instead of the yellow spark)
+  const fl = glowSprite(6, '255,110,40', 0.95);
+  g.drawImage(fl, 23 - 6, 2 - 6);
+  g.fillStyle = '#ffd873';
+  g.beginPath(); g.arc(23, 2, 2.2, 0, TAU); g.fill();
+  // crimson casing (form-shaded from the top-left key)
+  const grad = g.createRadialGradient(12, 15, 2, 15, 18, 12);
+  grad.addColorStop(0, '#a8462e');
+  grad.addColorStop(0.45, '#5c1c14');
+  grad.addColorStop(1, '#200a08');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(15, 18, 11, 0, TAU); g.fill();
+  // drip of burning gel
+  g.fillStyle = 'rgba(255,140,50,0.7)';
+  g.beginPath(); g.arc(20, 24, 2.2, 0, TAU); g.fill();
+  // top-left rim highlight (light convention)
+  g.fillStyle = 'rgba(255,190,150,0.5)';
+  g.beginPath(); g.ellipse(11, 14, 2.6, 1.7, -0.6, 0, TAU); g.fill();
+  return c;
+}
+
+// Blue-Flame snowball: cold blue core with a hotter cyan-white rim and frozen speckles.
+function snowballBlueSprite() {
+  const c = makeCanvas(22, 22);
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(9, 9, 1, 11, 11, 10);
+  grad.addColorStop(0, '#eafcff');
+  grad.addColorStop(0.55, '#5fd0ff');
+  grad.addColorStop(1, '#1a6fd8');
+  g.fillStyle = grad;
+  g.beginPath(); g.arc(11, 11, 9, 0, TAU); g.fill();
+  // icy shard speckles
+  g.fillStyle = 'rgba(240,252,255,0.9)';
+  for (const [x, y, r] of [[6, 8, 2.2], [14, 6, 1.8], [16, 13, 2.0], [9, 15, 1.7]]) {
+    g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+  // cold rim glow
+  g.strokeStyle = 'rgba(140,220,255,0.8)';
+  g.lineWidth = 1.2;
+  g.beginPath(); g.arc(11, 11, 9, 0, TAU); g.stroke();
   return c;
 }
 
@@ -802,5 +978,12 @@ export function buildItems() {
     burn: burnSprite(),
     blight: blightSprite(),
     shadowPickup: shadowSprite(7, 3, 0.30),
+    // 24.3 synergy variant maps (keyed by the projectile record's `v` tag). game.constructor
+    // assigns each to combat.<type>Var; combat.draw picks map[v] || baseImg.
+    boltVar: { blight: boltBlightSprite() },
+    bulletVar: { inferno: bulletInfernoSprite(), storm: bulletStormSprite() },
+    arrowVar: { flaming: arrowFlamingSprite(), piercer: arrowPiercerSprite() },
+    bombVar: { napalm: bombNapalmSprite() },
+    snowballVar: { blue: snowballBlueSprite() },
   };
 }

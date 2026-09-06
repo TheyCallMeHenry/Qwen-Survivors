@@ -1171,6 +1171,48 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(killed === B, '11.2: damageEnemy → onKill(e, owner)');
 }
 
+// --- 24.2 shared projectile-variant seam: fire sites tag a draw variant; base path unchanged ---
+{
+  const c = new Combat();
+  // No synergy → empty variant (base sprite path).
+  c.fireBolt(0, 0, 0, 10, 0, null, null);
+  ok(c.bolts[0].v === '', '24.2: plain bolt has empty variant (base look)');
+  c.fireBullet(0, 0, 0, 5, null, null, null);
+  ok(c.bullets[0].v === '', '24.2: plain bullet has empty variant');
+  c.fireArrow(0, 0, 0, 16, null, null, null);
+  ok(c.arrows[0].v === '', '24.2: plain arrow has empty variant');
+  c.fireBomb(0, 0, 0, 30, 8, 20, 0.5, null, null);
+  ok(c.bombs[0].v === '', '24.2: plain bomb has empty variant');
+  c.fireSnowball(0, 0, 100, 0, 6, 30, null, null);
+  ok(c.snowballs[0].v === '', '24.2: plain snowball has empty variant');
+  // Synergy present → the synergy key rides as the variant.
+  c.fireBolt(0, 0, 0, 10, 0, { dps: 14, dur: 3 }, null);
+  ok(c.bolts[1].v === 'blight', '24.2: blight bolt tagged blight');
+  c.fireBullet(0, 0, 0, 5, { dps: 12, dur: 2.5 }, null, null);
+  ok(c.bullets[1].v === 'inferno', '24.2: inferno bullet tagged inferno');
+  c.fireBullet(0, 0, 0, 5, null, null, { dmg: 45, jumps: 2 });
+  ok(c.bullets[2].v === 'storm', '24.2: storm bullet tagged storm');
+  // Both pistol synergies → storm wins (documented precedence).
+  c.fireBullet(0, 0, 0, 5, { dps: 12 }, null, { dmg: 45, jumps: 2 });
+  ok(c.bullets[3].v === 'storm', '24.2: storm takes precedence over inferno');
+  // Arrow two-synergy precedence → flaming wins over piercer.
+  c.fireArrow(0, 0, 0, 16, null, { dps: 8 }, { bonus: 10, pierce: 1 });
+  ok(c.arrows[1].v === 'flaming', '24.2: flaming arrow takes precedence over piercer');
+  c.fireArrow(0, 0, 0, 16, null, null, { bonus: 10, pierce: 1 });
+  ok(c.arrows[2].v === 'piercer', '24.2: piercer-only arrow tagged piercer');
+  c.fireBomb(0, 0, 0, 30, 8, 20, 0.5, { dps: 18 }, null);
+  ok(c.bombs[1].v === 'napalm', '24.2: napalm bomb tagged napalm');
+  c.fireSnowball(0, 0, 100, 0, 6, 30, null, { freeze: 0.3, dps: 8 });
+  ok(c.snowballs[1].v === 'blue', '24.2: blue-flame snowball tagged blue');
+  // Draw-selection fallback (mirrors combat.draw): variant map present + key → variant;
+  // absent map / missing key / empty v → base img (byte-identical solo path).
+  const base = { width: 10, height: 4 }, variant = { width: 12, height: 6 };
+  const pick = (map, v) => (map && map[v]) || base;
+  ok(pick({ blight: variant }, 'blight') === variant, '24.2: draw picks the variant sprite when present');
+  ok(pick(null, 'blight') === base && pick({}, 'blight') === base, '24.2: absent map/missing key → base (invariance)');
+  ok(pick({ blight: variant }, '') === base, '24.2: empty variant → base even with a map loaded');
+}
+
 // --- 11.3 difficulty scaling: coopScale ramp on enemy HP/dmg, spawn curves, boss ---
 {
   ok(coopScale(1) === 1 && coopScale(0) === 1, '11.3: coopScale(≤1) = 1 (solo invariance)');

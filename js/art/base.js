@@ -93,3 +93,23 @@ export function rimLight(ctx, color = 'rgba(170,196,255,0.30)') {
   ctx.lineWidth = 1.2;
   ctx.stroke();
 }
+
+// 24.4 global light-source convention (Phase 24 visual overhaul): a single top-left key
+// light across every character/enemy body. Call with the body path already current +
+// filled; it lays a right/bottom occlusion shade then a top-left rim-light in one step,
+// so all sprites read as lit from the same direction (2.5D volume). Bakes at build time
+// only — never called per frame. `x/y/w/h` bound the shape's box for the shade gradient.
+export function formShade(ctx, x, y, w, h, opts = {}) {
+  const { shade = 0.32, rim = 'rgba(180,205,255,0.34)' } = opts;
+  // occlusion on the away-from-light side (right)
+  sideShade(ctx, w + x, h, 'right', shade);
+  // subtle bottom shade toward the light convention's falloff
+  const bg = ctx.createLinearGradient(0, y, 0, y + h);
+  bg.addColorStop(0, 'rgba(6,10,14,0)');
+  bg.addColorStop(0.65, 'rgba(6,10,14,0)');
+  bg.addColorStop(1, `rgba(6,10,14,${shade * 0.7})`);
+  ctx.fillStyle = bg;
+  ctx.fill();
+  // top-left rim-light stroke
+  rimLight(ctx, rim);
+}

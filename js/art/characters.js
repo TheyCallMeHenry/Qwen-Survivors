@@ -3,7 +3,7 @@
 // runtime soft-shadow radius. Hit-flash copies are made at use via flashCopy.
 // m01 = Evernight Wood (originals) · m02 = Higan re-skins (13.3) · m03 = Drowned City re-skins (13.5).
 
-import { makeCanvas, roundRectPath, poly } from './base.js';
+import { makeCanvas, roundRectPath, poly, formShade } from './base.js';
 import { TAU } from '../utils/math.js';
 
 function canvasOf(w, h, draw) {
@@ -25,6 +25,7 @@ function playerFrame(dy, legL, legR) {
     roundRectPath(g, 18, 24, 22, 25, 6);
     g.fillStyle = '#35415a';
     g.fill();
+    formShade(g, 18, 24, 22, 25); // 24.4 top-left key light on the cloak
     // sword on back
     g.strokeStyle = '#9fb0c8';
     g.lineCap = 'round';
@@ -35,6 +36,7 @@ function playerFrame(dy, legL, legR) {
     // hood + face + eyes (facing right)
     g.fillStyle = '#3d4a66';
     g.beginPath(); g.arc(29, 18, 10, 0, TAU); g.fill();
+    formShade(g, 19, 8, 20, 20); // 24.4 hood volume
     g.fillStyle = '#0d1118';
     g.beginPath(); g.arc(31, 19, 6.5, 0, TAU); g.fill();
     g.fillStyle = '#9fe8ff';
@@ -61,6 +63,7 @@ function wardenFrame(dy, legL, legR) {
     roundRectPath(g, 14, 26, 31, 30, 7);
     g.fillStyle = '#46536b';
     g.fill();
+    formShade(g, 14, 26, 31, 30); // 24.4 plate volume
     g.strokeStyle = '#ffb454';
     g.lineWidth = 2;
     g.beginPath(); g.moveTo(17, 50); g.lineTo(42, 50); g.stroke();
@@ -71,6 +74,7 @@ function wardenFrame(dy, legL, legR) {
     // helmet + visor slit (facing right)
     g.fillStyle = '#4d5a74';
     g.beginPath(); g.arc(32, 15, 10, 0, TAU); g.fill();
+    formShade(g, 22, 5, 20, 20); // 24.4 helmet volume
     g.fillStyle = '#0d1118';
     g.fillRect(30, 12, 12, 5);
     g.fillStyle = '#ffb454';
@@ -100,9 +104,11 @@ function rangerFrame(dy, legL, legR) {
     roundRectPath(g, 15, 26, 22, 20, 5);
     g.fillStyle = '#3d5a45';
     g.fill();
+    formShade(g, 15, 26, 22, 20); // 24.4 tunic volume
     // hood + face + eyes (facing right)
     g.fillStyle = '#33503c';
     g.beginPath(); g.arc(28, 16, 9, 0, TAU); g.fill();
+    formShade(g, 19, 7, 18, 18); // 24.4 hood volume
     g.fillStyle = '#0d1118';
     g.beginPath(); g.arc(30.5, 17, 5.5, 0, TAU); g.fill();
     g.fillStyle = '#a4ffc9';
@@ -136,6 +142,7 @@ function swashFrame(dy, legL, legR) {
     roundRectPath(g, 16, 26, 22, 22, 5);
     g.fillStyle = '#6a3a4a';
     g.fill();
+    formShade(g, 16, 26, 22, 22); // 24.4 duster volume
     g.strokeStyle = '#e8b45a';
     g.lineWidth = 2.5;
     g.beginPath(); g.moveTo(18, 30); g.lineTo(36, 42); g.stroke();
@@ -145,6 +152,7 @@ function swashFrame(dy, legL, legR) {
     g.beginPath(); g.arc(21, 17, 4, 0, TAU); g.fill(); // back tuft
     g.fillStyle = '#e8c39e';
     g.beginPath(); g.arc(30, 17, 7.5, 0, TAU); g.fill();
+    formShade(g, 22.5, 9.5, 15, 15); // 24.4 face volume
     g.fillStyle = '#33283c';
     g.beginPath(); g.arc(33, 16.5, 1.2, 0, TAU); g.fill();
     g.beginPath(); g.arc(35.5, 18, 1.1, 0, TAU); g.fill();
@@ -170,6 +178,7 @@ function ghostFrame(color, dy, legL, legR) {
     g.lineTo(8, 24);
     g.closePath();
     g.fill();
+    formShade(g, 8, 4, 40, 50); // 24.4 sheet volume (top-left key)
     // eyes (facing right)
     g.fillStyle = '#0d1118';
     g.beginPath(); g.ellipse(32, 22, 2.6, 3.4, 0, 0, TAU); g.fill();
@@ -185,6 +194,7 @@ function ratFrame() {
     g.beginPath(); g.moveTo(4, 15); g.quadraticCurveTo(0, 17, 1, 21); g.stroke();
     g.fillStyle = '#6b7076';
     g.beginPath(); g.ellipse(13, 16, 9, 6, 0, 0, TAU); g.fill();
+    formShade(g, 4, 10, 18, 12); // 24.5 rat body
     g.fillStyle = '#767b80';
     g.beginPath(); g.arc(22, 13, 5.5, 0, TAU); g.fill();
     poly(g, [[26, 12], [29, 14], [26, 15]]);
@@ -209,6 +219,7 @@ function batFrame(up) {
     g.fill();
     g.fillStyle = '#4a3f5c';
     g.beginPath(); g.ellipse(17, 15, 5.5, 6, 0, 0, TAU); g.fill();
+    formShade(g, 11.5, 9, 11, 12); // 24.5 bat body
     g.beginPath(); g.arc(17, 8.5, 4.5, 0, TAU); g.fill();
     poly(g, [[13.5, 6], [12, 2], [16, 5]]);
     g.fill();
@@ -228,6 +239,7 @@ function goblinFrame(legL, legR) {
     roundRectPath(g, 8, 16, 15, 16, 4);
     g.fillStyle = '#4f7a3a';
     g.fill();
+    formShade(g, 8, 16, 15, 16); // 24.5 goblin torso
     g.strokeStyle = '#5a4430';
     g.lineWidth = 3;
     g.lineCap = 'round';
@@ -257,6 +269,7 @@ function wolfFrame(l1, l2) {
     g.fillRect(34 + l1, 22, 3.5, 10);
     g.fillStyle = '#5a626e';
     g.beginPath(); g.ellipse(23, 17, 14, 7, 0, 0, TAU); g.fill();
+    formShade(g, 9, 10, 28, 14); // 24.5 wolf body
     g.fillStyle = '#616a76';
     g.beginPath(); g.arc(37, 12, 6, 0, TAU); g.fill();
     poly(g, [[39, 10], [45, 13], [39, 16]]);
@@ -278,6 +291,7 @@ function bruteFrame(frame) {
     roundRectPath(g, 17, 18, 32, 30, 8);
     g.fillStyle = '#5a4a40';
     g.fill();
+    formShade(g, 17, 18, 32, 30); // 24.5 brute torso
     g.fillStyle = '#52433a';
     roundRectPath(g, 8, 20 + (frame ? -3 : 0), 10, 22, 4);
     g.fill();
@@ -308,6 +322,7 @@ function cultistFrame(frame) {
     poly(g, [[9, 46], [12, 14], [21, 14], [25, 46]]);
     g.fillStyle = '#2a2438';
     g.fill();
+    formShade(g, 9, 14, 16, 32); // 24.5 cultist robe
     g.fillStyle = '#322a44';
     g.beginPath(); g.arc(17, 11, 6.5, 0, TAU); g.fill();
     g.fillStyle = '#08060e';
@@ -334,6 +349,7 @@ function tanukiFrame() {
     g.beginPath(); g.moveTo(4, 16); g.quadraticCurveTo(-1, 14, 1, 9); g.stroke();
     g.fillStyle = '#6e5a48';
     g.beginPath(); g.ellipse(13, 16, 9, 6.5, 0, 0, TAU); g.fill();
+    formShade(g, 4, 9.5, 18, 13); // 24.5 tanuki body
     g.fillStyle = '#cbb9a4';
     g.beginPath(); g.ellipse(14, 19, 5.5, 2.6, 0, 0, TAU); g.fill();
     g.fillStyle = '#776450';
@@ -381,6 +397,7 @@ function shikomeFrame(legL, legR) {
     roundRectPath(g, 8, 16, 15, 16, 4);
     g.fillStyle = '#5d5a72';
     g.fill();
+    formShade(g, 8, 16, 15, 16); // 24.5 shikome torso
     g.strokeStyle = '#8a8298';
     g.lineWidth = 2.5;
     g.lineCap = 'round';
@@ -422,6 +439,7 @@ function kitsuneFrame(l1, l2) {
     g.fillRect(34 + l1, 22, 3.5, 10);
     g.fillStyle = '#e09a58';
     g.beginPath(); g.ellipse(23, 17, 14, 7, 0, 0, TAU); g.fill();
+    formShade(g, 9, 10, 28, 14); // 24.5 kitsune body
     g.fillStyle = '#f0e8e0';
     g.beginPath(); g.ellipse(21, 20, 11, 4, 0, 0, TAU); g.fill();
     g.fillStyle = '#e09a58';
@@ -447,6 +465,7 @@ function oniFrame(frame) {
     roundRectPath(g, 17, 18, 32, 30, 8);
     g.fillStyle = '#a83c3c';
     g.fill();
+    formShade(g, 17, 18, 32, 30); // 24.5 oni torso
     // loincloth belt
     g.fillStyle = '#7a5a3a';
     g.fillRect(19, 40, 28, 5);
@@ -494,6 +513,7 @@ function mikoFrame(frame) {
     poly(g, [[9, 46], [12, 14], [21, 14], [25, 46]]);
     g.fillStyle = '#e8e2d8';
     g.fill();
+    formShade(g, 9, 14, 16, 32); // 24.5 miko robe
     poly(g, [[9, 46], [12, 14], [17, 14], [15, 46]]);
     g.fillStyle = '#b8434a';
     g.fill();
@@ -547,6 +567,7 @@ function ryuFrame(frame) {
     // head
     g.fillStyle = '#265a80';
     g.beginPath(); g.ellipse(88, 22, 9, 6.5, -0.35, 0, TAU); g.fill();
+    formShade(g, 79, 15.5, 18, 13); // 24.5 ryū head
     poly(g, [[96, 20], [102, 24], [95, 26]]);
     g.fill();
     // whiskers
@@ -583,6 +604,7 @@ function crabFrame() {
     }
     g.fillStyle = '#c86a3c';
     g.beginPath(); g.ellipse(15, 14, 9.5, 7, 0, 0, TAU); g.fill();
+    formShade(g, 5.5, 7, 19, 14); // 24.5 crab shell
     g.fillStyle = '#b3543a';
     g.beginPath(); g.ellipse(15, 12, 8, 4, 0, 0, TAU); g.fill();
     // claws (forward = right)
@@ -611,6 +633,7 @@ function goldfishFrame(up) {
     g.fill();
     g.fillStyle = '#e8935a';
     g.beginPath(); g.ellipse(20, 14, 10, 6.5, 0, 0, TAU); g.fill();
+    formShade(g, 10, 7.5, 20, 13); // 24.5 goldfish body
     g.fillStyle = '#f2b076';
     g.beginPath(); g.ellipse(21, 16.5, 8, 3.5, 0, 0, TAU); g.fill();
     g.fillStyle = '#d87a42';
@@ -631,6 +654,7 @@ function mermanFrame(legL, legR) {
     roundRectPath(g, 8, 16, 15, 16, 4);
     g.fillStyle = '#7aa894';
     g.fill();
+    formShade(g, 8, 16, 15, 16); // 24.5 merman torso
     g.strokeStyle = '#9a6a3a';
     g.lineWidth = 3;
     g.lineCap = 'round';
@@ -656,6 +680,7 @@ function mermaidFrame(legL, legR) {
     roundRectPath(g, 8, 16, 15, 16, 4);
     g.fillStyle = '#8ab0a0';
     g.fill();
+    formShade(g, 8, 16, 15, 16); // 24.5 mermaid torso
     // shell top + flowing hair
     g.fillStyle = '#d87a8a';
     poly(g, [[9, 18], [22, 18], [15.5, 23]]);
@@ -686,6 +711,7 @@ function stingrayFrame(l1, l2) {
     g.fillStyle = '#4a7a90';
     poly(g, [[8, 16], [20, 9], [40, 12], [45, 16], [40, 20], [20, 24]]);
     g.fill();
+    formShade(g, 8, 9, 37, 15); // 24.5 stingray disc
     g.fillStyle = '#5a8aa0';
     g.beginPath(); g.ellipse(22, 16.5, 11, 5, 0, 0, TAU); g.fill();
     // eyes + mouth slits behind the snout
@@ -712,6 +738,7 @@ function orcaFrame(frame) {
     // body
     g.fillStyle = '#2c3844';
     g.beginPath(); g.ellipse(34, 30 + dy, 22, 14, 0, 0, TAU); g.fill();
+    formShade(g, 12, 16 + dy, 44, 28); // 24.5 orca body
     // head + snout
     g.fillStyle = '#324050';
     g.beginPath(); g.ellipse(50, 32 + dy, 10, 9, 0, 0, TAU); g.fill();
@@ -756,6 +783,7 @@ function eelFrame(frame) {
     // head + eye
     g.fillStyle = '#5a8a9a';
     g.beginPath(); g.arc(18, 9, 4.5, 0, 0, TAU); g.fill();
+    formShade(g, 13.5, 4.5, 9, 9); // 24.5 eel head
     g.fillStyle = '#ffd24a';
     g.beginPath(); g.arc(20.5, 8.5, 1, 0, 0, TAU); g.fill();
     // jagged lightning zap where the cultist orb sits
@@ -785,6 +813,7 @@ function sharkFrame(frame) {
     // torpedo body (facing RIGHT)
     g.fillStyle = '#4a5a66';
     g.beginPath(); g.ellipse(54, 62 + dy, 34, 20, 0, 0, TAU); g.fill();
+    formShade(g, 20, 42 + dy, 68, 40); // 24.5 shark body
     g.fillStyle = '#51606e';
     g.beginPath(); g.ellipse(78, 58 + dy, 12, 12, 0, 0, TAU); g.fill();
     poly(g, [[84, 50 + dy], [94, 58 + dy], [84, 66 + dy]]);
@@ -832,6 +861,7 @@ function wraithFrame(frame) {
     poly(g, [[46, 6], [22, 34], [18, 78], [28, 88], [34, 80], [40, 92], [46, 84], [52, 94], [58, 82], [64, 90], [74, 80], [70, 34]]);
     g.fillStyle = '#1c1830';
     g.fill();
+    formShade(g, 18, 6, 56, 88); // 24.5 wraith cloak
     g.fillStyle = 'rgba(60,52,96,0.8)';
     poly(g, [[24, 40], [8, 52], [14, 62], [26, 54]]);
     g.fill();

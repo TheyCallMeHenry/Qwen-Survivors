@@ -55,11 +55,16 @@ export class Particles {
     }
   }
 
-  // Death wisps: rise, fade.
+  // Death wisps: rise, fade. 24.7: per-wisp hue drift (teal → violet) for more variety
+  // at zero extra draw cost (color is per-particle state already).
   soul(x, y, n) {
     for (let i = 0; i < n; i++) {
       const a = rand(0, TAU);
-      this.dot(x + Math.cos(a) * 4, y + Math.sin(a) * 4, rand(-20, 20), rand(-70, -30), rand(0.5, 0.9), rand(2, 3.6), 140, 240, 200, -30);
+      const h = Math.random();
+      const r = Math.round(140 + h * 60);   // 140→200 toward violet
+      const g = Math.round(240 - h * 90);   // 240→150
+      const b = 200 + Math.round(h * 40);   // 200→240
+      this.dot(x + Math.cos(a) * 4, y + Math.sin(a) * 4, rand(-20, 20), rand(-70, -30), rand(0.5, 0.9), rand(2, 3.6), r, g, b, -30);
     }
   }
 
