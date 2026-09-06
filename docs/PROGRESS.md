@@ -17,7 +17,7 @@ Rules for every future edit — this file is loaded at every session start; its 
 
 - **Phase 20 COMPLETE** (session 14, 2026-09-05): passive-start rule (D66) — code already compliant; landed as asserts + comments (logic 661/661, boot first-passive level-up E2E). Phase 12 CLOSED prior. **NEXT = Phase 15 (level-up offer coverage; D80 fix decision lives there).**
 - **Gates (re-run green 2026-09-05 on this tree):** `node tools/check.mjs` **33/33** · `node tools/test-logic.mjs` **661/661** · `node tools/test-boot.mjs` **PASS boot-sim runs=4**. Full baseline: Resume Notes §Gates.
-- **Git:** branch `overnight-2026-08-22` = `main` = origin (pushed + **Pages carries Phase 12 COMPLETE** as of this commit; user explicit ask). Pages = the user's test channel; deploys from `main` only on explicit ask.
+- **Git:** branch `overnight-2026-08-22` = `main` = origin at `ac80df2` (Phase 20 pushed + **Pages carries Phase 20** as of this commit; user explicit ask). Pages = the user's test channel; deploys from `main` only on explicit ask.
 - **Server:** DOWN (port 47893 not listening as of last check); recipe in `docs/ENV.md`.
 
 ## Master Checklist
@@ -175,7 +175,7 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 
 ## Resume Notes — session 14, 2026-09-05 (live state only; rewritten each session per Format contract)
 
-**Where we are:** **Phase 20 COMPLETE** (passive-start rule D66 — verification-only phase: no code change needed, `reset()` never granted passives; asserts + comments landed). Phase 12 work committed/pushed/Pages-live on prior session's explicit user ask; Phase 20 changes UNCOMMITTED (rule 7).
+**Where we are:** **Phase 20 COMPLETE + PUBLISHED** (`ac80df2` on `overnight-2026-08-22` = `main` = origin; ff-merge + Pages refreshed on explicit user ask 2026-09-05). Working tree clean.
 
 **Gates baseline:** check.mjs **33/33** · test-logic **661/661** · boot `PASS boot-sim runs=4` (death + victory + m02 + m03; all weapon/status/synergy E2Es, co-op 11.x suite incl. ghost/char-sync/HUD/invariance/victory-at-t300, 16.x probes, 23.x E2Es). Run via `"/c/Program Files/nodejs/node.exe"` (node not on PATH — `docs/ENV.md`).
 
