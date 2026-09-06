@@ -1550,6 +1550,52 @@ m03RunDone = true;
     pl.synergies = {}; pl.overHeal = 0; pl.hp = Math.min(pl.hp, pl.maxHp); pl.regen = regenBak;
   }
 
+  // 19.1 equipment row E2E — the always-visible loadout chips mirror the player's equipped
+  // weapons → synergies → passives with their current level, rebuilt only on change.
+  {
+    const plE = game.player;
+    const bakE = { w: { ...plE.weapons }, s: { ...plE.synergies }, p: { ...plE.passives }, state: game.state };
+    game.state = 'PLAYING';
+    plE.weapons = { wand: 3, bow: 1 }; plE.synergies = { blight: 1 }; plE.passives = { speed: 2 };
+    hud.update();
+    const row = byId['equip-row'];
+    // expected order = CFG weapon order (wand before bow) → synergy → passive
+    const chips = row.children;
+    assert(chips.length === 4, `19.1: equip row shows one chip per equipped entry (got ${chips.length})`);
+    // each chip carries a level-number span with the right value
+    const lvls = chips.map((c) => { const n = c.children.find((x) => x.className === 'equip-lvl'); return n && n.textContent; });
+    assert(lvls.join(',') === '3,1,1,2', `19.1: chip level numbers match loadout (got "${lvls.join(',')}" want "3,1,1,2")`);
+    // upgrade a weapon → chip count unchanged but its number updates on next update
+    plE.weapons.wand = 5;
+    hud.update();
+    const lvls2 = byId['equip-row'].children.map((c) => { const n = c.children.find((x) => x.className === 'equip-lvl'); return n && n.textContent; });
+    assert(lvls2[0] === '5', `19.1: weapon level-up reflected in chip (got ${lvls2[0]})`);
+    // unchanged loadout → row not rebuilt (same children identity proves no churn)
+    const firstBefore = byId['equip-row'].children[0];
+    hud.update();
+    assert(byId['equip-row'].children[0] === firstBefore, '19.1: unchanged loadout does not rebuild chips');
+    // restore
+    plE.weapons = bakE.w; plE.synergies = bakE.s; plE.passives = bakE.p; game.state = bakE.state;
+  }
+
+  // 19.2 fuel bar relocation E2E — the Pyre Lance fuel bar draws beneath the player
+  // (D68 revises D24): every fillRect y in Player.draw must be ≥ the player's feet (y),
+  // never above the head as it was pre-19.2.
+  {
+    const bak = { flame: p2.weapons.flame, lv: p2._flame.fuel, reloading: p2._flame.reloading };
+    const ys = [];
+    const fctx = new Proxy({}, { get(_, prop) {
+      if (prop === 'fillRect') return (_x, y) => ys.push(y);
+      return () => {};
+    }});
+    p2.weapons.flame = 1; p2._flame.reloading = false;
+    p2._flame.fuel = CFG.weapons.flame.levels[0].fuel * 0.5;
+    p2.draw(fctx);
+    assert(ys.length >= 2, `19.2: fuel bar drawn (fillRects=${ys.length})`);
+    assert(ys.every((y) => y >= p2.y), '19.2: every fuel-bar rect draws beneath the player (D68)');
+    p2.weapons.flame = bak.flame; p2._flame.fuel = bak.lv; p2._flame.reloading = bak.reloading;
+  }
+
   // 12.8 — per-synergy combat E2Es (flamingArrows · heartPiercer · blueFlame · stormVolley).
   // Isolation per the hot pitfalls: unown everything but the weapon under test + clear ALL
   // projectile arrays at block entry (ownership persists; in-flight shots damage the pinned
@@ -2393,6 +2439,18 @@ m03RunDone = true;
   hudHost.update();
   assert(pan1.lvl.textContent === 'LV 7', '11.7: seat-1 level badge not tracking pl1');
   pl1.level = 1;
+  // 19.3 — per-seat equipment chips (co-op parity): the seat-1 panel mirrors its player's
+  // loadout (weapons → synergies → passives) with level numbers.
+  {
+    const bakW = { ...pl1.weapons }; const bakP = { ...pl1.passives };
+    pl1.weapons = { wand: 2, axe: 4 }; pl1.passives = { speed: 3 };
+    hudHost.update();
+    const chips = pan1.equip.children;
+    assert(chips.length === 3, `19.3: seat-1 equip row shows one chip per equipped entry (got ${chips.length})`);
+    const lvls = chips.map((c) => { const n = c.children.find((x) => x.className === 'equip-lvl'); return n && n.textContent; });
+    assert(lvls.join(',') === '2,4,3', `19.3: seat-1 chip levels match loadout (got "${lvls.join(',')}" want "2,4,3")`);
+    pl1.weapons = bakW; pl1.passives = bakP;
+  }
   // 3P = TL+TR+BL (visible count = player count, join order A5) — BR only at 4P.
   assert(!pan2.root.classList.contains('off') && pan2.name.textContent === 'Ranger',
     '11.7: seat-2 (BL) panel not visible with the assigned char name at 3P');

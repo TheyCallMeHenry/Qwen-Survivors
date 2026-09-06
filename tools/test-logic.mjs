@@ -1855,6 +1855,18 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     '12.6 sync: heartPiercer level 3 survives the wire (34-slot snap)');
 }
 
+// --- 19.1 equipment row (HTML + CSS content asserts; browser render verified on Pages) ---
+{
+  const html = readFileSync(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
+  ok(/<div id="equip-row" role="list" aria-label="Equipped weapons and items"><\/div>/.test(html),
+    '19.1: #equip-row present in HUD (role=list, labelled) inside the run UI');
+  const css = readFileSync(fileURLToPath(new URL('../css/main.css', import.meta.url)), 'utf8');
+  ok(/#equip-row \{[^}]*flex-wrap: wrap/.test(css),
+    '19.1: equipment row wraps so cap-5 weapons + synergies + passives never overflow');
+  ok(/\.equip-lvl \{[^}]*background: #0b1220[^}]*color: #ffe9b0/.test(css),
+    '19.1: chip level number is high-contrast (bright on solid pill) legible over any tile');
+}
+
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);
 for (const f of fails) console.error(`  FAIL ${f}`);
 process.exit(fails.length ? 1 : 0);

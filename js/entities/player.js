@@ -392,14 +392,14 @@ export class Player {
     ctx.drawImage(img, -def.w / 2, -def.h);
     ctx.restore();
     if (this.weapons.flame) {
-      // fuel bar above the player (red = recharging)
+      // 19.2 (D68): fuel bar beneath the player at foot level (red = recharging)
       const S = CFG.weapons.flame.levels[this.weapons.flame - 1];
       const w = 26, h = 3;
       const f = Math.max(0, Math.min(1, this._flame.fuel / S.fuel));
       ctx.fillStyle = 'rgba(10,8,14,0.75)';
-      ctx.fillRect(this.x - w / 2, this.y - def.h - 12, w, h);
+      ctx.fillRect(this.x - w / 2, this.y + 5, w, h);
       ctx.fillStyle = this._flame.reloading ? '#ff9a4a' : '#ff6b2e';
-      ctx.fillRect(this.x - w / 2 + 0.5, this.y - def.h - 11.5, (w - 1) * f, h - 1);
+      ctx.fillRect(this.x - w / 2 + 0.5, this.y + 5.5, (w - 1) * f, h - 1);
     }
     // 23.1 charge-up telegraph: the arrow nocks at mid-torso and slides from full draw
     // (tail on the body, opposite the aim) to the muzzle as _bowCharge drains.
