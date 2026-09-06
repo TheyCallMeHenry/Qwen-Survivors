@@ -280,7 +280,29 @@ User tested the published Pages build. Six asks, scoped below against in-tree co
 - **24.7** VFX/polish pass: projectile trails/impacts + particle shape/color variety (bounded by `CFG.perf`), lighting ambient/color-grade tweak if budget allows.
 - **24.8** Gates + acceptance: all three gates green; `[10.4-bench]` no draw-op/frame-time regression; boot E2Es for variant selection + light-convention content asserts; README/PROGRESS sync. Co-op snapshot-neutral throughout (visuals are host-sim-only/draw-only — no projectile key crosses the wire, 16.2).
 
-**Deferred (explicitly out of this session):** HUD/menu/CSS chrome restyle (recommended deferral, user-approved) → future pass. True isometric projection rework → not a visual change.
+**Deferred (explicitly out of this session):** HUD/menu/CSS chrome restyle (recommended deferral, user-approved) → **now scheduled as Phase 26 (user directive 2026-09-06)**. True isometric projection rework → not a visual change.
+
+### 3.17 Card & icon visual overhaul + character model redesign (Phase 26 — user directive 2026-09-06)
+
+**User directive (verbatim, USER-INPUT-LOG 2026-09-06):** "complete visual overhaul of the level-up cards, weapon and item icons, and completely reimagine/redesign/visually overhaul/improve the player character models."
+
+**Audit findings ("before" state):**
+1. **Icons** (`items.js buildIcons`, 72×72): all 24 icons sit on one identical faint blue glow plate; no framing, no category identity (weapon/passive/synergy read the same), mixed rendering quality across vintages.
+2. **Level-up cards** (`screens.js` 'cards' handler + CSS `.card*`): flat panel, plain 72px icon directly on card, no element/category color language, no hover affordance beyond translateY, NEW/FUSED badge tiny.
+3. **Player characters** (`characters.js` player/warden/ranger/swash/ghost frames): rounded-rect torsos + circle heads = blocky primitive assembly; limbs are plain fillRects; faces = dark disc + 2 dots; only flat `formShade` applied over primitives → weak silhouette, little identity between the 5 characters.
+
+**Design decisions (autonomous per Phase 24 cadence precedent):**
+- **Element families = card accent hue + icon plate.** weapon = teal (var(--accent)), passive = amber (var(--accent2)), synergy = violet. Cards get a kind class (`weapon`/`passive`/`synergy`) driving border/glow/tint; FUSED badge gets its own violet style.
+- **Icon redesign:** every icon on a category plate (roundRect + inner gradient + rim stroke + one top-left highlight), then the item silhouette rebuilt with layered depth cues consistent with Phase 24's top-left key light. Icon footprints stay **72×72** (card canvas, `drawIconScaled`, HUD chips all depend on it).
+- **Card DOM/CSS overhaul:** card frame gradient + kind accent border/glow, icon set into a framed plaque (`card-plaque`), title row with level pips (`Lv 3/5` → pips + text), effect line emphasized, desc de-emphasized, hover = lift + glow, staggered deal-in animation (`--i` custom prop), FUSED badge violet re-style. Mobile-safe (no fixed sizes beyond existing clamps).
+- **Character redesign:** same footprints (`w/h/shadowR` byte-stable — boot asserts 187/188 + 16.2 origin tests), richer silhouettes per archetype (mage = tall hooded cloak + hem flare + staff-side sash; warden = broad pauldron pauldrons + greaves + plume; ranger = light lean frame + feathered hood + visible bow grip; swash = longcoat tails + tricorn-ish bandana + saber belt; ghost = classic sheet with deeper hem waves + arms), gradient-lit volumes via existing `formShade` + build-time linear gradients, jointed limbs (boot/foot caps), eye-glint accents. Run-cycle contract stays `idle[2]/run[4]` with same leg offsets.
+- **Perf guardrails unchanged** (Phase 24 §3.16): everything bakes at build time; no per-frame allocations; `[10.4-bench]` must not regress.
+
+**Numbered steps (→ PROGRESS Phase 26 checklist):**
+- **26.1** Icon overhaul: category plate system + all weapon/passive/synergy/item icons rebuilt (`items.js buildIcons`).
+- **26.2** Level-up card DOM (`screens.js`) + CSS (`.card*`): kind accent classes, plaque, pips, deal-in animation, FUSED re-style.
+- **26.3** Player character model redesign (5 sheets in `characters.js`, footprints byte-stable).
+- **26.4** Gates green (check 33 · logic ≥682 · boot PASS runs=4) + new asserts (icon plate content, card DOM structure, roster footprint contract) + README/PROGRESS sync.
 
 ## 4. Phases & Tasks
 

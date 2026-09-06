@@ -13,149 +13,291 @@ function canvasOf(w, h, draw) {
 }
 
 // Player 56×64, feet y≈58, base at bottom.
+// 26.3 redesign: tall hooded mage — bell cloak with hem flare + shoulder capelet,
+// moonstone-tipped staff in the front hand, sash knot, jointed boot-feet.
 function playerFrame(dy, legL, legR) {
   return canvasOf(56, 64, (g) => {
     g.save();
     g.translate(0, dy);
-    // legs
-    g.fillStyle = '#222b3a';
-    g.fillRect(22 + legL, 44, 6, 14);
-    g.fillRect(30 + legR, 44, 6, 14);
-    // cloak
-    roundRectPath(g, 18, 24, 22, 25, 6);
-    g.fillStyle = '#35415a';
+    // legs + boot caps
+    const dark = g.createLinearGradient(0, 44, 0, 58);
+    dark.addColorStop(0, '#2a3447'); dark.addColorStop(1, '#1a2230');
+    g.fillStyle = dark;
+    g.fillRect(22 + legL, 44, 6, 13);
+    g.fillRect(30 + legR, 44, 6, 13);
+    g.fillStyle = '#141b28';
+    roundRectPath(g, 20.5 + legL, 54, 9, 4, 1.8); g.fill();
+    roundRectPath(g, 28.5 + legR, 54, 9, 4, 1.8); g.fill();
+    // bell cloak: shoulders → flared hem (gradient-lit volume)
+    const cloak = g.createLinearGradient(16, 22, 40, 50);
+    cloak.addColorStop(0, '#465574'); cloak.addColorStop(0.55, '#35415a'); cloak.addColorStop(1, '#242d40');
+    g.fillStyle = cloak;
+    g.beginPath();
+    g.moveTo(29, 21);
+    g.bezierCurveTo(20, 23, 17, 34, 15, 48);
+    g.quadraticCurveTo(22, 51, 28, 49);
+    g.quadraticCurveTo(34, 51, 41, 48);
+    g.bezierCurveTo(39, 34, 38, 23, 29, 21);
+    g.closePath();
     g.fill();
-    formShade(g, 18, 24, 22, 25); // 24.4 top-left key light on the cloak
-    // sword on back
-    g.strokeStyle = '#9fb0c8';
-    g.lineCap = 'round';
-    g.lineWidth = 3;
+    formShade(g, 15, 21, 26, 29); // top-left key on the cloak
+    g.strokeStyle = 'rgba(159,232,255,0.28)'; g.lineWidth = 1.4; // hem glimmer
+    g.beginPath();
+    g.moveTo(15.5, 47); g.quadraticCurveTo(22, 50, 28, 48);
+    g.quadraticCurveTo(34, 50, 40.5, 47);
+    g.stroke();
+    // shoulder capelet
+    g.fillStyle = '#3d4a66';
+    g.beginPath();
+    g.moveTo(17, 25); g.quadraticCurveTo(29, 19, 41, 25);
+    g.quadraticCurveTo(38, 32, 29, 30); g.quadraticCurveTo(20, 32, 17, 25);
+    g.closePath(); g.fill();
+    // moonstone staff in the front hand
+    const wood = g.createLinearGradient(37, 52, 42, 12);
+    wood.addColorStop(0, '#4a3a26'); wood.addColorStop(1, '#7a5f40');
+    g.strokeStyle = wood; g.lineWidth = 3.2; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(39, 52); g.lineTo(42, 14); g.stroke();
+    const moon = g.createRadialGradient(42, 11, 0.5, 42, 12, 5.5);
+    moon.addColorStop(0, '#eafffb'); moon.addColorStop(0.5, '#5eead4'); moon.addColorStop(1, 'rgba(94,234,212,0)');
+    g.fillStyle = moon;
+    g.beginPath(); g.arc(42, 12, 5.5, 0, TAU); g.fill();
+    // sash knot
+    g.strokeStyle = '#c9a35c'; g.lineWidth = 2.2; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(17.5, 37); g.lineTo(38.5, 41); g.stroke();
+    g.fillStyle = '#e8c66a';
+    g.beginPath(); g.arc(18.5, 37.5, 1.8, 0, TAU); g.fill();
+    // sword hilt over the shoulder
+    g.strokeStyle = '#9fb0c8'; g.lineCap = 'round'; g.lineWidth = 3;
     g.beginPath(); g.moveTo(17, 30); g.lineTo(9, 13); g.stroke();
     g.lineWidth = 2;
     g.beginPath(); g.moveTo(7, 17); g.lineTo(15, 15); g.stroke();
-    // hood + face + eyes (facing right)
-    g.fillStyle = '#3d4a66';
-    g.beginPath(); g.arc(29, 18, 10, 0, TAU); g.fill();
-    formShade(g, 19, 8, 20, 20); // 24.4 hood volume
+    // deep hood + face + eyes (facing right)
+    const hood = g.createLinearGradient(19, 8, 39, 28);
+    hood.addColorStop(0, '#4a5878'); hood.addColorStop(1, '#2e3a52');
+    g.fillStyle = hood;
+    g.beginPath();
+    g.moveTo(29, 7);
+    g.bezierCurveTo(39, 8, 41, 17, 39, 25);
+    g.quadraticCurveTo(29, 29, 19, 25);
+    g.bezierCurveTo(17, 15, 19, 8, 29, 7);
+    g.closePath();
+    g.fill();
+    formShade(g, 17, 7, 24, 22); // hood volume
     g.fillStyle = '#0d1118';
     g.beginPath(); g.arc(31, 19, 6.5, 0, TAU); g.fill();
     g.fillStyle = '#9fe8ff';
-    g.beginPath(); g.arc(32.5, 18.5, 1.2, 0, TAU); g.fill();
-    g.beginPath(); g.arc(35.5, 20, 1.1, 0, TAU); g.fill();
+    g.beginPath(); g.arc(32.5, 18.5, 1.3, 0, TAU); g.fill();
+    g.beginPath(); g.arc(35.5, 20, 1.2, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(240,255,252,0.9)'; // eye glints
+    g.beginPath(); g.arc(32.1, 18, 0.45, 0, TAU); g.fill();
+    g.beginPath(); g.arc(35.1, 19.5, 0.4, 0, TAU); g.fill();
     g.restore();
   });
 }
 
 // Warden 58×66 — heavy plate armor (D62: bigger than the mage, smaller than the brute 64×60), steel + amber.
+// 26.3 redesign: layered cuirass + faulds, riveted pauldrons, plumed helm, greaves.
 function wardenFrame(dy, legL, legR) {
   return canvasOf(58, 66, (g) => {
     g.save();
     g.translate(0, dy);
-    // heavy boots
-    g.fillStyle = '#232a38';
-    g.fillRect(19 + legL, 52, 9, 12);
-    g.fillRect(32 + legR, 52, 9, 12);
-    // tower shield on back
+    // heavy boots + knee-high greaves
+    g.fillStyle = '#2b3446';
+    g.fillRect(19 + legL, 46, 9, 8);
+    g.fillRect(32 + legR, 46, 9, 8);
+    const boot = g.createLinearGradient(0, 52, 0, 64);
+    boot.addColorStop(0, '#2a3242'); boot.addColorStop(1, '#181e2b');
+    g.fillStyle = boot;
+    roundRectPath(g, 17.5 + legL, 52, 12, 10, 2.5); g.fill();
+    roundRectPath(g, 30.5 + legR, 52, 12, 10, 2.5); g.fill();
+    // tower shield on back (rim highlight)
+    const shield = g.createLinearGradient(6, 28, 15, 50);
+    shield.addColorStop(0, '#435068'); shield.addColorStop(1, '#28313f');
     roundRectPath(g, 6, 28, 9, 22, 3);
-    g.fillStyle = '#333d52';
-    g.fill();
-    // torso plate
-    roundRectPath(g, 14, 26, 31, 30, 7);
-    g.fillStyle = '#46536b';
-    g.fill();
-    formShade(g, 14, 26, 31, 30); // 24.4 plate volume
-    g.strokeStyle = '#ffb454';
-    g.lineWidth = 2;
-    g.beginPath(); g.moveTo(17, 50); g.lineTo(42, 50); g.stroke();
-    // pauldrons
-    g.fillStyle = '#55627c';
-    g.beginPath(); g.arc(18, 28, 6.5, 0, TAU); g.fill();
-    g.beginPath(); g.arc(43, 28, 6.5, 0, TAU); g.fill();
-    // helmet + visor slit (facing right)
-    g.fillStyle = '#4d5a74';
-    g.beginPath(); g.arc(32, 15, 10, 0, TAU); g.fill();
-    formShade(g, 22, 5, 20, 20); // 24.4 helmet volume
+    g.fillStyle = shield; g.fill();
+    g.strokeStyle = 'rgba(255,180,84,0.35)'; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(6.8, 30); g.lineTo(6.8, 47); g.stroke();
+    // faulds (waist plates)
+    g.fillStyle = '#39465c';
+    roundRectPath(g, 15, 47, 29, 7, 3); g.fill();
+    roundRectPath(g, 17, 51, 25, 5, 2.5); g.fill();
+    // cuirass
+    const plate = g.createLinearGradient(14, 26, 45, 50);
+    plate.addColorStop(0, '#5a6a86'); plate.addColorStop(0.55, '#46536b'); plate.addColorStop(1, '#333e52');
+    roundRectPath(g, 14, 26, 31, 26, 7);
+    g.fillStyle = plate; g.fill();
+    formShade(g, 14, 26, 31, 26); // plate volume
+    g.strokeStyle = 'rgba(255,180,84,0.8)'; g.lineWidth = 2; // chest brand
+    g.beginPath();
+    g.moveTo(31, 32); g.lineTo(36, 37); g.lineTo(31, 42); g.lineTo(36, 47);
+    g.stroke();
+    // riveted pauldrons (back one first)
+    const pauld = g.createLinearGradient(0, 22, 0, 34);
+    pauld.addColorStop(0, '#66748f'); pauld.addColorStop(1, '#46536b');
+    for (const [px, back] of [[43, true], [18, false]]) {
+      g.fillStyle = back ? '#4c5a73' : '#5c6a85';
+      g.beginPath(); g.arc(px, 28, 7.5, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(255,180,84,0.5)'; g.lineWidth = 1.2;
+      g.beginPath(); g.arc(px, 28, 5.2, Math.PI * 1.05, Math.PI * 1.75); g.stroke();
+      g.fillStyle = '#ffb454';
+      g.beginPath(); g.arc(px - 3.5, 25.5, 1, 0, TAU); g.fill(); // rivet
+    }
+    // plumed helm + visor (facing right)
+    g.fillStyle = '#a34a3a'; // plume crest swept back
+    g.beginPath();
+    g.moveTo(30, 5);
+    g.quadraticCurveTo(24, 1, 17, 6);
+    g.quadraticCurveTo(23, 8, 27, 11);
+    g.closePath(); g.fill();
+    const helm = g.createLinearGradient(22, 5, 42, 25);
+    helm.addColorStop(0, '#5f6d88'); helm.addColorStop(1, '#3c4761');
+    g.fillStyle = helm;
+    g.beginPath(); g.arc(32, 15, 10.5, 0, TAU); g.fill();
+    formShade(g, 22, 5, 21, 21); // helmet volume
     g.fillStyle = '#0d1118';
-    g.fillRect(30, 12, 12, 5);
+    roundRectPath(g, 30, 12, 12.5, 5, 1.6); g.fill();
     g.fillStyle = '#ffb454';
-    g.beginPath(); g.arc(38, 14.5, 1.4, 0, TAU); g.fill();
+    g.beginPath(); g.arc(38, 14.5, 1.5, 0, TAU); g.fill(); // visor ember
     g.restore();
   });
 }
 
 // Ranger 52×60 — lean light armor, quiver + bow (fast, balanced).
+// 26.3 redesign: feathered hood, belt + pouches, bedroll, boot-feet, held recurve bow.
 function rangerFrame(dy, legL, legR) {
   return canvasOf(52, 60, (g) => {
     g.save();
     g.translate(0, dy);
-    // legs
-    g.fillStyle = '#26332a';
-    g.fillRect(20 + legL, 42, 6, 14);
-    g.fillRect(28 + legR, 42, 6, 14);
+    // legs + boot caps
+    g.fillStyle = '#2c3b2f';
+    g.fillRect(20 + legL, 42, 6, 12);
+    g.fillRect(28 + legR, 42, 6, 12);
+    g.fillStyle = '#1d2a21';
+    roundRectPath(g, 18.5 + legL, 51, 9, 4, 1.8); g.fill();
+    roundRectPath(g, 26.5 + legR, 51, 9, 4, 1.8); g.fill();
     // quiver on back + arrow nocks
+    const qv = g.createLinearGradient(8, 18, 16, 38);
+    qv.addColorStop(0, '#5c4a30'); qv.addColorStop(1, '#382b1a');
     roundRectPath(g, 8, 18, 8, 20, 3);
-    g.fillStyle = '#4a3b28';
-    g.fill();
-    g.strokeStyle = '#c9a06a';
-    g.lineWidth = 1.5;
+    g.fillStyle = qv; g.fill();
+    g.strokeStyle = '#c9a06a'; g.lineWidth = 1.5;
     g.beginPath(); g.moveTo(9.5, 20); g.lineTo(9.5, 15); g.stroke();
     g.beginPath(); g.moveTo(12.5, 20); g.lineTo(12.5, 16); g.stroke();
-    // tunic
+    g.fillStyle = '#8fd6a8'; // fletching
+    g.beginPath(); g.arc(9.5, 14.5, 1.3, 0, TAU); g.fill();
+    g.beginPath(); g.arc(12.5, 15.5, 1.3, 0, TAU); g.fill();
+    // bedroll strap
+    g.fillStyle = '#6b5a3e';
+    g.beginPath(); g.ellipse(14, 27, 5.5, 3.4, -0.5, 0, TAU); g.fill();
+    // tunic (gradient-lit)
+    const tunic = g.createLinearGradient(15, 26, 37, 46);
+    tunic.addColorStop(0, '#4a6b52'); tunic.addColorStop(0.6, '#3d5a45'); tunic.addColorStop(1, '#2b4232');
     roundRectPath(g, 15, 26, 22, 20, 5);
-    g.fillStyle = '#3d5a45';
+    g.fillStyle = tunic; g.fill();
+    formShade(g, 15, 26, 22, 20); // tunic volume
+    // belt + pouch
+    g.fillStyle = '#4a3b28';
+    roundRectPath(g, 14.5, 41, 23, 4, 2); g.fill();
+    g.fillStyle = '#6b5a3e';
+    roundRectPath(g, 30, 42, 6, 5, 1.5); g.fill();
+    g.fillStyle = '#c9a06a';
+    g.beginPath(); g.arc(24, 43, 1.2, 0, TAU); g.fill(); // buckle
+    // feathered hood (facing right)
+    const hood = g.createLinearGradient(19, 7, 37, 25);
+    hood.addColorStop(0, '#3f6049'); hood.addColorStop(1, '#28402f');
+    g.fillStyle = hood;
+    g.beginPath();
+    g.moveTo(28, 6);
+    g.bezierCurveTo(37, 7, 38.5, 15, 36.5, 22);
+    g.quadraticCurveTo(28, 25, 19.5, 22);
+    g.bezierCurveTo(18, 13, 19, 7, 28, 6);
+    g.closePath();
     g.fill();
-    formShade(g, 15, 26, 22, 20); // 24.4 tunic volume
-    // hood + face + eyes (facing right)
-    g.fillStyle = '#33503c';
-    g.beginPath(); g.arc(28, 16, 9, 0, TAU); g.fill();
-    formShade(g, 19, 7, 18, 18); // 24.4 hood volume
+    formShade(g, 18, 6, 20, 19); // hood volume
+    g.fillStyle = '#5f8a6b'; // feather leaf at the temple
+    g.beginPath();
+    g.moveTo(19.5, 12); g.quadraticCurveTo(14, 9, 12, 5);
+    g.quadraticCurveTo(17, 7, 19.5, 12);
+    g.closePath(); g.fill();
     g.fillStyle = '#0d1118';
     g.beginPath(); g.arc(30.5, 17, 5.5, 0, TAU); g.fill();
     g.fillStyle = '#a4ffc9';
-    g.beginPath(); g.arc(32, 16.5, 1.2, 0, TAU); g.fill();
-    g.beginPath(); g.arc(34.5, 18, 1.1, 0, TAU); g.fill();
-    // bow in the front hand
-    g.strokeStyle = '#c9a06a';
-    g.lineWidth = 2;
+    g.beginPath(); g.arc(32, 16.5, 1.3, 0, TAU); g.fill();
+    g.beginPath(); g.arc(34.5, 18, 1.2, 0, TAU); g.fill();
+    // recurve bow in the front hand (limbs + string)
+    const bowG = g.createLinearGradient(36, 22, 42, 42);
+    bowG.addColorStop(0, '#d9b178'); bowG.addColorStop(1, '#8a6a3a');
+    g.strokeStyle = bowG; g.lineWidth = 2.4;
     g.beginPath(); g.arc(38, 32, 9, -TAU / 4, TAU / 4); g.stroke();
+    g.strokeStyle = 'rgba(235,240,250,0.7)'; g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(38, 23); g.lineTo(44.5, 32); g.lineTo(38, 41);
+    g.stroke();
     g.restore();
   });
 }
 
 // Swashbuckler 54×62 — duster, sash, saber (agile, upper-medium).
+// 26.3 redesign: longcoat with flowing tails, gold sash + baldric, bandana,
+// saber carried at the hip belt.
 function swashFrame(dy, legL, legR) {
   return canvasOf(54, 62, (g) => {
     g.save();
     g.translate(0, dy);
-    // legs
-    g.fillStyle = '#33283c';
-    g.fillRect(20 + legL, 44, 6, 14);
-    g.fillRect(29 + legR, 44, 6, 14);
-    // saber on back
-    g.strokeStyle = '#d9e2f0';
-    g.lineCap = 'round';
-    g.lineWidth = 2.5;
-    g.beginPath(); g.moveTo(16, 28); g.lineTo(6, 44); g.stroke();
-    g.lineWidth = 2;
-    g.beginPath(); g.moveTo(10, 26); g.lineTo(16, 24); g.stroke();
-    // duster + gold sash
+    // legs + boot caps
+    g.fillStyle = '#3a2e45';
+    g.fillRect(20 + legL, 44, 6, 13);
+    g.fillRect(29 + legR, 44, 6, 13);
+    g.fillStyle = '#241b2e';
+    roundRectPath(g, 18.5 + legL, 54, 9, 4, 1.8); g.fill();
+    roundRectPath(g, 27.5 + legR, 54, 9, 4, 1.8); g.fill();
+    // longcoat tails streaming behind
+    const tail = g.createLinearGradient(8, 30, 20, 56);
+    tail.addColorStop(0, '#5c3242'); tail.addColorStop(1, '#3a1f2b');
+    g.fillStyle = tail;
+    g.beginPath();
+    g.moveTo(18, 32);
+    g.quadraticCurveTo(10, 42, 6, 52);
+    g.quadraticCurveTo(12, 50, 16, 46);
+    g.quadraticCurveTo(16, 52, 14, 56);
+    g.quadraticCurveTo(20, 50, 22, 42);
+    g.closePath(); g.fill();
+    // duster body
+    const coat = g.createLinearGradient(16, 26, 38, 50);
+    coat.addColorStop(0, '#7c4458'); coat.addColorStop(0.6, '#6a3a4a'); coat.addColorStop(1, '#4a2735');
     roundRectPath(g, 16, 26, 22, 22, 5);
-    g.fillStyle = '#6a3a4a';
-    g.fill();
-    formShade(g, 16, 26, 22, 22); // 24.4 duster volume
-    g.strokeStyle = '#e8b45a';
-    g.lineWidth = 2.5;
+    g.fillStyle = coat; g.fill();
+    formShade(g, 16, 26, 22, 22); // duster volume
+    // gold sash + baldric
+    g.strokeStyle = '#e8b45a'; g.lineWidth = 2.5; g.lineCap = 'round';
     g.beginPath(); g.moveTo(18, 30); g.lineTo(36, 42); g.stroke();
+    g.strokeStyle = '#8a6a3a'; g.lineWidth = 1.8;
+    g.beginPath(); g.moveTo(34, 27); g.lineTo(22, 40); g.stroke();
+    // saber at the hip belt (hilt forward, tip trailing behind)
+    g.fillStyle = '#33283c';
+    roundRectPath(g, 15.5, 43, 23, 3.6, 1.8); g.fill();
+    g.strokeStyle = '#d9e2f0'; g.lineWidth = 2.5; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(16, 46); g.lineTo(5, 53); g.stroke();
+    g.strokeStyle = '#c9a35c'; g.lineWidth = 2;
+    g.beginPath(); g.arc(16.5, 45.5, 3, 1.6, 4.3); g.stroke(); // guard
     // head: hair + face + eyes (facing right)
     g.fillStyle = '#c98a4b';
     g.beginPath(); g.arc(29, 15, 9, TAU / 2, TAU * 1.5); g.fill();
     g.beginPath(); g.arc(21, 17, 4, 0, TAU); g.fill(); // back tuft
     g.fillStyle = '#e8c39e';
     g.beginPath(); g.arc(30, 17, 7.5, 0, TAU); g.fill();
-    formShade(g, 22.5, 9.5, 15, 15); // 24.4 face volume
+    formShade(g, 22.5, 9.5, 15, 15); // face volume
+    // bandana over the brow + tail knot
+    g.fillStyle = '#d94f5c';
+    g.beginPath(); g.arc(30, 15, 7.6, Math.PI * 1.02, Math.PI * 1.98); g.closePath(); g.fill();
+    g.strokeStyle = '#d94f5c'; g.lineWidth = 2.4;
+    g.beginPath();
+    g.moveTo(23, 13); g.quadraticCurveTo(17, 10, 14, 12);
+    g.moveTo(23, 14.5); g.quadraticCurveTo(17, 14, 15, 17);
+    g.stroke();
     g.fillStyle = '#33283c';
-    g.beginPath(); g.arc(33, 16.5, 1.2, 0, TAU); g.fill();
-    g.beginPath(); g.arc(35.5, 18, 1.1, 0, TAU); g.fill();
+    g.beginPath(); g.arc(33, 16.5, 1.3, 0, TAU); g.fill();
+    g.beginPath(); g.arc(35.5, 18, 1.2, 0, TAU); g.fill();
     g.restore();
   });
 }
@@ -179,6 +321,14 @@ function ghostFrame(color, dy, legL, legR) {
     g.closePath();
     g.fill();
     formShade(g, 8, 4, 40, 50); // 24.4 sheet volume (top-left key)
+    // 26.3: inner hem shade + nubby arms gripping the sheet
+    const hemSh = g.createLinearGradient(0, 40, 0, 54);
+    hemSh.addColorStop(0, 'rgba(8,10,18,0)'); hemSh.addColorStop(1, 'rgba(8,10,18,0.32)');
+    g.fillStyle = hemSh;
+    g.beginPath(); g.arc(28, 24, 19.5, Math.PI, TAU); g.rect(8.5, 24, 39, 28); g.fill();
+    g.fillStyle = color; // arms
+    roundRectPath(g, 6, 30, 7, 13, 3.4); g.fill();
+    roundRectPath(g, 43, 30, 7, 13, 3.4); g.fill();
     // eyes (facing right)
     g.fillStyle = '#0d1118';
     g.beginPath(); g.ellipse(32, 22, 2.6, 3.4, 0, 0, TAU); g.fill();

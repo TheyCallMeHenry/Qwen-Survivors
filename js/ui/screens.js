@@ -294,20 +294,37 @@ export function initScreens(game, { icons }) {
         : c.kind === 'synergy' ? CFG.synergies[c.key]
         : CFG.passives[c.key];
       const isNew = c.kind === 'synergy' || (c.kind === 'weapon' && !game.player.weapons[c.key]);
+      // 26.2: kind accent class drives the whole card color language (border/glow/plaque/pips)
       const card = document.createElement('div');
-      card.className = isNew ? 'card new' : 'card';
+      card.className = `card ${c.kind}${isNew ? ' new' : ''}`;
+      card.style.setProperty('--i', String(i)); // deal-in stagger index
       card.setAttribute('role', 'listitem');
       card.tabIndex = 0;
       const badge = document.createElement('span');
       badge.className = 'card-badge';
       badge.textContent = c.kind === 'synergy' ? 'FUSED' : 'NEW';
+      // icon set into a framed plaque (26.2)
+      const plaque = document.createElement('div');
+      plaque.className = 'card-plaque';
       const cv = document.createElement('canvas');
       cv.width = 72; cv.height = 72;
       cv.getContext('2d').drawImage(icons[def.icon], 0, 0);
+      plaque.append(cv);
+      // title row: name + level pips (weapons have no cap → pip shows the current level)
       const h = document.createElement('h3');
       h.textContent = c.kind === 'synergy' ? def.name
         : c.kind === 'weapon' ? `${def.name} · Lv ${c.level}`
         : `${def.name} · Lv ${c.level}/${def.max}`;
+      const pips = document.createElement('div');
+      pips.className = 'card-pips';
+      if (c.kind !== 'synergy') {
+        const cap = def.max || 5;
+        for (let i2 = 0; i2 < cap; i2++) {
+          const dot = document.createElement('span');
+          dot.className = i2 < c.level ? 'pip on' : 'pip';
+          pips.append(dot);
+        }
+      }
       // exact effect of selecting this card is MANDATORY (user rule); flavour desc stays only as secondary
       const pe = document.createElement('p');
       pe.className = 'card-effect';
@@ -318,7 +335,7 @@ export function initScreens(game, { icons }) {
       const k = document.createElement('span');
       k.className = 'card-key';
       k.textContent = String(i + 1);
-      card.append(badge, cv, h, pe, p, k);
+      card.append(badge, plaque, h, pips, pe, p, k);
       const pick = () => game.pickCard(i);
       card.addEventListener('click', pick);
       card.addEventListener('keydown', (e) => {

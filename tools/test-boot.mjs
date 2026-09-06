@@ -188,7 +188,15 @@ assert(characters.player.idle.length > 0 && characters.player.run.length > 0, 'c
   assert(roster.warden.w * roster.warden.h > roster.mage.w * roster.mage.h
     && roster.warden.w * roster.warden.h < 64 * 60, '11.6.1 D62: player < warden area < brute (64×60)');
   buildRoster('#4be3ff'); // D62 per-seat tint rebuild — no crash
+  // 26.3 redesign contract: exact footprints + shadowR per sheet (hitboxes/anchors depend on these)
+  const fp = { mage: [56, 64, 12], warden: [58, 66, 13], ranger: [52, 60, 11], swash: [54, 62, 12], ghost: [56, 64, 12] };
+  for (const [k, [w, h, sr]] of Object.entries(fp))
+    assert(roster[k].w === w && roster[k].h === h && roster[k].shadowR === sr,
+      `26.3: ${k} sheet footprint/shadowR changed (${w}×${h}/r${sr} required)`);
 }
+// 26.1 icon category plates: every buildIcons() entry built at 72×72
+for (const [k, ic] of Object.entries(icons))
+  assert(ic && ic.width === 72 && ic.height === 72, `26.1: icon "${k}" not 72×72`);
 for (const k of ['orb', 'bolt', 'boomerang', 'blade', 'bullet', 'bomb', 'flame', 'explosion', 'burn', 'blight'])
   assert(items[k], `items missing "${k}"`);
 for (const lk of ['m01', 'm02', 'm03']) { // gem/heart are per-level now (13.10)

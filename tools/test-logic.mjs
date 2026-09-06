@@ -1867,6 +1867,44 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     '19.1: chip level number is high-contrast (bright on solid pill) legible over any tile');
 }
 
+// --- 26.1 icon overhaul: category plate system + every icon kind-tagged (source-level) ---
+{
+  const src = readFileSync(new URL('../js/art/items.js', import.meta.url), 'utf8');
+  ok(/const PLATE = \{/.test(src) && /weapon: \{ bgA/.test(src) && /passive: \{ bgA/.test(src) && /synergy: \{ bgA/.test(src),
+    '26.1: PLATE category table (weapon/passive/synergy) exists in items.js');
+  const kinds = {
+    weapon: ['wand', 'garlic', 'axe', 'blades', 'pistols', 'bombs', 'flame', 'snowball', 'ringLightning', 'bow'],
+    passive: ['boots', 'heart', 'sword', 'magnet', 'sigil', 'gem', 'dash'],
+    synergy: ['blight', 'tempest', 'inferno', 'napalm', 'phoenix', 'flamingArrows', 'heartPiercer', 'blueFlame', 'stormVolley', 'heartMagnet'],
+  };
+  let badKind = null;
+  for (const [kind, names] of Object.entries(kinds))
+    for (const n of names)
+      if (!new RegExp(`icons\\.${n} = make\\('${kind}'`).test(src)) badKind = `${n}≠${kind}`;
+  ok(badKind === null, `26.1: every icon is make()-tagged with its category (${badKind || 'all 22 correct'})`);
+  const untagged = (src.match(/icons\.\w+ = make\(\(/g) || []).length;
+  ok(untagged === 0, '26.1: no icon left on the old untagged make(fn) signature');
+}
+
+// --- 26.2 card DOM + CSS overhaul (content asserts; boot E2E drives the real handler) ---
+{
+  const src = readFileSync(new URL('../js/ui/screens.js', import.meta.url), 'utf8');
+  ok(/card\.className = `card \$\{c\.kind\}/.test(src),
+    '26.2: card element carries its kind class (weapon/passive/synergy accent hook)');
+  ok(/setProperty\('--i'/.test(src), "26.2: deal-in stagger index (--i) set per card");
+  ok(/className = 'card-plaque'/.test(src), '26.2: icon is set into a framed plaque');
+  ok(/className = 'card-pips'/.test(src), '26.2: level pips row built for weapon/passive cards');
+  const css = readFileSync(new URL('../css/main.css', import.meta.url), 'utf8');
+  ok(/\.card\.weapon \{[^}]*#5eead4/.test(css) && /\.card\.passive \{[^}]*accent2/.test(css) && /\.card\.synergy \{[^}]*#be8cff/.test(css),
+    '26.2: kind accent rules (teal/amber/violet) present');
+  ok(/@keyframes card-deal/.test(css) && /animation-delay: calc\(var\(--i, 0\)/.test(css),
+    '26.2: deal-in keyframe animation + per-card stagger delay');
+  ok(/\.card-plaque \{[^}]*border: 1px solid var\(--k\)/.test(css),
+    '26.2: plaque frame uses the kind accent color');
+  ok(/\.card\.synergy \.card-badge/.test(css), '26.2: FUSED badge has its own violet style');
+  ok(/@media \(prefers-reduced-motion: reduce\)/.test(css), '26.2: deal-in animation respects reduced-motion');
+}
+
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);
 for (const f of fails) console.error(`  FAIL ${f}`);
 process.exit(fails.length ? 1 : 0);

@@ -15,10 +15,10 @@ Rules for every future edit — this file is loaded at every session start; its 
 
 ## Status — 2026-09-06
 
-- **Active: Phase 19 — In-run HUD equipment icons + fuel bar — ALL DONE (19.1–19.4) this session.** Prior session shipped 19.1 (equip-row chips) + 19.3 (co-op seat chips) uncommitted and hit the cliff; session 21 recovered state from `git diff`, relocated the Pyre Lance fuel bar ABOVE → **beneath the player** (19.2, D68 revises D24; `js/entities/player.js` draw), added the 19.4 boot gate (fuel-bar-below-player E2E + existing equip-row/seat-chip E2Es). Phase 24 visual overhaul COMPLETE + committed (`7c4f01c`).
-- **Gates (green, Phase 19 acceptance):** `node tools/check.mjs` **33/33** · `node tools/test-logic.mjs` **682/682** · `node tools/test-boot.mjs` **PASS boot-sim runs=4**. `[10.4-bench]` drawImage 763–962 across 4 runs (pre-change band 771–847; bench variance, fuel-bar delta = +2 fillRect/frame only).
-- **Git:** `overnight-2026-08-22` = `main` = origin at **`6b9eeda`** — **Phase 19 PUBLISHED 2026-09-06** via ff-merge overnight-2026-08-22 → main + push (Pages test channel refreshed); Phase 24 (`7c4f01c`) and Phase 15 (`a0f456e`) previously published. Tree CLEAN.
-- **Server:** DOWN (port 47893 not listening); not needed for visual work; recipe in `docs/ENV.md`.
+- **Active: Phase 26 — Card & icon overhaul + character model redesign (spec PLAN §3.17) — ALL DONE (26.1–26.4).** Session 22 hit the token cliff mid-phase with code DONE but docs NOT updated; session 23 recovered state from `git diff` + gate re-run, updated this file first (per rule 9), then finished 26.4 (README roadmap line). Work is uncommitted (rule 7 — commit on user ask); publish = ff-merge → main + push when the user asks.
+- **Gates (green, Phase 26):** `node tools/check.mjs` **33/33** · `node tools/test-logic.mjs` **694/694** (682 + 12 new: PLATE table, all-22-icons kind-tagged, card DOM/CSS asserts) · `node tools/test-boot.mjs` **PASS boot-sim runs=4**. `[10.4-bench]` drawImage ~855.9 (pre-change band 763–962; no per-frame alloc added — all build-time).
+- **Git:** branch `overnight-2026-08-22` = `main` = origin at **`aa78667`** (docs-only, Phase 19 publish note). Tree **DIRTY = uncommitted Phase 26 work** (9 files: `items.js`, `characters.js`, `screens.js`, `css/main.css`, `tools/test-{logic,boot}.mjs`, docs) — commit only on user ask (rule 7).
+- **Server:** DOWN (port 47893 not listening); recipe in `docs/ENV.md`.
 
 ## Master Checklist
 
@@ -172,6 +172,12 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 - [ ] 25.5 Absorb 10.9 into this phase + queue line updated — DONE at scoping (2026-09-04)
 - [ ] 25.6 Acceptance: bench table flat across a full-length run on mobile settings · all gates green · README/PROGRESS sync
 
+### Phase 26 — Card & icon overhaul + character model redesign (user directive 2026-09-06; spec PLAN §3.17)
+- [x] 26.1 Icon overhaul: category plate system (`PLATE` table weapon=teal/passive=amber/synergy=violet; roundRect + inner gradient + rim stroke + top-left highlight) + all 22 icons rebuilt with layered depth cues, 72×72 footprints kept (2026-09-06, `items.js buildIcons`; boot assert: every icon 72×72)
+- [x] 26.2 Level-up card DOM (`screens.js`) + CSS (`.card*`): kind accent classes weapon=teal/passive=amber/synergy=violet, framed plaque (`card-plaque`), level pips row, staggered deal-in anim (`--i`, reduced-motion respected), FUSED badge violet re-style (2026-09-06)
+- [x] 26.3 Player character model redesign — 5 sheets in `characters.js` (mage hooded cloak+staff sash · warden pauldrons+plume · ranger lean+feathered hood · swash longcoat+saber belt · ghost sheet hem waves), footprints/shadowR byte-stable (mage 56×64/r12 · warden 58×66/r13 · ranger 52×60/r11 · swash 54×62/r12 · ghost 56×64/r12 — boot asserts), `idle[2]/run[4]` contract unchanged (2026-09-06)
+- [x] 26.4 Gates green + new asserts (icon plates, card DOM, roster footprint) + README/PROGRESS sync — logic 694/694 (+12: PLATE table, all-22-icons kind-tagged, card DOM/CSS) · boot PASS runs=4 (exact footprints/shadowR per sheet + every icon 72×72) · check 33/33; README roadmap Phase 26 line added — 2026-09-06
+
 ### Phase 24 — Visual upgrade / improvement pass (**user 2026-09-05: DEDICATED FULL SESSION, visual rework ONLY, nothing else**; **spec WRITTEN 2026-09-05 → `PLAN §3.16`**; art direction = clean stylized **2.5D isometric**, autonomous run w/ frequent docs)
 - [x] 24.1 Audit + spec: art surface audited (see PLAN §3.16 findings) — `base.js` ships unused 2.5D primitives (`sideShade`/`rimLight`/`shadowSprite`); characters = flat fills, no consistent light source; projectiles single-sprite-no-variant; ground flat-tiled → numbered steps + perf guardrails (no per-frame gradients/allocs in draw code; pre-rendered only) written to PLAN §3.16 — 2026-09-05
 - [x] 24.2 Shared projectile-variant seam (`combat.js`): record field `v` tagged at every fire site (`blight`/`inferno`/`storm`/`flaming`>`piercer`/`napalm`/`blue`; storm>inferno precedence); `combat.draw` picks `(this.<type>Var && this.<type>Var[r.v]) || this.<type>Img`. Base path byte-identical. +16 logic asserts (base empty-v, synergy tags, precedence, map/key fallback). Plumbing only — 2026-09-05
@@ -184,50 +190,21 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 - [x] 24.9 Solid-metal weapon lighting (completeness follow-up): `formShade()` applied to the last opaque weapon bodies — `bladeSprite` (whole blade, shade 0.28) + `boomerangSprite`/axe spikes (per-triangle, shade 0.26); additive energy sprites (`flame`/`explosion`/`spark`/`frostBurst`/`orb`) deliberately left unshaded (emit light — directional shade is physically wrong). Now every opaque body in the game follows the single top-left key convention. +2 boot asserts (24.9 sprite-build-at-footprint; pixel-content not checkable under fake-canvas shim) — 2026-09-06
 - **Deferred (user-approved):** HUD/menu/CSS chrome restyle → future pass; true iso projection = not a visual change
 
-## Resume Notes — session 21, 2026-09-06 (live state only; rewritten each session per Format contract)
+## Resume Notes — session 23, 2026-09-06 (live state only; rewritten each session per Format contract)
 
-**Where we are (session 21, 2026-09-06):** **Phase 19 COMPLETE (19.1–19.4 ticked).** Prior session shipped 19.1+19.3 uncommitted and hit the cliff with no docs update; this session recovered state from `git diff`, implemented **19.2** (fuel bar ABOVE → beneath player feet, `player.js` draw, y+5 below anchor; fuel logic untouched), added the **19.4** boot gate (Proxy-ctx records fillRect ys during `p2.draw`; asserts every bar rect ≥ `p2.y`). Node v24.11.0.
+**Where we are (session 23):** **Phase 26 COMPLETE (26.1–26.4) — UNCOMMITTED.** Session 22 shipped all Phase 26 code + tests + PLAN §3.17 spec + USER-INPUT-LOG entry but hit the token cliff before updating PROGRESS.md (Status/checklist/log stale). Session 23 recovered from `git diff` + full gate re-run, updated this file first (rule 9), then finished 26.4 = README roadmap line.
 
-**Gates (green, final):** check.mjs **33/33** · test-logic **682/682** (679 + 3 new 19.1 asserts) · boot `PASS boot-sim runs=4` · `[10.4-bench]` drawImage 763–962 across 5 runs (pre-change band 771–847 → bench variance, not regression; the change adds only 2 fillRects/frame when flame equipped).
+**Gates (green, just re-run):** check.mjs **33/33** · test-logic **694/694** (682 + 12 new: PLATE table, all-22-icons kind-tagged, card DOM/CSS) · boot `PASS boot-sim runs=4` · `[10.4-bench]` drawImage ~855.9 (band 763–962; no per-frame alloc — all build-time).
 
-**Git state:** branch `overnight-2026-08-22` = `main` = origin at **`6b9eeda`**. Tree **CLEAN** — Phase 19 committed (`eb00702` HUD chips + `6b9eeda` fuel bar/tests/docs) and **PUBLISHED to Pages** 2026-09-06 via ff-merge → main + push. Phases 24 (`7c4f01c`) and 15 (`a0f456e`) previously published.
+**Git state:** branch `overnight-2026-08-22` = `main` = origin at **`aa78667`** (docs-only Phase 19 publish note). Tree **DIRTY = uncommitted Phase 26 work**, 9 files: `js/art/items.js` (PLATE + 22 icon rebuilds) · `js/art/characters.js` (5 sheet redesigns) · `js/ui/screens.js` (card DOM: kind class, plaque, pips, `--i`) · `css/main.css` (`.card.<kind>` accents, plaque, deal-in keyframes, reduced-motion) · `tools/test-logic.mjs` (+12) · `tools/test-boot.mjs` (footprints + 72×72 icons) · `docs/{PLAN,PROGRESS,USER-INPUT-LOG}.md`. Commit only on user ask (rule 7).
 
-**What the uncommitted Phase 19 diff contains:**
-- `index.html`: `<div id="equip-row" role="list" aria-label=…>` under the XP bar in the run HUD.
-- `css/main.css`: `#equip-row` flex-wrap chip row (max-width clamp), `.equip-chip` 34px + `.equip-lvl` high-contrast pill badge; `.seat-equip` compact 24px variant for co-op seat panels.
-- `js/art/items.js`: new export `drawIconScaled(target, icon, css, dpr)` — blits a `buildIcons()` icon into a canvas with DPR baked once.
-- `js/ui/hud.js`: `initHud(game, { icons })`; `loadoutEntries(pl)` (weapons→synergies→passives in CFG order), `buildChip(icon, level)`, solo `syncEquip(p)` + per-seat sync, both WeakMap/`_sig`-gated (rebuild only on loadout change, never per frame); chips get `title` + `aria-label`; seat panels gain a `seat-equip` div (19.3 co-op parity).
-- `js/main.js`: passes `{ icons }` to `initHud`.
-- `js/entities/player.js` (19.2): fuel bar in `Player.draw` moved from above-head (`y - def.h - 12`) to beneath feet (`y + 5`); fuel logic (`_flame` state machine) untouched.
-- Tests: +3 logic asserts (HTML/CSS content, 679→682) · boot E2E blocks for solo equip-row (chips mirror loadout, no rebuild when unchanged, co-op seat chips) · 19.4 fuel-bar-below-player gate (Proxy ctx captures fillRect ys during `Player.draw`, asserts all ≥ feet).
+**Phase 26 key seams:** `items.js` `PLATE` table (~L536) = weapon teal / passive amber / synergy violet; every icon via `make('<kind>', fn)` at 72×72 (`drawIconScaled`/HUD chips depend on footprint). Card DOM in `screens.js` 'cards' handler (~L293–331): `card <kind>` class drives CSS accent var `--k`; pips only for weapon/passive; FUSED badge violet. Character sheets: footprints/shadowR byte-stable (mage 56×64/r12 · warden 58×66/r13 · ranger 52×60/r11 · swash 54×62/r12 · ghost 56×64/r12 — boot asserts), `idle[2]/run[4]` contract unchanged; footprints or anchors drift → 16.2 origin tests break.
 
-**NEXT = await user direction.** Phase 19 done + published. Obvious moves: (a) **Phase 25** — comprehensive performance & optimization pass (dedicated full session, absorbs 10.9), (b) queued feature phases 17 → 18 → 14 → 21. 22.8 needs a device repro; 11.13 impl needs the user's NAS.
+**NEXT (exact):** await user direction — Phase 26 is complete+publishable (commit + ff-merge → main + push only on ask); queue after = **Phase 25** (perf, dedicated session) or feature phases 17 → 18 → 14 → 21. 22.8 needs device repro; 11.13 impl needs user's NAS.
 
-**Key code seams (Phase 19):** `hud.js` syncEquip/seat-sync (signature-gated rebuild); `items.js drawIconScaled`; icons built once in `main.js boot()` via `buildIcons()`. **Perf guardrails unchanged:** no gradients/literals in `draw()` bodies; HUD DOM rebuilds only on loadout-signature change.
+**Pitfalls still hot:** regrid every tick in isolated probes · `_nearest` steals aim → probe player parked at x=500 · pooled enemy status zeroed on spawn · capture card `{key}` before `click()` (pickCard nulls game.cards at drain) · `Math.random=()=>0` = spread MINIMUM (pin 0.5).
 
-**Pitfalls still hot (from prior sessions):** regrid every tick in isolated probes · `_nearest` steals aim → probe player parked at x=500 · pooled enemy status zeroed on spawn · capture card `{key}` before `click()` (pickCard nulls game.cards at drain) · `Math.random=()=>0` = spread MINIMUM (pin 0.5).
-
-**Queue after Phase 19 (README order):** … → 17 → 18 → **19 (DONE)** → 14 → 21 → 24 (DONE, `7c4f01c`) → 25 (perf) → 2.9 browser sign-off. 22.8 needs device repro; 11.13 impl needs user's NAS.
-
-**What Phase 24 changed (for commit message / review):**
-- `base.js`: new `formShade(ctx,x,y,w,h,{shade,rim})` = one top-left key light (right/bottom occlusion + bottom falloff + top-left rimLight); `shadowSprite` reused for decor.
-- `characters.js` + enemy/boss art: `formShade()` applied to every body+head; footprints (`w/h/shadowR`) + anchor byte-stable; glow creatures (hō-ōi) intentionally skipped.
-- `combat.js`: projectile records gain `v` variant tag at every fire site; `combat.draw` picks `(this.<type>Var && this.<type>Var[r.v]) || this.<type>Img` — base path byte-identical (solo invariance).
-- `items.js`: 7 synergy variant sprites (`boltBlight` violet · `bulletInferno` ember · `bulletStorm` zigzag · `arrowFlaming` fire-wrapped · `arrowPiercer` cold-crystal · `bombNapalm` crimson+fuse · `snowballBlue`), each shares its base footprint; exported `items.*Var` → wired to `combat.*Var` in `game.constructor`.
-- `game.js`: `decorShadow` ellipse drawn under every visible standing decor (render shadow pass), offset down-right. Ground tiles NOT gradient-shaded (keeps seamless tiling).
-- `items.js` (24.9): `formShade()` added to the last opaque weapon bodies — `bladeSprite` (shade 0.28) + `boomerangSprite` axe spikes (shade 0.26); axe uses boomerang (`game.js:48`). Additive energy sprites left unshaded by design.
-- `particles.js`: death-wisp (`soul`) per-wisp teal→violet hue drift, zero extra draw cost.
-- Tests: +16 logic variant-seam asserts (663→679) · boot variant-select E2E (every synergy draws a distinct sprite, base draws base) · +2 boot 24.9 weapon-sprite asserts.
-
-**Co-op snapshot-neutral:** `sync.js` carries no projectile fields; the `v` variant tag never crosses the wire (16.2 invariant, gate 11.11 green). All Phase 24 changes are build-time sprites + render-only.
-
-**Key code seams (read before editing):** `art/base.js` = 2.5D primitives (`sideShade`/`rimLight`/`shadowSprite`/`formShade`); `combat.draw` single-sprite-per-weapon (variant hook lives here); `items.js buildItems()` builds projectile/pickup + variant sprites; `render` Y-sort game.js (~L1013); footprints/anchor byte-stable or 16.2 origin tests break.
-
-**Perf guardrails (binding for Phase 25 too):** no `create*Gradient`/array-literal/string-concat inside any `draw()` body (bake into pre-rendered sprites at build); entities/projectiles/particles stay pre-rendered offscreen canvases via `drawImage`; new counts bounded by `CFG.perf`, thresholds in config.
-
-**Pitfalls still hot (from prior sessions):** regrid every tick in isolated probes · `_nearest` steals aim → probe player parked at x=500 · pooled enemy status zeroed on spawn · capture card `{key}` before `click()` (pickCard nulls game.cards at drain) · `Math.random=()=>0` = spread MINIMUM (pin 0.5).
-
-**Queue after Phase 24 (README order, unchanged):** … → 17 → 18 → 19 → 14 → 21 → **24 (DONE)** → 25 (perf) → 2.9 browser sign-off. 22.8 needs device repro; 11.13 impl needs user's NAS.
+**Perf guardrails (binding):** no `create*Gradient`/array-literal/string-concat inside any `draw()` body — bake at build; entities/projectiles/particles stay pre-rendered offscreen canvases via `drawImage`; new counts bounded by `CFG.perf`, thresholds in config.
 
 ## Decisions (binding — table: pointer to `docs/DECISIONS.md`)
 
@@ -316,6 +293,10 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 | 81 | Offer draw = UNIFORM sample-without-replacement; every card equal odds, no weighting (full text DECISIONS.md) |
 
 ## Session Log (append-only, newest first)
+
+- **2026-09-06 (session 23) — docs-first recovery of session 22's unlogged Phase 26 work:** resumed after token cliff; per user directive discovered state from `git diff` BEFORE any dev work, then updated PROGRESS.md (Status → Phase 26, ticked 26.1–26.3 with verified evidence, Resume Notes rewritten to session-23 NOW state, this log line). Verified: all three gates green on the dirty tree (check 33/33 · logic **694/694** · boot PASS runs=4 · bench drawImage ~855.9); 26.1–26.3 code complete in `items.js`/`characters.js`/`screens.js`/`css/main.css`; new asserts already in-tree (+12 logic: PLATE table, all-22-icons kind-tagged, card DOM/CSS; boot: exact footprints/shadowR per sheet + every icon 72×72); PLAN §3.17 spec + USER-INPUT-LOG entry written by session 22. **Outstanding for 26.4:** README roadmap Phase 26 line — **DONE same session** (line added after Phase 25 entry, matching format) → **Phase 26 COMPLETE (26.1–26.4), uncommitted.** No commits (rule 7).
+
+- **2026-09-06 (session 22) — Phase 26 code COMPLETE (26.1–26.3 + tests + spec), docs NOT updated before cliff (logged by session 23 from diff recovery):** user directive = complete visual overhaul of level-up cards + weapon/item icons + player character models (verbatim in USER-INPUT-LOG). Shipped: **26.1** `items.js` — `PLATE` category table (weapon teal / passive amber / synergy violet; roundRect plate + inner gradient + rim stroke + top-left highlight) + all 22 icons rebuilt via `make('<kind>', fn)` with layered depth cues, 72×72 footprints kept; **26.2** `screens.js` card DOM (kind class → CSS accent var `--k`, framed `card-plaque`, level-pips row for weapon/passive, per-card `--i` stagger) + `css/main.css` (`.card.weapon/.passive/.synergy` accents, plaque frame, `card-deal` keyframes + reduced-motion guard, FUSED violet badge); **26.3** `characters.js` — 5 player sheets redesigned (mage hooded cloak+staff sash · warden pauldrons+plume · ranger lean frame+feathered hood · swash longcoat+saber belt · ghost sheet hem waves), footprints/shadowR byte-stable, `idle[2]/run[4]` contract unchanged. Tests: +12 logic asserts (682→**694**) + boot asserts (exact footprints per sheet; every icon 72×72). Spec written → `PLAN §3.17`. Hit token cliff before PROGRESS.md update — Status/checklist/log were stale at recovery.
 
 - **2026-09-06 (session 21) — Phase 19 COMPLETE (cliff recovery + 19.2 + 19.4):** prior session hit token cliff mid-**Phase 19** with no docs update. Recovered from `git diff`: Phase 24 committed+pushed (`7c4f01c`); 19.1+19.3 implemented but unticked (`#equip-row` chips, `drawIconScaled`, signature-gated `syncEquip` + seat chips; boot E2E blocks). Implemented **19.2**: fuel bar relocated above-head → beneath feet (`player.js` draw only; D68 revises D24; logic untouched). Added **19.4** boot gate: Proxy-ctx fillRect-y capture during `Player.draw`, asserts every fuel-bar rect ≥ player feet. Gates final: check 33/33 · logic 682/682 · boot PASS runs=4 (drawImage 763–962 across 5 runs = bench variance; delta = +2 fillRect/frame). All 19.x ticked. Same session: committed (`eb00702` chips + `6b9eeda` fuel bar/tests/docs), ff-merged → main, pushed both branches — **Phase 19 PUBLISHED to Pages**. NEXT = user direction (Phase 25? phase 17?).
 

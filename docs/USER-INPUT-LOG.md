@@ -13,6 +13,16 @@
 
 ## Entries (newest first)
 
+### 2026-09-06 — Directive: this session = complete visual overhaul of level-up cards + weapon/item icons + player character models redesign
+- **Received:** 2026-09-06 (no time in message; date only)
+- **Classification:** `feature request` (visual rework) · `design decision` (scope override of prior session proposal)
+- **Context:** Replaces my proposed next-step options (Phase 25 / 17 / 18) after gate verification; sets this session's entire scope.
+- **Verbatim input:**
+
+  ```
+  Actually, this session I want you to perform a complete visual overhaul of the level-up cards, weapon and item icons, and completely reimagine/redesign/visually overhaul/improve the player character models.
+  ```
+
 ### 2026-09-05 — Phase 24 visual overhaul: direction answers (start 24.1) — clean stylized 2.5D isometric + scope approved + perf guardrails approved + all synergies + autonomous w/ frequent docs
 - **Received:** 2026-09-05 (no time in message; date only)
 - **Classification:** `design decision` (style, synergy scope) · `answer/approval` (scope, perf guardrails, cadence) · directive (autonomous execution)
