@@ -15,9 +15,9 @@ Rules for every future edit — this file is loaded at every session start; its 
 
 ## Status — 2026-09-05
 
-- **Active: Phase 15 (level-up offer coverage DEFECT)** — 15.1 reproduce + 15.2 root cause **DONE** (session 17, 2026-09-05; numbers on checklist line). **NEXT = 15.3 fix decision (options A/B/C/D in Resume Notes; awaiting user pick)** → implement → 15.4 regression. Phase 20 COMPLETE + Phase 12 CLOSED prior.
-- **Gates (re-run green 2026-09-05 session 17, no code touched):** `node tools/check.mjs` **33/33** · `node tools/test-logic.mjs` **661/661** · `node tools/test-boot.mjs` **PASS boot-sim runs=4**. Full baseline: Resume Notes §Gates.
-- **Git:** branch `overnight-2026-08-22` = `main` = origin at `8852e67` (docs-only; Pages carries Phase 20 from `ac80df2`; user explicit ask). Uncommitted = session-15/16 test/doc carry-over + this session's Phase 15 docs. Pages = the user's test channel; deploys from `main` only on explicit ask.
+- **Active: Phase 15 COMPLETE (level-up offer coverage — uniform draw D81)** (session 18, 2026-09-05). All 15.1–15.4 done + committed `a0f456e` on `overnight-2026-08-22` (user explicit ask). **NEXT = Phase 17** (run durations + boss schedule, PLAN §3.10 D65).
+- **Gates (green 2026-09-05 session 18):** `node tools/check.mjs` **33/33** · `node tools/test-logic.mjs` **663/663** · `node tools/test-boot.mjs` **PASS boot-sim runs=4**. Full baseline: Resume Notes §Gates.
+- **Git:** `overnight-2026-08-22` = origin at **`a0f456e`** (Phase 15 pushed to work branch). `main` = `8852e67` (Pages carries Phase 20; NOT advanced this session — Pages refresh awaits explicit ff-merge + push). Two-checkout reconciliation done: sandbox authoritative; `D:\Apps\Qwen-Survivors` fast-forwarded to `a0f456e`, trees byte-identical, its obsolete local edits stashed recoverable (`stash@{0}`). Pages = the user's test channel; deploys from `main` only on explicit ask.
 - **Server:** DOWN (port 47893 not listening as of last check); recipe in `docs/ENV.md`.
 
 ## Master Checklist
@@ -178,7 +178,7 @@ Framerate drops precipitously over long runs, esp. mobile. Most load already cap
 
 ## Resume Notes — session 18, 2026-09-05 (live state only; rewritten each session per Format contract)
 
-**Where we are (session 18, 2026-09-05):** **Phase 15 COMPLETE** (15.1–15.4). Offer-draw rework SHIPPED per user directive: **UNIFORM sample-without-replacement** — every card equal odds, no weighting (`drawOffers` partial Fisher-Yates in `js/entities/player.js`; `CFG.offer = { slots: 3 }`). HEAD `8852e67` = `main` = origin; uncommitted = this session's product-code (`player.js`, `config.js`) + tests (`test-logic.mjs`) + docs. Node v24.11.0 on PATH.
+**Where we are (session 18, 2026-09-05):** **Phase 15 COMPLETE** (15.1–15.4) + COMMITTED `a0f456e` on `overnight-2026-08-22` (pushed to origin work branch; `main`/Pages NOT advanced). Offer-draw rework SHIPPED per user directive: **UNIFORM sample-without-replacement** — every card equal odds, no weighting (`drawOffers` partial Fisher-Yates in `js/entities/player.js`; `CFG.offer = { slots: 3 }`). Two-checkout reconciliation done (sandbox authoritative; D:\Apps fast-forwarded to `a0f456e`, byte-identical trees, obsolete local edits in `stash@{0}`). Uncommitted now = this status/Resume sync only. Node v24.11.0 on PATH.
 
 **Gates (green 2026-09-05 session 18):** check.mjs **33/33** · test-logic **663/663** · boot `PASS boot-sim runs=4`. Sim harnesses gitignored `unsloth-tmp/` (`offer-sim.mjs`, `uniform-proto.mjs`).
 
