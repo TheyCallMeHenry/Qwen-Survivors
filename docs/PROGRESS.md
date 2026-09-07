@@ -17,9 +17,9 @@ Rules for every future edit — this file is loaded at every session start; its 
 ## Status — 2026-09-07
 
 
-- **Active: Phases 28 + 17 COMPLETE, UNCOMMITTED** — 28: all 27 card icons redesigned from scratch (PLAN §3.19); 17: selectable run durations 5(default)/10/15/20/ENDLESS + boss cadence every 5:00 from 4:00, per-level menu chips, ENDLESS = death-only end (PLAN §3.10, D65+D83). Commit pending user ask (rule 7) covering both. Feature queue after: **18 → 14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro).
+- **Active: Phases 28 + 17 COMPLETE + PUBLISHED (2026-09-07, session 31, user ask)** — 28: all 27 card icons redesigned from scratch (PLAN §3.19); 17: selectable run durations 5(default)/10/15/20/ENDLESS + boss cadence every 5:00 from 4:00, per-level menu chips, ENDLESS = death-only end (PLAN §3.10, D65+D83). Commits `9977791` (28) + `ca1739a` (17) → ff-merge `main` → Pages build ✓ on `ca1739a`. Feature queue after: **18 → 14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro).
 - **Gates (green on final Phase-17 tree, session 31):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **718/718** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** (×2) — `[10.4-bench]` radial=0.0.
-- **Git:** Phases 25+27 committed on `overnight-2026-08-22`, ff-merged → `main` + pushed = Pages build updated (hashes in Session Log / Resume Notes below).
+- **Git:** `overnight-2026-08-22` = `main` = origin at `ca1739a` (Phases 25+27 published session 29; 28+17 published session 31 — `9977791` + `ca1739a`).
 - **Server:** DOWN (port 47893 not listening, re-checked session 27); recipe in `docs/ENV.md`.
 
 ## Master Checklist
@@ -115,13 +115,13 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 
 ## Resume Notes — session 31, 2026-09-07 (live state only; rewritten each session per Format contract)
 
-**Where we are (session 31):** **Phase 17 COMPLETE — selectable run durations (5 default/10/15/20/ENDLESS) + boss cadence every 5:00 from 4:00 + per-level menu chips + ENDLESS death-only end (PLAN §3.10, D65+D83). UNCOMMITTED** together with Phase 28 (`js/art/items.js`) on `overnight-2026-08-22` @ `0a94172`; commit pending user ask (rule 7). Phases 25 + 27 remain COMMITTED & PUBLISHED.
+**Where we are (session 31):** **Phases 28 + 17 COMPLETE & PUBLISHED** — 17: selectable run durations (5 default/10/15/20/ENDLESS) + boss cadence every 5:00 from 4:00 + per-level menu chips + ENDLESS death-only end (PLAN §3.10, D65+D83). Commits `9977791` + `ca1739a` on `overnight-2026-08-22`, ff-merge → `main` pushed; Pages build ✓ on `ca1739a` (`gh run list`). Working tree clean.
 
-**NEXT (exact):** 1) ask user → commit Phases 28 + 17 (art + durations code + docs); 2) feature queue **Phase 18** (level-up actions SKIP/BANISH/RE-ROLL — PLAN §3.11, D67; O-resolutions on 18.1 need user confirm) → 14 → 21 → 2.9.
+**NEXT (exact):** feature queue **Phase 18** (level-up actions SKIP/BANISH/RE-ROLL — PLAN §3.11, D67; O-resolutions on 18.1 need user confirm) → 14 → 21 → 2.9.
 
 **Gates (green on final Phase-17 tree, session 31):** check.mjs **34/34** · test-logic **718/718** · boot `PASS boot-sim runs=4` ×2 · `[10.4-bench]` radial=0.0. One-off boot flake seen once at 11.5 exclusivity (~L2134, pre-existing seed-sensitivity the harness itself notes) — green on both re-runs; re-run once before bisecting.
 
-**Git state:** `overnight-2026-08-22` at `0a94172`; dirty = Phase 28 art + Phase 17 (config/spawner/meta/game/hud/screens + index.html/css + conn/serve + both test harnesses) + docs. `unsloth-tmp/` gitignored.
+**Git state:** `overnight-2026-08-22` = `main` = origin at `ca1739a` (tree clean; `9977791` = Phase 28 art, `ca1739a` = Phase 17 + tests + docs). `unsloth-tmp/` gitignored.
 
 **Probe seams:** probes import game modules directly in Node with ctx stubs; fixed seed env; `[10.4-bench]` counters permanent in test-boot (`DEBUG_BOOT=1`). Sprite art check: `node tools/sprite-preview.mjs [char]` → stdout ASCII + `unsloth-tmp/hero-preview.html`. Latest probe capture: `unsloth-tmp/probe-mobile-session27.txt` (disposable).
 
