@@ -84,10 +84,34 @@ export class World {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, vw, horizon + 2);
 
-    ctx.fillStyle = sky.star;
-    for (const s of sky.stars) {
-      ctx.globalAlpha = s.a * (0.55 + 0.45 * Math.sin(t * s.sp + s.ph));
-      ctx.fillRect(s.x * vw, s.y * horizon * 0.9, s.r, s.r);
+    // 25.4d (perf): stars bake into offscreen canvases per (sky, view size, horizon±1px)
+    // — twinkle rides globalAlpha on CFG.world.starBands average-alpha groups instead of
+    // one fillRect + alpha set per star per frame.
+    const SKY = CFG.world.starBands;
+    if (!sky._bands || sky._bandW !== vw || sky._bandH !== vh || Math.abs(sky._bandHz - horizon) > 1) {
+      sky._bandW = vw; sky._bandH = vh; sky._bandHz = horizon;
+      sky._bands = [];
+      for (let b = 0; b < SKY; b++) {
+        const c = makeCanvas(vw, vh);
+        const g = c.getContext('2d');
+        g.fillStyle = sky.star;
+        for (let i = 0; i < sky.stars.length; i++) {
+          if (i % SKY !== b) continue;
+          const s = sky.stars[i];
+          g.fillRect(s.x * vw, s.y * horizon * 0.9, s.r, s.r);
+        }
+        sky._bands.push(c);
+      }
+    }
+    for (let b = 0; b < SKY; b++) {
+      const band = sky._bands[b];
+      let aB = 0;
+      for (let i = b; i < sky.stars.length; i += SKY) {
+        const s = sky.stars[i];
+        aB += s.a * (0.55 + 0.45 * Math.sin(t * s.sp + s.ph));
+      }
+      ctx.globalAlpha = aB / Math.max(1, ((sky.stars.length - b + SKY - 1) / SKY | 0));
+      ctx.drawImage(band, 0, 0);
     }
     ctx.globalAlpha = 1;
 
