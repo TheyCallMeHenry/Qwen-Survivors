@@ -12,6 +12,16 @@ export const aliveCap = (t, level = L0, s = 1) => CFG.spawner.aliveCap(t) * leve
 export const spawnInterval = (t, level = L0, s = 1) => CFG.spawner.interval(t) / (level.diff * s);
 export const batchSize = (t, level = L0, s = 1) => Math.round(CFG.spawner.batch(t) * level.diff * s);
 
+// Boss event timeline (17.3, PLAN §3.10): every `every` seconds from `first`,
+// strictly BEFORE the run ends (a 15-min run → 4:00, 9:00, 14:00 = 3 events).
+// durSec null/undefined = ENDLESS → [] (game.js streams the cadence past the table).
+export const bossTimes = (durSec, first = CFG.run.bossAt, every = CFG.run.bossEvery) => {
+  const out = [];
+  if (durSec === null || durSec === undefined) return out;
+  for (let t = first; t < durSec; t += every) out.push(t);
+  return out;
+};
+
 // Weighted enemy-type pick for time t. rng = mulberry32 fn. Null if nothing has weight.
 export function pickType(t, rng, level = L0) {
   const w = level.weights(t);

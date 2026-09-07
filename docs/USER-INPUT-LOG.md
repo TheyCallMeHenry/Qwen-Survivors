@@ -13,6 +13,36 @@
 
 ## Entries (newest first)
 
+### 2026-09-07 — Resume directive: get up-to-speed from docs, propose + proceed with the next implementation phase
+- **Received:** 2026-09-07 (no time in message; date only)
+- **Classification:** `answer/approval` (go for the agent-proposed Phase 17 — durations/boss schedule — incl. its adopted O-resolutions, recorded as D83)
+- **Context:** First message of session 31, after Phase 28 closed; answers this session's pending phase-selection proposal.
+- **Verbatim input:**
+
+  ```
+  Please review this project's documentation to get up-to-speed on the current status of development and implementation then propose your recommendation for the phase(s)/step(s) we should complete within this new session.
+  Let's resume the next implementation/development phase/tasks.
+  ```
+
+### 2026-09-07 — Directive: throw out the current weapon icon/card designs; genuinely reimagine/redesign from scratch + verify-before-docs + self-directed polish
+- **Received:** 2026-09-07 (no time in message; date only)
+- **Classification:** `feature request` (art) · `design decision` (supersedes the Phase 26.1 icon designs — refinement-in-place rejected) · `process rule` (verify actual completion before updating docs)
+- **Context:** Follow-up to published Phase 26 "card & icon overhaul"; sets this session's scope (Phase 28), mirroring the character-sheet directive pattern.
+- **Verbatim input:**
+
+  ```
+  I want you to "throw out" the current/original weapon icon/card designs and genuinely reimagine/redesign them from scratch. I want you to make them as detailed, clearly recognizable, and refined as possible.
+  resume
+  continue
+  continue
+  continue
+  resume
+  Please verify for yourself the actual completion of the icon redesign before updating any/all documentation.
+  Additionally, please make any corrections/improvements to the updated icons as you identify the potential to do so / as you see fit.
+  1. I interrupted the boot test earlier simply because I had another message to send you with additional info I wanted you to have right away - do not read anything further into it than that.
+  2. I did not intend to interrupt you just now - please resume/continue.
+  ```
+
 ### 2026-09-07 — Directive: throw out the current character designs; genuinely reimagine/redesign them from scratch, maximally detailed/refined
 - **Received:** 2026-09-07 (no time in message; date only)
 - **Classification:** `feature request` (art) · `design decision` (supersedes the Phase 26.3 sheet designs — refinement-in-place rejected)

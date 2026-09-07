@@ -66,6 +66,7 @@ export function initScreens(game, { icons }) {
   const metaShards = $('meta-shards');
   const metaList = $('meta-list');
   const levelSelect = $('level-select');
+  const durationSelect = $('duration-select');
   const charList = $('char-list');
   const charShards = $('char-shards');
   const coopBtn = $('btn-coop');
@@ -135,12 +136,33 @@ export function initScreens(game, { icons }) {
         saveSelectedLevel(CFG.meta.levelKey, key);
         game.previewLevel(key); // big menu backdrop re-generates for this level
         renderLevels();
+        renderDurations(); // 17.2: each level carries its own saved duration
       };
       card.addEventListener('click', choose);
       card.addEventListener('keydown', (e) => {
         if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); choose(); }
       });
       levelSelect.append(card);
+    }
+  }
+
+  // --- duration select (17.2, PLAN §3.10): 5 chips under the level cards; per-level
+  // persistence; default d5 reproduces the old fixed 5:00 run exactly.
+  function renderDurations() {
+    durationSelect.innerHTML = '';
+    const D = CFG.run.durations;
+    for (const key of D.order) {
+      const def = D[key];
+      const sel = key === game.selectedDurationKey;
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.classList.add('dur-chip');
+      if (sel) chip.classList.add('sel');
+      chip.setAttribute('role', 'radio');
+      chip.setAttribute('aria-checked', sel ? 'true' : 'false');
+      chip.textContent = def.label;
+      chip.addEventListener('click', () => { game.setDuration(key); renderDurations(); });
+      durationSelect.append(chip);
     }
   }
 
@@ -256,7 +278,7 @@ export function initScreens(game, { icons }) {
     else if (st === 'LEVELUP') name = 'levelup';
     else if (st === 'GAMEOVER') name = 'gameover';
     else name = 'none';
-    if (name !== cur) { cur = name; show(name); if (name === 'menu') renderLevels(); }
+    if (name !== cur) { cur = name; show(name); if (name === 'menu') { renderLevels(); renderDurations(); } }
     coopUI();
     // Banner queue (13.10): a queued banner (e.g. NEW MAP UNLOCKED after DAWN BREAKS)
     // takes over once the current one holds for CFG.ui.bannerMs.

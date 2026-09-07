@@ -166,6 +166,7 @@ Lazy `AudioContext` (created/resumed on first user gesture — required for mobi
 - **Boss events (user spec, binding):** a boss event occurs at **4:00, 9:00, 14:00, 19:00** during a run, and **every 5 minutes during ENDLESS runs**. User-confirmed example: a 15-minute run experiences exactly **3 boss events** (4:00, 9:00, 14:00); "the same pattern applies to all of the listed potentially selectable run durations."
 - **O (decide at Phase 17, documented as-is for now):** (a) 20-min run — the 19:00 boss fires per the timestamp list (confirm: "fires if T < run end" read); (b) ENDLESS cadence — fixed slots (4/9/14/19) AND the 5-min cadence (5:00, 10:00, …) both apply, or the 5-min cadence replaces the slots; (c) co-op: N players = N bosses per event (D35 pattern — confirm); (d) per-level boss: each event spawns the CURRENT level's boss (Phase 13 — confirm); (e) ENDLESS: no victory/"DAWN BREAKS" (death-only end) + high-score inclusion (per-level list? victory bonus N/A) O.
 - **Mechanical impact (planning only):** boss trigger moves from hard-coded 240 s to a per-duration boss-time table (data in `config.js` — tuning rule); spawner difficulty tail beyond 5:00 must be defined (current curve is 5-min-shaped; O: ramp cap/hold); victory = survive to the selected duration.
+- **CLOSED 2026-09-07 (Phase 17, session 31):** all O items resolved → **D83**. Cadence data `CFG.run.bossAt`/`bossEvery` + `CFG.run.durations`; spawner tail = existing curves continue past 5:00 unchanged (they already saturate); per-level duration LS `qsurv.duration.v1`; host-authoritative `runstart.dur` in co-op.
 
 ### 3.11 Level-up screen actions: SKIP / BANISH / RE-ROLL (Phase 18 — spec'd 2026-08-22; research: `RESEARCH_FINDINGS.md` §7)
 
@@ -313,6 +314,16 @@ User tested the published Pages build. Six asks, scoped below against in-tree co
 **Contracts:** footprints + shadowR byte-stable (mage 56×64/12 · warden 58×66/13 · ranger 52×60/11 · swash 54×62/12 · ghost 56×64/12), `idle[2]/run[4]`, boot ctx-stub rules (arc ≤6 args, ellipse exactly 7, gradients only via addColorStop). New boot asserts: sheets retired from `buildCharacters` · per-seat ghost rebuild · no shared frame canvases · detail floor (radial glows + strokes per sheet).
 
 **Art check without a browser:** `tools/sprite-preview.mjs` — Canvas2D→SVG shim rendering real builders to an ASCII contact sheet (ink %, content bbox, feetY, clip-overflow flags) + `unsloth-tmp/hero-preview.html` (zoomed SVG, colored + silhouette pairs).
+
+### 3.19 Card icons: full from-scratch reimagining (Phase 28 — user directive 2026-09-07)
+
+**User directive (verbatim, USER-INPUT-LOG 2026-09-07):** “throw out” the current/original weapon icon/card designs and genuinely reimagine/redesign them from scratch, “as detailed, clearly recognizable, and refined as possible.” Supersedes the §3.17/26.1 icon designs (refinement-in-place rejected).
+
+**Design:** all 27 `buildIcons()` keys redrawn from scratch in `js/art/items.js` — silhouette-first, one unmistakable object per card, layered depth cues consistent with Phase 24's top-left key light. The Phase 26 category-plate system is **kept** (weapon teal / passive amber / synergy violet; test-logic asserts plate presence + key names). Shared helpers inside `buildIcons()`: `seg` (polyline stroke — stroke style must be set before every call), `dot`, `glint`, `boltShape`, `flameShape` (teardrop, tip at x,y), `crescent`, `heartPath`. Recurring legibility rule: check every shape against the **plate** color, not just the icon palette (dark-on-dark was the main Phase-26 failure mode).
+
+**Contracts unchanged:** every icon exactly **72×72**, built at load only; key names fixed (`test-logic` regex-maps every `CFG.*` icon name ↔ `icons.<name> = make(...)`); `drawIconScaled` blits to HUD chips.
+
+**Art check with a browser:** Playwright element screenshots at `device_scale_factor=4` per canvas (`unsloth-tmp/shot7.py` → `z_NN.png` against `unsloth-tmp/icon-preview.html` order array). Full-page `clip=` screenshots proved unreliable — use per-element shots.
 
 ## 4. Phases & Tasks
 

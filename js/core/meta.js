@@ -78,6 +78,29 @@ export function saveSelectedLevel(key, levelKey) {
   try { if (LEVELS[levelKey]) localStorage.setItem(key, levelKey); } catch { /* private mode */ }
 }
 
+// Per-level selected run duration (17.2, PLAN §3.10) — map levelKey → durationKey.
+// Corrupt entries dropped; unknown levels/keys fall back to the default (d5 = old behavior).
+export function loadDurations(key) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(key) || 'null');
+    if (!raw || typeof raw !== 'object') return {};
+    const out = {};
+    for (const k of Object.keys(raw)) {
+      if (LEVELS[k] && CFG.run.durations[raw[k]]) out[k] = raw[k];
+    }
+    return out;
+  } catch { return {}; }
+}
+
+export function durationFor(map, levelKey) {
+  const d = map && map[levelKey];
+  return CFG.run.durations[d] ? d : CFG.run.defaultDuration;
+}
+
+export function saveDurations(key, map) {
+  try { localStorage.setItem(key, JSON.stringify(map)); } catch { /* private mode */ }
+}
+
 // View zoom (13.8): camera-view factor (CFG.zoom.touch | CFG.zoom.full), persisted as raw string.
 // Invalid/absent storage falls back to the device default (touch 0.80 / desktop 1.0).
 export function defaultZoom(isTouch) {

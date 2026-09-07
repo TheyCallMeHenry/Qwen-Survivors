@@ -17,8 +17,8 @@ Rules for every future edit — this file is loaded at every session start; its 
 ## Status — 2026-09-07
 
 
-- **Active: none — Phase 25 + Phase 27 COMMITTED & PUBLISHED to Pages (user ask, session 29, 2026-09-07).** Feature queue next: **17 → 18 → 14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro).
-- **Gates (green on the Phase-27 tree, session 28):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **694/694** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0, drawImage 784.4.
+- **Active: Phases 28 + 17 COMPLETE, UNCOMMITTED** — 28: all 27 card icons redesigned from scratch (PLAN §3.19); 17: selectable run durations 5(default)/10/15/20/ENDLESS + boss cadence every 5:00 from 4:00, per-level menu chips, ENDLESS = death-only end (PLAN §3.10, D65+D83). Commit pending user ask (rule 7) covering both. Feature queue after: **18 → 14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro).
+- **Gates (green on final Phase-17 tree, session 31):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **718/718** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** (×2) — `[10.4-bench]` radial=0.0.
 - **Git:** Phases 25+27 committed on `overnight-2026-08-22`, ff-merged → `main` + pushed = Pages build updated (hashes in Session Log / Resume Notes below).
 - **Server:** DOWN (port 47893 not listening, re-checked session 27); recipe in `docs/ENV.md`.
 
@@ -55,12 +55,12 @@ Completed phases = one line each; full step detail lives verbatim in `docs/ARCHI
 ### Phase 16 — Playtest defects (COMPLETE 2026-08-22)
 - [x] 16.1–16.4 m01 snow regression repro-first then arc restored as v1.0.0 · spawn origin feet→mid-torso (`spawnOriginFrac` 0.55; latent fix: blades/garlic were NEVER drawn) · Pyre Lance reach exactly 1.33× (speed 2× + life trim, LEAD 0.5), seeded A/B bit-exact · gates + co-op invariance (no projectile key on wire)
 
-### Phase 17 — Selectable run durations & boss schedule (spec PLAN §3.10, D65; queued after 15)
+### Phase 17 — Selectable run durations & boss schedule (COMPLETE 2026-09-07 session 31; spec PLAN §3.10, D65+D83; UNCOMMITTED)
 Durations 5(default)/10/15/20/ENDLESS; bosses at 4:00/9:00/14:00/19:00 + every 5:00 endless.
-- [ ] 17.1 O resolutions (user confirm: 20-min 19:00, ENDLESS slots-vs-cadence, co-op N-bosses/event, ENDLESS victory/high-score) + `CFG.run.durations` + spawner tail past 5:00
-- [ ] 17.2 Menu duration select (≥72 px, per-level persistence, default = current behavior)
-- [ ] 17.3 Run machinery: victory at duration; boss events per schedule; ENDLESS count-up HUD
-- [ ] 17.4 Gates: table asserts (5→[240], 10→[240,540], …) + boot E2E (10-min two bosses; ENDLESS past 5:00 no victory; 5:00 default bit-identical)
+- [x] 17.1 O resolutions ADOPTED + recorded as D83 (blanket-go 2026-09-07): events fire strictly < run end (20-min → 19:00 fires; 15-min → 3); slots ARE one cadence (every 5:00 from 4:00, ENDLESS streams it); co-op N bosses/event; current level's boss per event; ENDLESS death-only + scores accrue, no victory bonus. Data `CFG.run.durations`/`defaultDuration`/`bossEvery`; spawner tail = existing curves continue (saturate past 5:00, no new tuning)
+- [x] 17.2 Menu duration chips — `#duration-select` radiogroup, 5 × ≥72 px, per-level persistence (`qsurv.duration.v1`, `loadDurations`/`durationFor`), d5 default = current behavior
+- [x] 17.3 Run machinery: victory at `runDuration` (ENDLESS never); boss events via `_bossIdx` (solo default bit-identical); HUD counts up on ENDLESS; co-op host-authoritative `runstart.dur` (null=ENDLESS, serve relay null-safe, old-host fallback)
+- [x] 17.4 Gates: `bossTimes` tables 5→[240] 10→[240,540] 15→+840 20→+1140 endless→[] + LS round-trip + CSS ≥72 px asserts → **718/718**; boot E2E chips+persist / d10 two bosses 4:00+9:00 / victory gate per duration / ENDLESS past 5:00 no victory + 9:00 cadence; `runs=4` default path untouched (bit-identical 5:00)
 
 ### Phase 18 — Level-up actions SKIP / BANISH / RE-ROLL (spec PLAN §3.11, D67; research `RESEARCH_FINDINGS.md` §7; queued after 17)
 Screen actions (NOT items/cards/level-able); unlocked + upgraded in the meta store, max 5 uses/run each.
@@ -104,30 +104,39 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 - [x] 27.3 `tools/sprite-preview.mjs` — Canvas2D→SVG shim: ASCII contact sheet to stdout (ink % / content bbox / feetY / clip-overflow flags, colored + silhouette) + zoomed HTML (`unsloth-tmp/hero-preview.html`); per-char via argv
 - [x] 27.4 Gates green **34/34 · 694/694 · boot PASS runs=4** (bench drawImage 784.4 radial 0.0 — no regression) + new asserts: sheets retired from `buildCharacters` · no shared frame canvases per sheet · detail floor (radial glows ≥1 + strokes ≥3 via instrumented rebuild, `sheetDetail()`) · PLAN §3.18 + README + PROGRESS synced
 
+### Phase 28 — Card icons: full from-scratch reimagining (COMPLETE 2026-09-07; supersedes the 26.1 icon designs; PLAN §3.19)
+- [x] 28.1 All 27 `buildIcons()` keys (9 weapons · 6 passives · 12 synergies incl. new-status skins) redrawn from scratch in `js/art/items.js` — silhouette-first, one recognizable object per card, top-left key light kept; Phase 26 category plates kept (teal/amber/violet)
+- [x] 28.2 Verification pass (user rule: verify before docs): 27/27 keys present; per-icon 4× Playwright renders (`unsloth-tmp/shot7.py` → `z_NN.png`) eyeballed all 27 — recurring bug = dark shapes on dark plates
+- [x] 28.3 Polish fixes from the pass: `pistols` full rewrite (two crossed outlined revolvers — cylinders/grips/sights) · `boots` full rewrite (outlined boot + strap buckle + ankle feathers + wind streaks inside plate) · `inferno` rocket misread fixed (bullet flies up-right, casing+primer trail) · `blades` crescents sharpened, crack-like gleams removed · `tempest`/`stormVolley` clouds brightened (were invisible on violet) · `flamingArrows` fan spread widened · `snowball` ice seated on muzzle (bore dot)
+- [x] 28.4 Gates green on final tree **34/34 · 694/694 · boot PASS runs=4** (bench drawImage 838.5 radial 0.0 — no regression); PLAN §3.19 + USER-INPUT-LOG + PROGRESS synced
+
 ### Phase 24 — Visual overhaul, 2.5D isometric (COMPLETE + PUBLISHED `7c4f01c`; PLAN §3.16)
 - [x] 24.1–24.9 `formShade()` single top-left key light on every opaque body (chars / enemies / bosses / blade + axe; additive energy sprites deliberately unshaded) · projectile-variant seam (`v` tag at fire sites, `(Var&&Var[v])||Img` lookup, base byte-identical) + 7 distinct synergy projectile skins · `decorShadow` contact shadows under standing decor · death-wisp hue variety · **deferred (user-approved): HUD/menu/CSS chrome restyle**
 
-## Resume Notes — session 28, 2026-09-07 (live state only; rewritten each session per Format contract)
+## Resume Notes — session 31, 2026-09-07 (live state only; rewritten each session per Format contract)
 
-**Where we are (session 29):** **Phases 25 + 27 COMMITTED & PUBLISHED.** User ask executed: gates re-run green on the dirty tree, two commits on `overnight-2026-08-22` (Phase 25 perf · Phase 27 character sheets), ff-merged → `main`, pushed → Pages build updated. Tree CLEAN.
+**Where we are (session 31):** **Phase 17 COMPLETE — selectable run durations (5 default/10/15/20/ENDLESS) + boss cadence every 5:00 from 4:00 + per-level menu chips + ENDLESS death-only end (PLAN §3.10, D65+D83). UNCOMMITTED** together with Phase 28 (`js/art/items.js`) on `overnight-2026-08-22` @ `0a94172`; commit pending user ask (rule 7). Phases 25 + 27 remain COMMITTED & PUBLISHED.
 
-**NEXT (exact):** feature queue **Phase 17** (selectable run durations & boss schedule — PLAN §3.10, D65; O-resolutions on checklist 17.1 need user confirm) → 18 → 14 → 21 → 2.9.
+**NEXT (exact):** 1) ask user → commit Phases 28 + 17 (art + durations code + docs); 2) feature queue **Phase 18** (level-up actions SKIP/BANISH/RE-ROLL — PLAN §3.11, D67; O-resolutions on 18.1 need user confirm) → 14 → 21 → 2.9.
 
-**Gates (green, session 28):** check.mjs **34/34** · test-logic **694/694** · boot `PASS boot-sim runs=4` · `[10.4-bench]` drawImage 784.4 radial=0.0. Node NOT on PATH — use `"/c/Program Files/nodejs/node.exe"`.
+**Gates (green on final Phase-17 tree, session 31):** check.mjs **34/34** · test-logic **718/718** · boot `PASS boot-sim runs=4` ×2 · `[10.4-bench]` radial=0.0. One-off boot flake seen once at 11.5 exclusivity (~L2134, pre-existing seed-sensitivity the harness itself notes) — green on both re-runs; re-run once before bisecting.
 
-**Git state:** `overnight-2026-08-22` = `main` = origin at session-29 publish commit (see Status bullet + Session Log). Tree CLEAN.
+**Git state:** `overnight-2026-08-22` at `0a94172`; dirty = Phase 28 art + Phase 17 (config/spawner/meta/game/hud/screens + index.html/css + conn/serve + both test harnesses) + docs. `unsloth-tmp/` gitignored.
 
 **Probe seams:** probes import game modules directly in Node with ctx stubs; fixed seed env; `[10.4-bench]` counters permanent in test-boot (`DEBUG_BOOT=1`). Sprite art check: `node tools/sprite-preview.mjs [char]` → stdout ASCII + `unsloth-tmp/hero-preview.html`. Latest probe capture: `unsloth-tmp/probe-mobile-session27.txt` (disposable).
 
-**Pitfalls still hot:** regrid every tick in isolated probes · `_nearest` steals aim → probe player parked at x=500 · pooled enemy status zeroed on spawn · capture card `{key}` before `click()` · `Math.random=()=>0` = spread MINIMUM (pin 0.5) · rm/powershell blocked — python glob+os.remove for scratch cleanup · verify prior-session claims against `git status` + mtimes, never prose · boot ctx stub counts only arc/ellipse/fill/stroke/drawImage/radial — a detail-floor assert must rebuild the builder via `sheetDetail()`, linear gradients are invisible to it.
+**Pitfalls still hot:** regrid every tick in isolated probes · `_nearest` steals aim → probe player parked at x=500 · pooled enemy status zeroed on spawn · capture card `{key}` before `click()` · `Math.random=()=>0` = spread MINIMUM (pin 0.5) · rm/powershell blocked — python glob+os.remove for scratch cleanup · verify prior-session claims against `git status` + mtimes, never prose · boot ctx stub counts only arc/ellipse/fill/stroke/drawImage/radial (linear gradients invisible) · grep `include_pattern` needs `sandbox/js/**` form · serve.mjs `num()` maps null→0 — `runstart.dur` null passes explicitly · boot seeds `Math.random` per startRun → rare upstream flakes in long co-op pump sections: re-run before bisecting.
 
 **Perf guardrails (binding):** no `create*Gradient`/array-literal/string-concat inside any `draw()` body — bake at build; entities/projectiles/particles stay pre-rendered offscreen canvases via `drawImage`; new counts bounded by `CFG.perf`, thresholds in config.
 
 ## Decisions (binding)
 
-Full texts + one-line row index for **D1–D82** live in `docs/DECISIONS.md` (append-only numbering, revisions carry new numbers; Format contract §5). Open phases cite: D64 (11.13) · D65 (17) · D67 (18) · D54 (14) · D69 (21).
+Full texts + one-line row index for **D1–D83** live in `docs/DECISIONS.md` (append-only numbering, revisions carry new numbers; Format contract §5). Open phases cite: D64 (11.13) · D67 (18) · D54 (14) · D69 (21).
 
 ## Session Log (append-only, newest first; entries before session 24 archived verbatim to `docs/ARCHIVE.md`)
+
+- **2026-09-07 (session 31) — Phase 17 CLOSED (selectable run durations & boss schedule):** durations data `CFG.run.durations` (d5 default/10/15/20/ENDLESS null) + cadence `bossAt`+`bossEvery` (D83 O-resolutions recorded); pure `bossTimes` in spawner; per-level LS map `qsurv.duration.v1` (`loadDurations`/`durationFor`/`saveDurations` + `Game.setDuration`); `runDuration` per run drives victory (`ENDLESS != null` gate) + boss events via `_bossIdx` (strict `<` run end) + HUD count-up; menu chips `#duration-select` (5 × ≥72 px, radiogroup, re-render on level/duration pick); co-op `runstart.dur` end-to-end (conn.js field, serve.mjs null-safe relay, client fallback). Solo 5:00 path untouched. Gates **34/34 · 718/718 · boot PASS runs=4 ×2** (first run tripped the pre-existing 11.5 pump-rng flake — re-runs green). Commit still pending user ask (rule 7), batched with Phase 28. NEXT = commit ask → 18 → 14 → 21 → 2.9.
+- **2026-09-07 (session 30) — Phase 28 CLOSED (card-icon from-scratch reimagining):** all 27 icon keys rebuilt in `js/art/items.js` (plates kept). Verification-before-docs per user rule: per-icon 4× Playwright shots (`unsloth-tmp/shot7.py` → `z_NN.png`) reviewed all 27; polish pass fixed `pistols` + `boots` (full rewrites), `inferno` rocket misread, `blades` crescents, `tempest`/`stormVolley` cloud legibility (dark-on-violet), `flamingArrows` fan, `snowball` muzzle seat; `napalm` cleared at 4× (no change — small-render misread). Gates **34/34 · 694/694 · boot PASS runs=4** (bench drawImage 838.5 radial 0.0). PLAN §3.19 + USER-INPUT-LOG entry added. Commit pending user ask. NEXT = commit ask → 17 → 18 → 14 → 21 → 2.9.
 
 - **2026-09-07 (session 29) — Phases 25+27 PUBLISHED to Pages (user ask):** re-ran all three gates on the dirty tree first (34/34 · 694/694 · boot PASS runs=4, bench drawImage 824.6 radial 0.0), then two commits on `overnight-2026-08-22` — Phase 25 (lighting baked-sprite/star-bands/world + config) and Phase 27 (`js/art/heroes.js` NEW sheets, `characters.js` legacy builders deleted, game/hud/player/test-boot/sprite-preview + docs incl. new `docs/ARCHIVE.md`) — ff-merge → `main`, push → origin (`97b7db7..a690c16`); Pages build now serves Phases 25+27 (commits `69e3964` + `a690c16`).
 
@@ -150,6 +159,6 @@ See `docs/ENV.md` (moved out of this file 2026-09-05 per Format contract §6 —
 ## How to Resume a Session
 
 1. Read `AGENTS.md` → this file (Status → Master Checklist active phases → **Resume Notes**) → `docs/ENV.md`. Architecture: `docs/PLAN.md` §3–§4; decisions + pitfalls: `docs/DECISIONS.md`; user's own words: `docs/USER-INPUT-LOG.md`. The code is the API record — read the module before changing it.
-2. Work **NEXT** from Resume Notes (currently: 25.6 acceptance → close Phase 25; then feature queue 17 → 18 → 14 → 21 → 2.9; leftovers 11.13 NAS-side, 22.8 device repro). New scope → Master Checklist first.
-3. Validate with **all three gates** before any tick: `"/c/Program Files/nodejs/node.exe" tools/check.mjs` (33 modules) · `tools/test-logic.mjs` (**694**) · `tools/test-boot.mjs` (`PASS boot-sim runs=4`).
+2. Work **NEXT** from Resume Notes (currently: Phases 28+17 commit ask → feature queue 18 → 14 → 21 → 2.9; leftovers 11.13 NAS-side, 22.8 device repro). New scope → Master Checklist first.
+3. Validate with **all three gates** before any tick: `"/c/Program Files/nodejs/node.exe" tools/check.mjs` (34 modules) · `tools/test-logic.mjs` (**718**) · `tools/test-boot.mjs` (`PASS boot-sim runs=4`).
 4. On completion: tick + date + ≤2-line note in the checklist, ≤10-line Session Log entry, rewrite Resume Notes (≤25 lines), update Status — *before* declaring done (Format contract §1–§4).

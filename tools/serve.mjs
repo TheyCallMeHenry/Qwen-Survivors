@@ -170,7 +170,7 @@ export function attachCoopRoom(server) {
               ? { t: MSG.input, id: from.id, mx: num(m.mx), my: num(m.my), dash: !!m.dash }
               : m.t === MSG.state
                 ? { t: MSG.state, id: from.id, v: num(m.v), step: num(m.step), time: num(m.time), score: num(m.score), kills: num(m.kills), players: arr(m.players, 4), enemies: arr(m.enemies, 512), pickups: arr(m.pickups, 512) }
-                : { t: MSG.runstart, id: from.id, seed: num(m.seed), levelKey: typeof m.levelKey === 'string' ? m.levelKey.slice(0, 16) : 'm01' };
+                : { t: MSG.runstart, id: from.id, seed: num(m.seed), levelKey: typeof m.levelKey === 'string' ? m.levelKey.slice(0, 16) : 'm01', dur: m.dur === null ? null : num(m.dur) || undefined }; // dur (17.3): null = ENDLESS; absent → client falls back to its own map
             for (const v of conns.values()) if (v.id !== c.id) send(v, msg);
           } else if (m.t === MSG.closed) {
             // host ends the room explicitly (run over / quit)

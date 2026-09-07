@@ -340,6 +340,22 @@ body.touch #touch-ui { display: block; }
 }
 .lv-card.shake { animation: lv-shake 0.32s ease; }
 
+/* ============ duration select (17.2) ============ */
+.duration-select { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: min(86vw, 420px); }
+.dur-chip {
+  flex: 1 1 72px; min-width: 72px; min-height: 72px; padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: linear-gradient(180deg, rgba(30, 40, 64, 0.92), rgba(15, 21, 38, 0.92));
+  color: var(--text); font-family: inherit; font-size: 15px; font-weight: 800; letter-spacing: 0.03em;
+  cursor: pointer; transition: border-color 0.12s ease, transform 0.08s ease;
+}
+.dur-chip:hover { border-color: var(--accent); }
+.dur-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dur-chip.sel {
+  border-color: rgba(94, 234, 212, 0.8);
+  box-shadow: 0 0 20px rgba(94, 234, 212, 0.18), inset 0 0 16px rgba(94, 234, 212, 0.06);
+}
+
 .btn {
   min-height: 72px; padding: 0 22px;
   border: 1px solid var(--line); border-radius: 12px;

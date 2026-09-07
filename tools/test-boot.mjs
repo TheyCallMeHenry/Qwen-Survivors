@@ -1982,7 +1982,7 @@ m03RunDone = true;
       close: () => raw.w.close(),
       sendInput: (mx, my, dash) => raw.send({ t: 'input', mx, my, dash }),
       sendState: (id, body) => raw.send(Object.assign({ t: 'state' }, body, { id })),
-      sendRunStart: (id, seed, levelKey) => raw.send({ t: 'runstart', id, seed, levelKey }),
+      sendRunStart: (id, seed, levelKey, dur) => raw.send({ t: 'runstart', id, seed, levelKey, dur }),
       sendClosed: (reason) => raw.send({ t: 'closed', reason }),
     };
     raw.w.addEventListener('message', (ev) => { const m = JSON.parse(String(ev.data)); conn.onMessage && conn.onMessage(m); });
@@ -2195,7 +2195,7 @@ m03RunDone = true;
       close: () => raw.w.close(),
       sendInput: (mx, my, dash) => raw.send({ t: 'input', mx, my, dash }),
       sendState: (id, body) => raw.send(Object.assign({ t: 'state' }, body, { id })),
-      sendRunStart: (id, seed, levelKey) => raw.send({ t: 'runstart', id, seed, levelKey }),
+      sendRunStart: (id, seed, levelKey, dur) => raw.send({ t: 'runstart', id, seed, levelKey, dur }),
       sendClosed: (reason) => raw.send({ t: 'closed', reason }),
     };
     raw.w.addEventListener('message', (ev) => { const m = JSON.parse(String(ev.data)); conn.onMessage && conn.onMessage(m); });
@@ -2366,7 +2366,7 @@ m03RunDone = true;
       close: () => raw.w.close(),
       sendInput: (mx, my, dash) => raw.send({ t: 'input', mx, my, dash }),
       sendState: (id, body) => raw.send(Object.assign({ t: 'state' }, body, { id })),
-      sendRunStart: (id, seed, levelKey) => raw.send({ t: 'runstart', id, seed, levelKey }),
+      sendRunStart: (id, seed, levelKey, dur) => raw.send({ t: 'runstart', id, seed, levelKey, dur }),
       sendClosed: (reason) => raw.send({ t: 'closed', reason }),
     };
     raw.w.addEventListener('message', (ev) => { const m = JSON.parse(String(ev.data)); conn.onMessage && conn.onMessage(m); });
@@ -2616,6 +2616,77 @@ m03RunDone = true;
   game.net = saved.net; game.netMyId = saved.netMyId; game.netRoster = saved.netRoster;
 }
 
+// ============ Phase 17 — run durations & boss schedule E2E (PLAN §3.10) ============
+// Targeted (no full long sims): menu chips + persistence, d10 two-boss schedule via
+// _spawns fast-forward, victory gate at the duration edge, ENDLESS no-victory + cadence.
+{
+  game.selectedLevelKey = 'm01';
+  game.toMenu(); pump(10);
+  const ds = byId['duration-select'].children;
+  assert(ds.length === 5, `17.2: expected 5 duration chips, got ${ds.length}`);
+  assert(ds[0].classList.contains('sel') && ds[0].textContent === '5:00', '17.2: d5 chip selected by default (5:00 label)');
+  ds[2].click(); // pick 15:00 for the selected level (m01)
+  assert(game.selectedDurationKey === 'd15' && game.durations.m01 === 'd15', '17.2: chip click → game.setDuration');
+  assert(JSON.parse(localStorage.getItem(CFG.meta.durKey)).m01 === 'd15', '17.2: duration selection persisted (qsurv.duration.v1)');
+  assert(byId['duration-select'].children[2].classList.contains('sel'), '17.2: re-render marks the new chip selected');
+  game.setDuration('d5'); // restore the default before the run machinery below
+
+  const DT17 = 1 / 60;
+  const mkDurGame = () => {
+    const g = new Game({
+      input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
+      loop: { timescale: 1, hitStop() {} }, ctx: makeCtx(), mctx, characters, items,
+    });
+    g.resize(1280, 800);
+    return g;
+  };
+  const bossN = (g) => g.enemies.list.filter((e) => e.boss).length;
+
+  // (a) d10 → runDuration 600 + TWO boss events (4:00 and 9:00)
+  const gD = mkDurGame();
+  gD.startRun('m01');
+  assert(gD.runDuration === 300 && gD._bossIdx === 0, '17.3: default selection → 5:00 run (old behavior)');
+  gD.durations.m01 = 'd10';
+  gD.startRun('m01');
+  assert(gD.runDuration === 600, '17.3: d10 selection → runDuration 600');
+  gD.t = 539.9; gD._spawns(DT17); // the 240 event fires; the 540 one must NOT yet
+  assert(gD._bossIdx === 1 && bossN(gD) === 1, '17.4: d10 — one boss event by 9:00−ε');
+  gD.t = 540.0; gD._spawns(DT17);
+  assert(gD._bossIdx === 2 && bossN(gD) === 2, '17.4: d10 — second boss exactly at 9:00');
+
+  // (b) victory gate follows the duration, not the old constant
+  const gV = mkDurGame();
+  gV.startRun('m01');
+  gV.t = 299.999;
+  gV.update(DT17); // one playing-step across the boundary
+  assert(gV.state === 'GAMEOVER' && gV.victory, '17.3: victory fires at the selected 5:00 duration');
+  const gV2 = mkDurGame();
+  gV2.startRun('m01');
+  gV2.runDuration = 600;
+  gV2.t = 299.999;
+  gV2.update(DT17);
+  assert(gV2.state === 'PLAYING' && !gV2.victory, '17.3: d10 run does NOT win at 5:00');
+
+  // (c) ENDLESS — death-only end past 5:00 + boss cadence streams
+  const gE = mkDurGame();
+  gE.selectedLevelKey = 'm01';
+  gE.setDuration('endless');
+  gE.startRun('m01');
+  assert(gE.runDuration === null && gE.selectedDurationKey === 'endless', '17.3: ENDLESS selection → runDuration null');
+  let awakenE = 0; // count boss EVENTS (the 4:00 wraith may die in the 60 s pump → never count corpses)
+  gE.bus.on('banner', (b) => { if (b.text.includes('AWAKENS')) awakenE++; });
+  for (let i = 0; i < 36000 && gE.t < 300.5 && gE.state !== 'GAMEOVER'; i++) {
+    for (const pl of gE.players) { pl.dead = false; pl.hp = pl.maxHp; pl.iframes = 5; } // invulnerable pump
+    if (gE.state === 'LEVELUP') gE.pickCard(0);
+    gE.update(DT17);
+  }
+  assert(gE.state === 'PLAYING' && !gE.victory, `17.4: ENDLESS past 5:00 — no victory (state=${gE.state} t=${gE.t.toFixed(1)}s)`);
+  assert(gE.bossSpawned && gE._bossIdx === 1 && awakenE === 1, '17.4: ENDLESS — 4:00 boss event fired in-run');
+  gE.t = 540.0; gE._spawns(DT17);
+  assert(gE._bossIdx === 2 && awakenE === 2, '17.4: ENDLESS — 9:00 cadence streams past the finite table');
+  gE.setDuration('d5'); // LS hygiene: leave the default map behind for any later block
+}
+
 // self-verification: every one-shot path above must have actually fired
 assert(keyPickDone, 'keyboard card pick never exercised');
 assert(heartDone && heartAsserted, 'heart pickup path never exercised');
@@ -2640,5 +2711,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 8 weapons (wand-off kill window) · ` +
   `all 8 weapons observed live (bolts/axes/blades/garlic/bullets/bombs/flames/arrows) · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 12.8 per-synergy E2Es (flamingArrows burn-on-hit · heartPiercer bonus+pierce exactly 1 extra · blueFlame freeze+burn on burst · stormVolley 4th-volley both-rounds strike + chain shock) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · loop alive throughout`,
 );

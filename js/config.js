@@ -4,11 +4,22 @@ export const CFG = {
   world: { w: 4200, h: 3200, margin: 70, tile: 256, cullPad: 300, starBands: 4 }, // starBands = 25.4d twinkle alpha-group count
 
   run: {
-    time: 300,          // survive this long (s) to win
-    bossAt: 240,        // wraith spawn time
+    time: 300,          // survive this long (s) to win (kept as the canonical default; 17.1)
+    bossAt: 240,        // wraith spawn time (first boss event = 4:00)
+    bossEvery: 300,     // cadence between boss events: 4:00, 9:00, 14:00, 19:00, … (17.3)
     victoryBonus: 10000,
     timeScorePerSec: 15,
     maxWeapons: 5,      // base standard-weapon slots per player (co-op cap = base − (N−1), 11.5)
+    // Selectable run durations (Phase 17, PLAN §3.10). time null = ENDLESS (death-only end).
+    durations: {
+      order: ['d5', 'd10', 'd15', 'd20', 'endless'],
+      d5: { time: 300, label: '5:00' },
+      d10: { time: 600, label: '10:00' },
+      d15: { time: 900, label: '15:00' },
+      d20: { time: 1200, label: '20:00' },
+      endless: { time: null, label: 'ENDLESS' },
+    },
+    defaultDuration: 'd5', // default = the old fixed 5:00 run → solo invariance
   },
 
   player: {
@@ -435,6 +446,7 @@ export const CFG = {
     storageKey: 'qsurv.meta.v1',
     winsKey: 'qsurv.wins.v1',        // per-level cumulative victory counts (13.6)
     levelKey: 'qsurv.level.v1',      // last-selected level (13.7)
+    durKey: 'qsurv.duration.v1',     // per-level selected run duration (17.2)
     charKey: 'qsurv.character.v1',   // last-selected playable character (11.6.2)
     charListKey: 'qsurv.chars.v1',   // unlocked character keys (11.6.2, D58)
     shardPerScore: 400,   // shards per score point

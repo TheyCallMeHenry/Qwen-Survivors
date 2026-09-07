@@ -14,7 +14,7 @@ import { Pickups, escapeFromSpots } from '../entities/pickups.js';
 import { Enemies } from '../entities/enemies.js';
 import { Combat } from '../entities/combat.js';
 import { Player, cardOffers, applyCard, recomputeStats, charDef } from '../entities/player.js';
-import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, loadSelectedLevel, isUnlocked, loadZoom, saveZoom, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar } from './meta.js';
+import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, loadSelectedLevel, isUnlocked, loadZoom, saveZoom, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations } from './meta.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../entities/spawner.js';
 import { getLevel, LEVEL_ORDER } from '../world/levels.js';
 import { buildCharacters } from '../art/characters.js';
@@ -104,6 +104,11 @@ export class Game {
     if (!isUnlocked(this.wins, this.selectedLevelKey)) this.selectedLevelKey = 'm01';
     this.level = getLevel(this.selectedLevelKey); // backdrop + Start honor the persisted selection
     this.levelKey = this.selectedLevelKey;
+    // Duration-select choice (17.2) — per-level map, default d5 = the old fixed 5:00 run.
+    this.durations = loadDurations(CFG.meta.durKey);
+    this.selectedDurationKey = durationFor(this.durations, this.selectedLevelKey);
+    this.runDuration = CFG.run.durations[this.selectedDurationKey].time; // set per-run by startRun (null = ENDLESS)
+    this._bossIdx = 0;
     this._reskinPickups();
     // View zoom (13.8): touch default 0.80 / desktop 1.0, persisted (qsurv.zoom.v1).
     this.zoom = loadZoom(CFG.zoom.key, document.body.classList.contains('touch'));
@@ -193,6 +198,8 @@ export class Game {
     this.cards = null;
     this.victory = false;
     this.bossSpawned = false;
+    this._bossIdx = 0; // 17.3: boss events fired this run (derived-from-map, retry-safe)
+    this.runDuration = CFG.run.durations[durationFor(this.durations, this.levelKey)].time; // null = ENDLESS
     this._ghostT = 0;
     this._ghost = false; // 11.6.3: co-op startRun re-arms it via the ghost flow (D59)
     this.loop.timescale = 1;
@@ -229,6 +236,7 @@ export class Game {
     const lvl = getLevel(key);
     this.level = lvl;
     this.levelKey = key;
+    this.selectedDurationKey = durationFor(this.durations, key); // 17.2: menu shows this level's saved duration
     this._reskinPickups();
     this.world.data = null;
     this._genMenuBackdrop();
@@ -239,6 +247,14 @@ export class Game {
       this.state = 'MENU';
     }
     this.input.clearTransient();
+  }
+
+  // Duration-select choice (17.2): apply to the selected level + persist the whole map.
+  setDuration(durKey) {
+    if (!CFG.run.durations[durKey]) return;
+    this.durations[this.selectedLevelKey] = durKey;
+    this.selectedDurationKey = durKey;
+    saveDurations(CFG.meta.durKey, this.durations);
   }
 
   pause() {
@@ -378,7 +394,8 @@ export class Game {
     this.particles.update(dt);
     this.snow.update(dt);
     this.camera.update(dt, p.x, p.y, p.vx, p.vy);
-    if (this.t >= CFG.run.time) this._gameOver(true);
+    // 17.3: victory = survive to the selected duration; ENDLESS never wins (death-only).
+    if (this.runDuration != null && this.t >= this.runDuration) this._gameOver(true);
     if (this.state === 'PLAYING') this._coopBroadcast(); // host: per-step snapshot
   }
 
@@ -397,16 +414,22 @@ export class Game {
     const L = this.level || getLevel('m01');
     const B = L.boss || { key: 'wraith', at: R.bossAt, name: 'THE WRAITH' };
     const S = this.enemies.coopS; // 11.3 co-op difficulty factor (1.0 solo)
-    if (!this.bossSpawned && this.t >= B.at) {
+    // 17.3 (PLAN §3.10): boss events at B.at, B.at+every, … strictly BEFORE the run
+    // ends (20-min run → 19:00 fires; 15-min → 3 events); ENDLESS streams forever.
+    // Matches spawner.bossTimes. Default 300 s run: exactly one event at 240 —
+    // bit-identical to the old single-boss path (same rng order, same banner).
+    const nextT = B.at + this._bossIdx * R.bossEvery;
+    if (this.t >= nextT && (this.runDuration == null || nextT < this.runDuration)) {
       // 11.10: N players = N bosses of the current level (count fixed at the
-      // spawn moment — mid-run joiners before B.at add bosses; after it, the
-      // wave is done). Solo: exactly 1, bit-identical to the pre-11.10 path.
+      // spawn moment — mid-run joiners before the event add bosses; after it,
+      // the wave is done). Solo: exactly 1, bit-identical to the pre-11.10 path.
       const n = bossCount(this.players.length);
       for (let i = 0; i < n; i++) {
         const pt = this._spawnPt();
         this.enemies.spawn(B.key, pt.x, pt.y);
       }
       this.bossSpawned = true;
+      this._bossIdx++;
       this.bus.emit('banner', { text: n > 1 ? `${B.name} AWAKENS ×${n}` : `${B.name} AWAKENS` });
     }
     if (this.t < CFG.spawner.firstSpawn) return;
@@ -602,7 +625,7 @@ export class Game {
         this.net = null;
         break;
       case MSG.roster: this._netRoster(m); break;
-      case MSG.runstart: if (this.netRole !== 'host') this._startClientRun(m.seed, m.levelKey); break;
+      case MSG.runstart: if (this.netRole !== 'host') this._startClientRun(m.seed, m.levelKey, m.dur); break;
       case MSG.input: this._netInput(m); break;
       case MSG.state: if (this.netRole === 'client') this._netState(m); break;
       case MSG.left: break; // roster covers it
@@ -633,7 +656,7 @@ export class Game {
     }
     this.players = [this.player, ...this.remote];
     this.enemies.coopS = coopScale(this.players.length); // 11.3: live ramp on mid-run join/leave
-    if (grew) this.net.sendRunStart(this.netMyId, this._coopSeed, this.levelKey); // mid-run joiner gets the seed
+    if (grew) this.net.sendRunStart(this.netMyId, this._coopSeed, this.levelKey, this.runDuration); // mid-run joiner gets the seed + duration
     if (this.state === 'PLAYING') this._applyAssign(); // 11.6.4: roster changed mid-run — (re)resolve per-seat chars
   }
 
@@ -759,7 +782,7 @@ export class Game {
     this._step = 0;
     this._coopSeed = seed;
     this.weaponOwner = {}; // 11.5: ownership resets each run
-    this.net.sendRunStart(this.netMyId, seed, this.levelKey);
+    this.net.sendRunStart(this.netMyId, seed, this.levelKey, this.runDuration); // 17.3: host broadcasts the duration (null = ENDLESS)
     this._applyAssign(); // 11.6.4 (D56/D59): per-seat chars + ghost 2-offer deal
     const hw = charDef(this.player.charKey).weapon; // 11.6b: the host's own starting weapon is pre-owned too
     if (hw && !this.weaponOwner[hw]) this.weaponOwner[hw] = this.player;
@@ -808,7 +831,7 @@ export class Game {
 
   // --- co-op client: no local sim — apply host snapshots + interpolate ---
 
-  _startClientRun(seed, levelKey) {
+  _startClientRun(seed, levelKey, dur) {
     this.levelKey = levelKey || this.levelKey || 'm01';
     this.level = getLevel(this.levelKey);
     this._reskinPickups();
@@ -831,6 +854,12 @@ export class Game {
     this.camera.snap(s.x, s.y);
     this.t = 0; this.score = 0; this.kills = 0;
     this.bossSpawned = false;
+    this._bossIdx = 0;
+    // 17.3: duration is host-authoritative (null = ENDLESS); old host without
+    // the dur field → fall back to this client's own per-level map.
+    this.runDuration = dur === undefined
+      ? CFG.run.durations[durationFor(this.durations, this.levelKey)].time
+      : (typeof dur === 'number' && dur > 0 ? dur : null);
     this.victory = false;
     this.levelupQueue = 0;
     this.cards = null;

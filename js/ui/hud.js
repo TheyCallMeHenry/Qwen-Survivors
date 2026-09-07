@@ -235,7 +235,9 @@ export function initHud(game, { icons } = {}) {
     xpFill.style.transform = `scaleX(${clamp(p.xp / CFG.xpNeed(p.level), 0, 1)})`;
     setTxt(lvlBadge, `LV ${p.level}`);
     syncEquip(p); // 19.1: seat-0 (solo = local) equipment row, rebuilt only on loadout change
-    setTxt(timer, fmtTime(CFG.run.time - game.t));
+    // 17.3: count down the selected duration; ENDLESS (null) counts up.
+    const rd = game.runDuration === null ? null : (game.runDuration == null ? CFG.run.time : game.runDuration);
+    setTxt(timer, fmtTime(rd === null ? game.t : rd - game.t));
     setTxt(score, String(game.liveScore()));
     const cd = String(clamp(p.dashCd / CFG.player.dashCd, 0, 1));
     if (cd !== cdStr) { cdStr = cd; btnDash.style.setProperty('--cd', cd); btnDashHud.style.setProperty('--cd', cd); }

@@ -5,14 +5,14 @@ import { CFG } from '../js/config.js';
 import { generateWorld } from '../js/world/generate.js';
 import { LEVELS, LEVEL_ORDER, getLevel } from '../js/world/levels.js';
 import { HashGrid } from '../js/utils/grid.js';
-import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../js/entities/spawner.js';
+import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint, bossTimes } from '../js/entities/spawner.js';
 import { Enemies } from '../js/entities/enemies.js';
 import { Player, cardOffers, applyCard, recomputeStats, cardEffectText, charDef } from '../js/entities/player.js';
 import { Combat } from '../js/entities/combat.js';
 import { Pickups, escapeFromSpots } from '../js/entities/pickups.js';
 import { GEM_PAL, HEART_PAL } from '../js/art/items.js';
 import { SNAP_V, WEAPON_KEYS, PASSIVE_KEYS, SYNERGY_KEYS, ENEMY_KEYS, E_FLAG_FLASH, E_FLAG_BURN, E_FLAG_BLIGHT, E_FLAG_BOSS, E_FLAG_FLIP, playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState } from '../js/net/sync.js';
-import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom, defaultChars, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar } from '../js/core/meta.js';
+import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom, defaultChars, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations } from '../js/core/meta.js';
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
@@ -1903,6 +1903,62 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     '26.2: plaque frame uses the kind accent color');
   ok(/\.card\.synergy \.card-badge/.test(css), '26.2: FUSED badge has its own violet style');
   ok(/@media \(prefers-reduced-motion: reduce\)/.test(css), '26.2: deal-in animation respects reduced-motion');
+}
+
+// ============ Phase 17 — selectable run durations & boss schedule (PLAN §3.10, D65) ============
+{
+  const D = CFG.run.durations;
+  ok(D.order.length === 5 && CFG.run.defaultDuration === 'd5', '17.1: 5 durations, default d5');
+  ok(D.d5.time === 300 && D.d10.time === 600 && D.d15.time === 900 && D.d20.time === 1200 && D.endless.time === null,
+    '17.1: duration times 5/10/15/20 min + ENDLESS (null)');
+  ok(D.d5.time === CFG.run.time && D.d5.label === '5:00', '17.1: d5 = the old fixed 5:00 run (solo invariance)');
+  ok(CFG.run.bossAt === 240 && CFG.run.bossEvery === 300, '17.1: boss cadence — first 4:00, every 5:00');
+  ok(CFG.meta.durKey === 'qsurv.duration.v1', '17.2: per-level duration LS key');
+}
+{
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  ok(eq(bossTimes(300), [240]), '17.4: 5-min run → bosses [240]');
+  ok(eq(bossTimes(600), [240, 540]), '17.4: 10-min run → [240, 540]');
+  ok(eq(bossTimes(900), [240, 540, 840]), '17.4: 15-min run → exactly 3 events (user-confirmed example)');
+  ok(eq(bossTimes(1200), [240, 540, 840, 1140]), '17.4: 20-min run → 19:00 fires (T < run end)');
+  ok(eq(bossTimes(null), []) && eq(bossTimes(undefined), []), '17.4: ENDLESS → no finite table (cadence streams)');
+}
+{
+  ok(durationFor({}, 'm01') === 'd5' && durationFor({ m01: 'nope' }, 'm01') === 'd5' && durationFor(null, 'm03') === 'd5',
+    '17.2: durationFor → d5 on empty/unknown/no-map');
+  ok(durationFor({ m02: 'd15' }, 'm02') === 'd15' && durationFor({ m02: 'd15' }, 'm03') === 'd5',
+    '17.2: durationFor is per-level (m03 unaffected by m02 pick)');
+  ok(Object.keys(loadDurations('absent-key.ls')).length === 0, '17.2: loadDurations without storage → {}');
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+  };
+  const m = loadDurations(CFG.meta.durKey);
+  m.m02 = 'd15'; m.m03 = 'endless';
+  saveDurations(CFG.meta.durKey, m);
+  const back = loadDurations(CFG.meta.durKey);
+  ok(back.m02 === 'd15' && durationFor(back, 'm02') === 'd15', '17.2: duration localStorage round-trip (m02 → d15)');
+  ok(durationFor(back, 'm03') === 'endless', '17.2: ENDLESS persists as a selection');
+  ok(durationFor(back, 'm01') === 'd5', '17.2: unset level falls back to d5');
+  globalThis.localStorage.setItem(CFG.meta.durKey, '{"m02":"bogus","nolevel":"d10","x":1}');
+  ok(Object.keys(loadDurations(CFG.meta.durKey)).length === 0, '17.2: corrupt map entries dropped');
+  globalThis.localStorage.setItem(CFG.meta.durKey, 'not json');
+  ok(Object.keys(loadDurations(CFG.meta.durKey)).length === 0, '17.2: corrupt JSON → {}');
+}
+{
+  const html = readFileSync(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
+  ok(/<div id="duration-select" class="duration-select" role="radiogroup" aria-label="Select run duration"><\/div>/.test(html),
+    '17.2: #duration-select radiogroup beside the level select');
+  const css = readFileSync(fileURLToPath(new URL('../css/main.css', import.meta.url)), 'utf8');
+  ok(/\.duration-select \{[^}]*flex-wrap: wrap/.test(css), '17.2: duration chips wrap (mobile layout)');
+  ok(/\.dur-chip \{[^}]*min-width: 72px[^}]*min-height: 72px/.test(css), '17.2: duration chips ≥72 px touch targets (rule 6)');
+  ok(/\.dur-chip\.sel \{/.test(css), '17.2: selected-chip style present');
+  const ssrc = readFileSync(fileURLToPath(new URL('../js/ui/screens.js', import.meta.url)), 'utf8');
+  ok(/function renderDurations\(\)/.test(ssrc) && /game\.setDuration\(key\)/.test(ssrc),
+    '17.2: renderDurations + game.setDuration wiring live');
+  ok(/renderLevels\(\); renderDurations\(\);/.test(ssrc), '17.2: menu screen renders both selects');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);
