@@ -8,7 +8,7 @@ Owned here; never re-narrated in PROGRESS.md.
 - **Node on PATH:** `node` resolves directly in the current shell (verified 2026-09-05, v24.11.0). If a shell lacks it, use `"/c/Program Files/nodejs/node.exe"`. Session 15 reported v24.14.1 in its environment — version may differ per shell; check `node --version` at session start.
 - Gates (canonical commands, run from repo root):
   - `node tools/check.mjs` → 33/33 modules import-clean
-  - `node tools/test-logic.mjs` → 661/661
+  - `node tools/test-logic.mjs` → 694/694
   - `node tools/test-boot.mjs` → `PASS boot-sim runs=4`
 
 ## Git
@@ -25,7 +25,7 @@ Owned here; never re-narrated in PROGRESS.md.
 
 ## Workspace artifacts
 
-- Gitignored scratch: `unsloth-tmp/` (disposable sims — `pool-sim.mjs` 12.7 Monte-Carlo, `syn-seed-scan.mjs` boot-flake seed scan live here; re-create as needed), `NOTES.md`, `STATUS.md`, `server.log`/`server-err.log`, `isolate-*-v8.log`, `prof-out.txt`.
+- Gitignored scratch: `unsloth-tmp/` (disposable sims — latest perf capture `probe-mobile-session27.txt` — `pool-sim.mjs` 12.7 Monte-Carlo, `syn-seed-scan.mjs` boot-flake seed scan live here; re-create as needed), `NOTES.md`, `STATUS.md`, `server.log`/`server-err.log`, `isolate-*-v8.log`, `prof-out.txt`.
 - Hygiene is proactive (AGENTS rule 8): delete strays the same turn they appear, incl. Windows reserved-name artifacts (`nul`) via extended-length path (Python `os.remove(r'\\?\full\file')`; shell `rm`/`del` fail on reserved names). Verify `git status --short` before declaring a turn done.
 
 ## Browser note
@@ -33,5 +33,7 @@ Owned here; never re-narrated in PROGRESS.md.
 - All gate coverage is Node stub-DOM (D15); **no real-browser run happens in this environment**. Browser-only behavior (CSS rendering, WebGL/compositor, device input) is verified by CSS-content asserts (test-logic regexes on `main.css`) + user playtest on Pages. 22.8 (mobile "View zoom") needs device repro — impossible here.
 
 ## Docs history
+
+- `docs/ARCHIVE.md` (2026-09-06, session 27b compression pass): verbatim overflow home for PROGRESS.md — completed-phase checklist detail, Session Log entries before 2026-09-06 session 24, and the retired PROGRESS Decisions row table. Consult on demand; never loaded every session.
 
 - This file + `docs/DECISIONS.md` were planned in session 13 (2026-09-05) but lost before writing; created 2026-09-05 (session 16). Until a decision has a DECISIONS.md entry, its full text lives on its PROGRESS checklist line / table row.

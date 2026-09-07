@@ -12,7 +12,7 @@ export function charDef(key) {
 
 export class Player {
   constructor(def) {
-    this.def = def; // characters.player {w, h, shadowR, idle[2], run[4]}
+    this.def = def; // roster sheet {w, h, shadowR, idle[2], run[4]} — art/heroes.js (Phase 27)
     this.flashes = null; // [idleFlash[2], runFlash[4]] — injected (browser)
     this.charKey = 'mage'; // 11.6: selected playable (solo default = starter, D58)
     this.x = 0; this.y = 0; this.vx = 0; this.vy = 0;

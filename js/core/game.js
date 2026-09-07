@@ -17,7 +17,8 @@ import { Player, cardOffers, applyCard, recomputeStats, charDef } from '../entit
 import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, loadSelectedLevel, isUnlocked, loadZoom, saveZoom, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar } from './meta.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../entities/spawner.js';
 import { getLevel, LEVEL_ORDER } from '../world/levels.js';
-import { buildCharacters, buildRoster, buildGhost } from '../art/characters.js';
+import { buildCharacters } from '../art/characters.js';
+import { buildRoster, buildGhost } from '../art/heroes.js';   // Phase 27 from-scratch sheets
 import { gemHeartFor } from '../art/items.js';
 import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';

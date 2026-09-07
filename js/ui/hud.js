@@ -9,7 +9,7 @@
 
 import { CFG } from '../config.js';
 import { clamp, fmtTime } from '../utils/math.js';
-import { buildGhost } from '../art/characters.js';
+import { buildGhost } from '../art/heroes.js';   // Phase 27 from-scratch sheets
 import { drawIconScaled } from '../art/items.js';
 import { charAccent, ghostColor, resolveChars } from '../net/coop.js';
 

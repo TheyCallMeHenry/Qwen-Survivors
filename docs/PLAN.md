@@ -304,6 +304,16 @@ User tested the published Pages build. Six asks, scoped below against in-tree co
 - **26.3** Player character model redesign (5 sheets in `characters.js`, footprints byte-stable).
 - **26.4** Gates green (check 33 · logic ≥682 · boot PASS runs=4) + new asserts (icon plate content, card DOM structure, roster footprint contract) + README/PROGRESS sync.
 
+### 3.18 Playable character sheets: full from-scratch reimagining (Phase 27 — user directive 2026-09-07)
+
+**User directive (verbatim, USER-INPUT-LOG 2026-09-07):** “throw out” the current/original character designs and genuinely reimagine/redesign them from scratch based on their archetypes/roles, as detailed and refined as possible. Supersedes the §3.17/26.3 sheet designs (refinement-in-place rejected).
+
+**Design:** new module `js/art/heroes.js` owns all five playable sheets; `characters.js` is enemy skins only (its `player` key + roster exports retired — nothing reads them). Archetype concept per D62 role: **mage = “Moonscribe”** (tall bell-hood moon cleric, crescent staff, ink-glow runes), **warden = “Oathbound”** (broad plate knight, plumed helm, lantern-heart chest sigil, tower shield arm), **ranger = “Greenwalker”** (lean leaf-mesh mantle, branch bow held vertical, quiver + thrown scarf, acorn charm), **swash = “Ember Duelist”** (open longcoat with tails, baldric/plume diagonals, lit brass pyre lance), **ghost = ragged sheet** (faceless cloth-in-motion, torn hem rippling against the stride, eye holes right of centre = facing). All build-time gradient-lit volumes + `formShade`, secondary motion driven off the existing `(dy, legL, legR)` signature — no pipeline change.
+
+**Contracts:** footprints + shadowR byte-stable (mage 56×64/12 · warden 58×66/13 · ranger 52×60/11 · swash 54×62/12 · ghost 56×64/12), `idle[2]/run[4]`, boot ctx-stub rules (arc ≤6 args, ellipse exactly 7, gradients only via addColorStop). New boot asserts: sheets retired from `buildCharacters` · per-seat ghost rebuild · no shared frame canvases · detail floor (radial glows + strokes per sheet).
+
+**Art check without a browser:** `tools/sprite-preview.mjs` — Canvas2D→SVG shim rendering real builders to an ASCII contact sheet (ink %, content bbox, feetY, clip-overflow flags) + `unsloth-tmp/hero-preview.html` (zoomed SVG, colored + silhouette pairs).
+
 ## 4. Phases & Tasks
 
 ### Phase 0 — Scaffold & Docs *(done first, always)*

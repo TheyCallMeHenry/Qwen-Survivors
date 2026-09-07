@@ -1,7 +1,7 @@
 // All tuning in one place. World units = CSS pixels.
 
 export const CFG = {
-  world: { w: 4200, h: 3200, margin: 70, tile: 256, cullPad: 300 },
+  world: { w: 4200, h: 3200, margin: 70, tile: 256, cullPad: 300, starBands: 4 }, // starBands = 25.4d twinkle alpha-group count
 
   run: {
     time: 300,          // survive this long (s) to win
@@ -27,7 +27,7 @@ export const CFG = {
   },
 
   // Playable character roster (11.6, D28/D34/D56–D62). Data-driven (D60): adding a
-  // character = one entry here + one frame builder in art/characters.js.
+  // character = one entry here + one frame builder in art/heroes.js (Phase 27 sheets).
   // `hp`/`speed` are absolute bases (replace CFG.player when selected), `dmg` = weapon-
   // damage multiplier, `weapon` = pre-owned starting weapon (null = none → ghost gets 2
   // offers, D59), `cost` = Soulshard unlock price (D58; 0 = default/starter), `accent` =

@@ -65,6 +65,17 @@ function makeCtx() {
 }
 const ctx2d = makeCtx();
 
+// 27.4 detail floor: rebuild one sheet with an instrumented ctx and count the op mix.
+// Heroes builders are pure functions of (dy, legL, legR), so a fresh build == the
+// roster frame's draw stream. Boot stub ctx counts stay on the global `drawOps`.
+async function sheetDetail(sheetObj) {
+  const heroes = await import('../js/art/heroes.js');
+  const b = { mage: heroes.mageFrame, warden: heroes.wardenFrame, ranger: heroes.rangerFrame, swash: heroes.swashFrame };
+  Object.keys(drawOps).forEach((k) => { drawOps[k] = 0; });
+  (b[sheetObj] || ((c, dy, l, r) => heroes.ghostFrame('#ff4b4b', dy, l, r)))(0, 4, 0);
+  return { grads: drawOps.radial, strokes: drawOps.stroke };
+}
+
 function makeEl(tag = 'div') {
   const el = {
     tag,
@@ -152,7 +163,8 @@ const { Loop } = await import('../js/core/loop.js');
 const { Input } = await import('../js/core/input.js');
 const { Game } = await import('../js/core/game.js');
 const { saveMeta, saveSelectedLevel } = await import('../js/core/meta.js');
-const { buildCharacters, buildRoster } = await import('../js/art/characters.js');
+const { buildCharacters } = await import('../js/art/characters.js');
+const { buildRoster, buildGhost } = await import('../js/art/heroes.js');   // Phase 27 sheets
 const { buildItems, buildIcons, gemHeartFor } = await import('../js/art/items.js');
 const { initHud } = await import('../js/ui/hud.js');
 const { initScreens, saveScores } = await import('../js/ui/screens.js');
@@ -176,7 +188,7 @@ const icons = buildIcons();
 // sprite-shape sanity (the key-mismatch class of bug that kills a live frame)
 for (const k of Object.keys(CFG.enemies))
   assert(characters[k] && characters[k].frames.length > 0, `characters missing enemy "${k}"`);
-assert(characters.player.idle.length > 0 && characters.player.run.length > 0, 'characters missing player frames');
+assert(!characters.player, '27.1: playable sheets retired from buildCharacters (heroes.js only)');
 // 11.6.1 roster art (D28/D62): 5 sheets × idle[2]/run[4]; warden sheet strictly
 // LARGER than the original player sprite but < brute (area, D62); ghost tint rebuild.
 {
@@ -188,11 +200,25 @@ assert(characters.player.idle.length > 0 && characters.player.run.length > 0, 'c
   assert(roster.warden.w * roster.warden.h > roster.mage.w * roster.mage.h
     && roster.warden.w * roster.warden.h < 64 * 60, '11.6.1 D62: player < warden area < brute (64×60)');
   buildRoster('#4be3ff'); // D62 per-seat tint rebuild — no crash
+  assert(buildGhost('#ff7bd9').idle.length === 2, '27.1: ghost tint sheet rebuilds standalone');
+  for (const k of ['mage', 'warden', 'ranger', 'swash'])
+    assert(roster[k].run.every((f) => f.width > 0), `27.1: ${k} run frame built`);
   // 26.3 redesign contract: exact footprints + shadowR per sheet (hitboxes/anchors depend on these)
   const fp = { mage: [56, 64, 12], warden: [58, 66, 13], ranger: [52, 60, 11], swash: [54, 62, 12], ghost: [56, 64, 12] };
   for (const [k, [w, h, sr]] of Object.entries(fp))
     assert(roster[k].w === w && roster[k].h === h && roster[k].shadowR === sr,
       `26.3: ${k} sheet footprint/shadowR changed (${w}×${h}/r${sr} required)`);
+  // 27.2 run-cycle contract: every frame is its own canvas (no shared/reused frames).
+  for (const k of ['mage', 'warden', 'ranger', 'swash', 'ghost']) {
+    const sh = roster[k], all = [...sh.idle, ...sh.run];
+    assert(new Set(all).size === all.length, `27.2: ${k} shares a frame canvas`);
+  }
+  // 27.4 detail floor: every sheet draws a rich op stream (radial glows + strokes,
+  // not primitive blocks) — fresh build per char via the instrumented boot ctx.
+  for (const k of ['mage', 'warden', 'ranger', 'swash', 'ghost']) {
+    const d = await sheetDetail(k);
+    assert(d.grads >= 1 && d.strokes >= 3, `27.4: ${k} sheet too plain (glows=${d.grads} strokes=${d.strokes})`);
+  }
 }
 // 26.1 icon category plates: every buildIcons() entry built at 72×72
 for (const [k, ic] of Object.entries(icons))

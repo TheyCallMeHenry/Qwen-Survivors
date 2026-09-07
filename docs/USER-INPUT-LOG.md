@@ -13,6 +13,16 @@
 
 ## Entries (newest first)
 
+### 2026-09-07 — Directive: throw out the current character designs; genuinely reimagine/redesign them from scratch, maximally detailed/refined
+- **Received:** 2026-09-07 (no time in message; date only)
+- **Classification:** `feature request` (art) · `design decision` (supersedes the Phase 26.3 sheet designs — refinement-in-place rejected)
+- **Context:** Follow-up to the published Phase 26 "character redesign"; user judges those sheets still derivative of the original sprite and wants true from-scratch concepts per archetype.
+- **Verbatim input:**
+
+  ```
+  I want you to "throw out" the current/original character designs and genuinely reimagine/redesign them from scratch based on their archetypes/roles next. I want you to make them as detailed and refined as possibe.
+  ```
+
 ### 2026-09-06 — Directive: this session = complete visual overhaul of level-up cards + weapon/item icons + player character models redesign
 - **Received:** 2026-09-06 (no time in message; date only)
 - **Classification:** `feature request` (visual rework) · `design decision` (scope override of prior session proposal)
