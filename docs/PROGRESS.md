@@ -17,9 +17,9 @@ Rules for every future edit — this file is loaded at every session start; its 
 ## Status — 2026-09-07
 
 
-- **Active: Phase 14 COMPLETE (2026-09-07, session 34) — UNCOMMITTED.** In-run `#hud-shards` projected-award counter + unified co-op earnings (guests now accrue the host's run-level total in full, D54). Next in feature queue: **21 → 2.9** (21.1 needs user O-resolutions first; leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
-- **Gates (green on the Phase 14 tree, session 34):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **760/760** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0.
-- **Git:** `overnight-2026-08-22` = `main` = origin at `7acad05` (Phase 22 r4 `dbfe4f1` published, Pages live); Phase 14 dirty on top — commit only on user ask (rule 7).
+- **Active: none shipping — Phase 14 PUBLISHED (2026-09-07, session 34) at `533f730`** (in-run `#hud-shards` counter + unified co-op earnings, D54; Pages verified live). Next in feature queue: **21 → 2.9** (21.1 needs user O-resolutions first; leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
+- **Gates (green on published tree `533f730`, session 34):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **760/760** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0.
+- **Git:** `overnight-2026-08-22` = `main` = origin at `533f730` (tree clean; Pages serving Phase 14).
 - **Server:** DOWN (port 47893 not listening, re-checked session 27); recipe in `docs/ENV.md`.
 
 ## Master Checklist
@@ -118,13 +118,13 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 
 ## Resume Notes — session 34, 2026-09-07 (live state only; rewritten each session per Format contract)
 
-**Where we are (session 34 DONE):** **Phase 14 COMPLETE (UNCOMMITTED)** — `#hud-shards` live projection (`setTxt(shardsFor({score: liveScore()})) ◆`, `hud.js`) + unified co-op earnings: host gain on `sendClosed('run-end', gain)` → serve relays sanitized `shards` (host-seat close only) → client `_netClosed` accrues full amount locally (`sanitizeShards` in `net/coop.js`). Docs/README/PLAN §3.20/ENV synced. Published baseline unchanged: `dbfe4f1` (Phase 22 r4, Pages live).
+**Where we are (session 34 DONE):** **Phase 14 PUBLISHED at `533f730`** (ff-merge → `main`, both branches pushed, Pages verified via live `index.html` HUD `◆` counter) — `#hud-shards` live projection (`setTxt(shardsFor({score: liveScore()})) ◆`, `hud.js`) + unified co-op earnings: host gain on `sendClosed('run-end', gain)` → serve relays sanitized `shards` (host-seat close only) → client `_netClosed` accrues `sanitizeShards()` in full into local meta (meta stays player-specific, D53 otherwise holds; old-host/old-client wire additive). Docs/README/PLAN §3.20/ENV synced.
 
 **NEXT (exact):** feature queue **21 → 2.9** — Phase 21 (extended roster, PLAN §3.13 verbatim) starts at **21.1 O-resolutions: needs user confirm** (per-weapon stats, item slot rules, character archetypes/stats/unlock costs, Cannonball×leash, boulder auto-kill size class). 11.13 needs the NAS; 22.8 needs a phone — not this environment.
 
 **Gates (green on Phase 14 tree, session 34):** check.mjs **34/34** · test-logic **760/760** (+10) · boot `PASS boot-sim runs=4` · radial=0.0. Known boot flake 11.5 pump-rng: re-run once before bisecting.
 
-**Git state:** dirty on top of `7acad05`: `index.html` `css/main.css` `js/core/game.js` `js/net/conn.js` `js/net/coop.js` `js/ui/hud.js` `tools/serve.mjs` `tools/test-boot.mjs` `tools/test-logic.mjs` `README.md` `docs/PLAN.md` `docs/ENV.md` `docs/PROGRESS.md`. Commit only on user ask (rule 7). `unsloth-tmp/` gitignored.
+**Git state:** `overnight-2026-08-22` = `main` = origin at `533f730` (tree clean). `unsloth-tmp/` gitignored.
 
 **Probe seams:** probes import game modules directly in Node with ctx stubs; fixed seed env; `[10.4-bench]` counters permanent in test-boot (`DEBUG_BOOT=1`). Sprite art check: `node tools/sprite-preview.mjs [char]` → stdout ASCII + `unsloth-tmp/hero-preview.html`. Latest probe capture: `unsloth-tmp/probe-mobile-session27.txt` (disposable).
 
@@ -137,6 +137,8 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 Full texts + one-line row index for **D1–D84** live in `docs/DECISIONS.md` (append-only numbering, revisions carry new numbers; Format contract §5). Open phases cite: D64 (11.13) · D54 (14) · D69 (21) · Phase 18 shipped under **D84** (supersedes D67 caps/opens).
 
 ## Session Log (append-only, newest first; entries before session 24 archived verbatim to `docs/ARCHIVE.md`)
+
+- **2026-09-07 (session 34b) — Phase 14 PUBLISHED (user ask):** single commit `533f730` (13 files) on `overnight-2026-08-22` → ff-merge → `main`, pushed `7acad05..533f730` (both branches); Pages verified via live `index.html` (new `◆` counter in HUD markup). NEXT = queue 21 (21.1 O-resolutions need user) → 2.9.
 
 - **2026-09-07 (session 34) — Phase 14 CLOSED (in-run Soulshards counter + unified co-op earnings, D54):** `#hud-shards` under the score = live `shardsFor(liveScore)` projection, change-detected, runs-only (no economy change, O1=A). Co-op gap found + fixed: guests earned NOTHING (room closed bare, clients → menu) — now host gain rides the close (`sendClosed('run-end', gain)`), serve sanitizes/relays `shards` on host-seat closes only, client `_netClosed(m)` accrues `sanitizeShards()` in full into local meta (meta stays player-specific, D53 otherwise holds; old-host/old-client wire additive). Latent serve fix: `closed` handler now guards `room &&` (null-room TypeError). 3 boot wire-mirror `sendClosed`s upgraded. Gates **34/34 · 760/760 (+10) · boot PASS runs=4** (radial 0.0, clean first run). PLAN §3.20 + README + ENV baselines synced. **UNCOMMITTED** — commit ask pending (rule 7). NEXT = 21 (21.1 O-resolutions need user) → 2.9.
 
