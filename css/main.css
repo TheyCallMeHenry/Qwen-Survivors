@@ -576,6 +576,42 @@ body.touch .kbd-only { display: none; }
   background: #0b0f1e;
 }
 
+/* level-up action toolbar (18.3, D84): SKIP / RE-ROLL / BANISH — soul-blue, ≥72 px targets */
+.lv-actions { display: flex; gap: clamp(10px, 2vmin, 20px); justify-content: center; flex-wrap: wrap; }
+.lv-actions[hidden] { display: none; }
+.lv-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-width: 96px; min-height: 72px; padding: 8px 14px 6px;
+  border: 1px solid rgba(120, 180, 255, 0.45); border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(96, 165, 250, 0.12), rgba(0, 0, 0, 0)),
+    linear-gradient(180deg, rgba(20, 30, 56, 0.95), rgba(8, 12, 26, 0.95));
+  color: var(--text);
+  font-weight: 800; letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: transform 0.08s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.lv-btn canvas { width: 40px; height: 40px; display: block; }
+.lv-btn .lv-btn-name { font-size: 12px; }
+.lv-btn .lv-btn-count { font-size: 11px; color: #9cc3ff; font-variant-numeric: tabular-nums; }
+.lv-btn:hover { border-color: #9cc3ff; transform: translateY(-1px); box-shadow: 0 0 14px rgba(96, 165, 250, 0.35); }
+.lv-btn:active { transform: translateY(1px) scale(0.985); }
+.lv-btn:focus-visible { outline: 2px solid #9cc3ff; outline-offset: 2px; }
+.lv-btn[disabled] { opacity: 0.4; cursor: default; transform: none; box-shadow: none; }
+.lv-btn.armed { border-color: var(--danger); box-shadow: 0 0 16px rgba(255, 93, 115, 0.5); }
+.lv-btn.armed .lv-btn-count { color: var(--danger); }
+/* banish armed: cards read as banish targets */
+.cards.banishable .card { border-color: var(--danger); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 16px rgba(255, 93, 115, 0.35); cursor: crosshair; }
+
+/* meta shop section divider (18.2) */
+.meta-section {
+  margin-top: 14px; padding: 6px 2px;
+  border-top: 1px solid var(--line);
+  font-size: 12px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase;
+  color: #9cc3ff;
+}
+.meta-uses { font-size: 12px; font-weight: 700; color: #9cc3ff; font-variant-numeric: tabular-nums; }
+
 /* game over */
 .go-box { min-width: min(88vw, 420px); }
 #go-stats {

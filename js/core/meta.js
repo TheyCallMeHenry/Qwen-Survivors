@@ -10,7 +10,21 @@ function num(v) {
 export function defaultMeta() {
   const upgrades = {};
   for (const k of Object.keys(CFG.meta.upgrades)) upgrades[k] = 0;
-  return { shards: 0, upgrades };
+  return { shards: 0, upgrades, actions: defaultActions() };
+}
+
+// Level-up action shop levels (Phase 18, D84): 0 = locked; level = uses/run (1..10).
+export function defaultActions() {
+  const actions = {};
+  for (const k of CFG.meta.actions.order) actions[k] = 0;
+  return actions;
+}
+
+// Cost of the next level of action `key` at `level`; null = maxed/unknown.
+export function actionCost(key, level) {
+  const def = CFG.meta.actions[key];
+  if (!def || level >= def.max) return null;
+  return def.cost[Math.max(0, level)];
 }
 
 export function loadMeta(key) {
@@ -23,7 +37,12 @@ export function loadMeta(key) {
       const v = raw.upgrades && typeof raw.upgrades[k] === 'number' ? raw.upgrades[k] : 0;
       upgrades[k] = Math.min(CFG.meta.upgrades[k].max, Math.max(0, Math.floor(v)));
     }
-    return { shards: Math.floor(num(raw.shards)), upgrades };
+    // 18.2: actions ride the same profile; old saves (no key) default to locked — no data loss.
+    for (const k of CFG.meta.actions.order) {
+      const v = raw.actions && typeof raw.actions[k] === 'number' ? raw.actions[k] : 0;
+      def.actions[k] = Math.min(CFG.meta.actions[k].max, Math.max(0, Math.floor(v)));
+    }
+    return { shards: Math.floor(num(raw.shards)), upgrades, actions: def.actions };
   } catch { return def; }
 }
 
@@ -181,6 +200,19 @@ export function upgradeCost(key, level) {
   return upg.cost[level];
 }
 
+// Apply an action purchase onto `meta` (18.2): level +1 within [0, max], shards spent.
+// Returns ok=false (nothing touched) when maxed/unaffordable/unknown.
+export function buyAction(meta, key) {
+  const def = CFG.meta.actions[key];
+  if (!def) return false;
+  const level = meta.actions[key] || 0;
+  const cost = actionCost(key, level);
+  if (cost === null || meta.shards < cost) return false;
+  meta.shards -= cost;
+  meta.actions[key] = level + 1;
+  return true;
+}
+
 // Apply a meta profile onto a player (or plain stats object). Called after
 // player.reset() at the start of every run.
 export function applyMeta(p, meta) {
@@ -191,5 +223,11 @@ export function applyMeta(p, meta) {
   p.metaHp = M.maxHp.val * (u.maxHp || 0);
   p.metaDmg = M.dmg.val * (u.dmg || 0);
   p.metaSpeed = M.speed.val * (u.speed || 0);
+  // 18.3: seed this run's per-player action uses from the shop level (level = uses, D84).
+  const a = meta.actions || {};
+  p.actLeft = {};
+  for (const k of CFG.meta.actions.order) {
+    p.actLeft[k] = Math.min(CFG.meta.actions[k].max, Math.max(0, a[k] | 0));
+  }
   return p;
 }

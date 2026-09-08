@@ -41,6 +41,10 @@ export class Player {
     this._flame = { fuel: 0, reloading: false };
     this._flameAng = 0;
     this.overHeal = 0; // 23.3: Phoenix Heart over-health pool (hp above maxHp, decays to 0)
+    // 18.3: level-up screen actions (Phase 18, D84) — per-run use counters (seeded by
+    // applyMeta from the shop level) + this run's banished card keys (per-picker).
+    this.actLeft = { skip: 0, reroll: 0, banish: 0 };
+    this.banished = new Set();
   }
 
   // 11.6: select the playable character (D56: unique per co-op player; solo: menu pick).
@@ -75,6 +79,8 @@ export class Player {
     this._flame = { fuel: 0, reloading: false };
     this._flameAng = 0;
     this.overHeal = 0;
+    this.actLeft = { skip: 0, reroll: 0, banish: 0 }; // re-seeded by applyMeta per run
+    this.banished = new Set(); // run-long, per-picker (D84)
   }
 
   gainXp(n) {
@@ -602,7 +608,12 @@ export function recomputeStats(p) {
 // 11.6.3 ghost: `ghostOffers` = the player's UNIQUE starting-weapon pair (D59) —
 // while set (the ghost's first level-up only) the offers are exactly that pair;
 // it is cleared after the first pick (applyCard) and the flow resumes normally.
-export function cardOffers(weapons, passives, synergies, rng, cap = CFG.run.maxWeapons, exclude = null, ghostOffers = null) {
+// 18.4 banish (D84): `banished` = this picker's run-long banished keys — excluded from
+// the pool whether owned or not, so an OWNED banished card freezes at its current rank
+// (no upgrade offers) while other players' pools are untouched. `exclude` (11.5,
+// other-player ownership) stays separate. Reroll redraw-exclusion (D84/VS) reuses the
+// same param: pass banished ∪ current-offer keys for that one draw only.
+export function cardOffers(weapons, passives, synergies, rng, cap = CFG.run.maxWeapons, exclude = null, ghostOffers = null, banished = null) {
   if (Array.isArray(ghostOffers) && ghostOffers.length) {
     const avail = ghostOffers.filter((k) => CFG.weapons[k] && !(weapons[k] || 0));
     if (avail.length) return avail.map((k) => ({ kind: 'weapon', key: k, level: 1 }));
@@ -610,19 +621,23 @@ export function cardOffers(weapons, passives, synergies, rng, cap = CFG.run.maxW
   const pool = [];
   const ownedW = Object.keys(weapons).length;
   const locked = exclude instanceof Set ? exclude : null;
+  const ban = banished instanceof Set ? banished : null;
   for (const k of Object.keys(CFG.weapons)) {
     if (locked && locked.has(k)) continue;
+    if (ban && ban.has(k)) continue; // 18.4: banished (owned = frozen)
     const lvl = weapons[k] || 0;
     const wpn = CFG.weapons[k];
     if (lvl > 0 && lvl < wpn.levels.length) pool.push({ kind: 'weapon', key: k, level: lvl + 1 });
     else if (lvl === 0 && ownedW < cap) pool.push({ kind: 'weapon', key: k, level: 1 });
   }
   for (const k of Object.keys(CFG.passives)) {
+    if (ban && ban.has(k)) continue;
     const lvl = passives[k] || 0;
     if (lvl < CFG.passives[k].max) pool.push({ kind: 'passive', key: k, level: lvl + 1 });
   }
   for (const k of Object.keys(CFG.synergies)) {
     if (locked && locked.has(k)) continue; // 11.6b: other-owned synergy (first-pick-wins)
+    if (ban && ban.has(k)) continue; // 18.4
     const S = CFG.synergies[k];
     const lvl = (synergies && synergies[k]) || 0;
     if (lvl >= S.levels.length) continue;
@@ -652,6 +667,11 @@ function drawOffers(pool, rng) {
     bag[j] = tmp;
   }
   return bag.slice(0, n);
+}
+
+// 18.4 SKIP XP grant (D84, pure): 66% of the NEXT level's requirement, floored.
+export function skipXp(level) {
+  return Math.floor(CFG.meta.actions.skip.xpRatio * CFG.xpNeed(level));
 }
 
 // Is the synergy requirement `key` (a weapon or passive key) at max level?

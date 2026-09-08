@@ -171,7 +171,7 @@ const { initScreens, saveScores } = await import('../js/ui/screens.js');
 const { aliveCap } = await import('../js/entities/spawner.js');
 const { getLevel } = await import('../js/world/levels.js');
 const { clamp, rand, mulberry32 } = await import('../js/utils/math.js');
-const { recomputeStats, cardOffers } = await import('../js/entities/player.js');
+const { recomputeStats, cardOffers, Player, skipXp } = await import('../js/entities/player.js');
 const { weaponCap, bossCount } = await import('../js/net/coop.js');
 const { SNAP_V } = await import('../js/net/sync.js');
 
@@ -859,14 +859,37 @@ pump(30);
 assert(game.state === 'MENU', `btn-go-menu did not return to menu (state=${game.state})`);
 byId['btn-upgrades'].click();
 pump(30);
-assert(byId['meta-list'].children.length === 5, 'Upgrades screen: expected 5 upgrade rows');
+// 18.2: 5 upgrade rows + section divider + 3 action rows (skip/reroll/banish)
+assert(byId['meta-list'].children.length === 9, `Upgrades screen: expected 9 rows (5 upgrades + divider + 3 actions), got ${byId['meta-list'].children.length}`);
+assert(byId['meta-list'].children[5].className === 'meta-section', '18.2: actions section divider present');
 assert(byId['meta-shards'].textContent === '50', 'Upgrades screen: shard count not rendered');
 const buyBtn = byId['meta-list'].children[0].children[2];
 assert(buyBtn._upgKey === 'maxHp', 'first upgrade row is not maxHp');
 buyBtn.click();
 assert(game.meta.upgrades.maxHp === 1, 'buyMeta did not level up maxHp');
-assert(game.meta.shards === 30, 'buyMeta did not deduct the 20-shard cost');
+assert(game.meta.shards === 0, 'buyMeta did not deduct the 50-shard cost (D84 slow-down)');
 assert(JSON.parse(localStorage.getItem(CFG.meta.storageKey)).upgrades.maxHp === 1, 'meta purchase not persisted');
+// 18.2 action purchase E2E: locked rows render "Unlock"; unaffordable → disabled
+const actRows = () => [...byId['meta-list'].children].filter((c) => c.children[2] && c.children[2]._actKey);
+const actRows0 = actRows();
+assert(actRows0.length === 3 && actRows0[0].children[2]._actKey === 'skip'
+  && actRows0[1].children[2]._actKey === 'reroll' && actRows0[2].children[2]._actKey === 'banish',
+  '18.2: three action rows in skip/reroll/banish order');
+assert(actRows0[0].children[2].textContent === 'Unlock' && actRows0[0].children[2].disabled,
+  '18.2: locked + unaffordable action button renders "Unlock" disabled');
+game.meta.shards = 900;
+saveMeta(CFG.meta.storageKey, game.meta);
+byId['btn-upgrades-back'].click();
+pump(30);
+byId['btn-upgrades'].click(); // re-render with the funded wallet
+pump(30);
+actRows()[0].children[2].click(); // unlock SKIP at 300
+assert(game.meta.actions.skip === 1 && game.meta.shards === 600, '18.2: SKIP unlock costs exactly 300');
+actRows()[0].children[2].click(); // row re-rendered → "+1" at 600
+assert(game.meta.actions.skip === 2 && game.meta.shards === 0, '18.2: SKIP +1 costs exactly 600 (tier ladder)');
+assert(actRows()[0].children[2].disabled, '18.2: action button disabled again at 0 shards');
+assert(JSON.parse(localStorage.getItem(CFG.meta.storageKey)).actions.skip === 2,
+  '18.2: action purchase persisted to qsurv.meta.v1');
 byId['btn-upgrades-back'].click();
 pump(30);
 
@@ -886,6 +909,10 @@ passivePickDone = false; // 20.3 re-arms per run (run 1 asserts below)
 byId['btn-start'].click();
 assert(game.state === 'PLAYING', 'btn-start click did not start run 2');
 assert(game.player.maxHp === 80, 'meta maxHp upgrade not applied at run start (mage 60 + 20 expected)');
+// 18.3: shop action levels seed this run's per-player use counters (skip=2 bought above)
+assert(game.player.actLeft.skip === 2 && game.player.actLeft.reroll === 0 && game.player.actLeft.banish === 0
+  && game.player.banished.size === 0,
+  '18.3: run start seeds actLeft from shop levels (skip 2 / reroll 0 / banish 0)');
 // 20.1 (D66): runs start with NO passives — empty dicts + baseline multipliers
 // (meta bonuses ride metaHp/metaDmg/metaSpeed, untouched by the rule).
 assert(Object.keys(game.player.passives).length === 0 && Object.keys(game.player.synergies).length === 0
@@ -2687,6 +2714,88 @@ m03RunDone = true;
   gE.setDuration('d5'); // LS hygiene: leave the default map behind for any later block
 }
 
+// ============ Phase 18 — level-up actions E2E: SKIP / RE-ROLL / BANISH (D84) ============
+// Deterministic: LEVELUP entered via levelupQueue + _startLevelUp (real offer pipeline +
+// real DOM via the bus), no pump() — the steer() auto-picker never sees these states.
+{
+  const LV = byId['lv-actions'];
+  const CARD0 = () => byId['cards'];
+  const forceLevelUp = () => { game.levelupQueue = 1; game._startLevelUp(); };
+  game.toMenu(); pump(10);
+
+  // (a) Solo invariance: nothing unlocked → zero uses; toolbar hidden even at LEVELUP.
+  game.meta.actions = { skip: 0, reroll: 0, banish: 0 };
+  game.startRun('m01');
+  assert(Object.values(game.player.actLeft).every((v) => v === 0), '18.3: locked shop → zero action uses at run start');
+  forceLevelUp();
+  assert(game.state === 'LEVELUP' && CARD0().children.length > 0, '18.x: forced LEVELUP built real cards');
+  assert(LV.hidden === true, '18.3: all actions locked → toolbar stays hidden (solo invariance)');
+  const xpA = game.player.xp;
+  game.levelupSkip(); game.levelupReroll(); game.levelupBanish(0);
+  assert(game.player.xp === xpA && game.player.banished.size === 0 && game.state === 'LEVELUP'
+    && game.levelupQueue === 1,
+    '18.3: all three actions no-op at 0 uses (uses banked, state untouched)');
+
+  // (b) Unlocked run: counts render ×1, SKIP grants exactly 66% XP and ends the pick step.
+  game.meta.actions = { skip: 1, reroll: 1, banish: 1 };
+  game.startRun('m01');
+  assert(game.player.actLeft.skip === 1 && game.player.actLeft.reroll === 1 && game.player.actLeft.banish === 1,
+    '18.3: shop levels seed the per-run use counters');
+  forceLevelUp();
+  assert(!LV.hidden && LV.children.length === 3, '18.3: unlocked actions reveal the toolbar');
+  assert(LV.children[0].children[2].textContent === '×1' && !LV.children[0].disabled,
+    '18.3: action button renders ×N count and stays enabled with uses left');
+  const xp0 = game.player.xp, lv0 = game.player.level;
+  LV.children[0].click(); // SKIP via the real button
+  assert(game.player.xp === xp0 + skipXp(lv0), `18.4: SKIP granted exactly floor(0.66 × xpNeed(${lv0})) = ${skipXp(lv0)}`);
+  assert(game.state === 'PLAYING' && game.cards === null && game.levelupQueue === 0,
+    '18.4: SKIP consumed the queued level-up (no card applied)');
+  assert(LV.children[0].disabled && LV.children[0].children[2].textContent === '×0',
+    '18.3: spent action button disables at ×0');
+
+  // (c) RE-ROLL: disjoint redraw, use decremented.
+  forceLevelUp();
+  const keys0 = game.cards.map((c) => `${c.key}@${c.level}`);
+  LV.children[1].click(); // RE-ROLL
+  assert(game.player.actLeft.reroll === 0, '18.4: RE-ROLL decrements the run counter');
+  assert(game.cards && game.cards.every((c) => !keys0.includes(`${c.key}@${c.level}`)),
+    '18.4: RE-ROLL draw is disjoint from the discarded set');
+
+  // (d) BANISH: arm via button (target cue on cards), click a card → key banished,
+  // pick step NOT consumed, slot refilled without the banished key.
+  LV.children[2].click();
+  assert(CARD0().classList.contains('banishable'), '18.4: banish armed → cards show the target cue');
+  assert(LV.children[2].classList.contains('armed'), '18.4: armed button renders the armed state');
+  const banKey = game.cards[1].key;
+  CARD0().children[1].click();
+  assert(game.player.banished.has(banKey), '18.4: clicked card key banished run-long');
+  assert(game.player.actLeft.banish === 0 && game.state === 'LEVELUP'
+    && game.cards.every((c) => c.key !== banKey) && !CARD0().classList.contains('banishable'),
+    '18.4: banish refills the slot, disarms, and never consumes the pick');
+  game.pickCard(0); // finish the level-up normally
+  assert(game.state === 'PLAYING', '18.x: pick after banish resumes the run');
+
+  // (e) Per-run reseed: uses come back from the shop level, banish list clears.
+  game.toMenu(); pump(10);
+  game.startRun('m01');
+  assert(game.player.actLeft.skip === 1 && game.player.actLeft.banish === 1 && game.player.banished.size === 0,
+    '18.3: next run re-seeds uses and clears banished (run-long = this run only)');
+
+  // (f) Per-picker isolation: seat A's banish never touches seat B's pool.
+  const pA = game.players[0];
+  const pB = new Player({}); pB.reset(0, 0);
+  pA.banished.add('wand');
+  let bSawWand = false;
+  for (let i = 0; i < 30; i++) {
+    const oA = cardOffers(pA.weapons, pA.passives, pA.synergies, mulberry32(100 + i), 5, null, null, pA.banished);
+    assert(!oA.some((c) => c.key === 'wand'), `18.4: seat A never re-sees banished wand (draw ${i})`);
+    const oB = cardOffers(pB.weapons, pB.passives, pB.synergies, mulberry32(100 + i), 5, null, null, pB.banished);
+    if (oB.some((c) => c.key === 'wand')) bSawWand = true;
+  }
+  assert(bSawWand, '18.4: seat B (no banish) still sees wand — banish is per-picker');
+  game.toMenu(); pump(10);
+}
+
 // self-verification: every one-shot path above must have actually fired
 assert(keyPickDone, 'keyboard card pick never exercised');
 assert(heartDone && heartAsserted, 'heart pickup path never exercised');
@@ -2711,5 +2820,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 8 weapons (wand-off kill window) · ` +
   `all 8 weapons observed live (bolts/axes/blades/garlic/bullets/bombs/flames/arrows) · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 12.8 per-synergy E2Es (flamingArrows burn-on-hit · heartPiercer bonus+pierce exactly 1 extra · blueFlame freeze+burn on burst · stormVolley 4th-volley both-rounds strike + chain shock) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · loop alive throughout`,
 );

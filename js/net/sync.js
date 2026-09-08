@@ -4,7 +4,7 @@
 // only sim outputs (D53). Keys follow CFG order (stable across clients).
 import { CFG } from '../config.js';
 
-export const SNAP_V = 5; // v5 (12.6): playerSnap 29 → 34 slots (five 5-level synergies join the table; levels ride the same slot per key)
+export const SNAP_V = 6; // v6 (18.3): playerSnap 34 → 37 slots (actLeft skip/reroll/banish ride the end; D53 holds — counts are sim state, meta levels never sync)
 
 export const WEAPON_KEYS = Object.keys(CFG.weapons);    // 10
 export const PASSIVE_KEYS = Object.keys(CFG.passives);  // 5
@@ -15,20 +15,24 @@ export const E_FLAG_FLASH = 1, E_FLAG_BURN = 2, E_FLAG_BLIGHT = 4, E_FLAG_BOSS =
 
 const r1 = (n) => Math.round(n * 10) / 10;
 
-// Player snapshot (34 slots, SNAP_V=5):
+// Player snapshot (37 slots, SNAP_V=6):
 // [0] x  [1] y  [2] hp  [3] maxHp  [4] xp  [5] level
 // [6] dashT  [7] dashCd  [8] flip(0/1)
 // [9..18] weapons (CFG order, 0..5)  [19..23] passives  [24..33] synergies (level 0..5)
+// [34..36] actLeft skip/reroll/banish (CFG.meta.actions.order; 18.3 per PLAN §3.11)
 // Offsets are derived from key-table lengths so a roster change can't desync them.
 const W_OFF = 9;
 const P_OFF = W_OFF + WEAPON_KEYS.length;
 const S_OFF = P_OFF + PASSIVE_KEYS.length;
+const A_OFF = S_OFF + SYNERGY_KEYS.length;
+const ACT_ORDER = CFG.meta.actions.order; // ['skip','reroll','banish']
 export function playerSnap(p) {
   const s = [r1(p.x), r1(p.y), r1(p.hp), r1(p.maxHp), r1(p.xp), p.level | 0,
     r1(p.dashT), r1(p.dashCd), p.flip ? 1 : 0];
   for (const k of WEAPON_KEYS) s.push(p.weapons[k] || 0);
   for (const k of PASSIVE_KEYS) s.push(p.passives[k] || 0);
   for (const k of SYNERGY_KEYS) s.push(p.synergies[k] || 0);
+  for (const k of ACT_ORDER) s.push(p.actLeft ? (p.actLeft[k] | 0) : 0);
   return s;
 }
 
@@ -41,6 +45,8 @@ export function applyPlayerSnap(p, s) {
   for (let i = 0; i < WEAPON_KEYS.length; i++) { const v = s[W_OFF + i]; if (v) p.weapons[WEAPON_KEYS[i]] = v; }
   for (let i = 0; i < PASSIVE_KEYS.length; i++) { const v = s[P_OFF + i]; if (v) p.passives[PASSIVE_KEYS[i]] = v; }
   for (let i = 0; i < SYNERGY_KEYS.length; i++) { const v = s[S_OFF + i]; if (v) p.synergies[SYNERGY_KEYS[i]] = v; }
+  p.actLeft = {};
+  for (let i = 0; i < ACT_ORDER.length; i++) p.actLeft[ACT_ORDER[i]] = s[A_OFF + i] | 0;
 }
 
 // Enemy snapshot: [sid, typeIdx, x, y, hp, maxHp, frame, flags]
@@ -109,7 +115,8 @@ export function unpackState(m) {
   if (!m || m.v !== SNAP_V) return null;
   if (!Number.isInteger(m.step) || !num(m.time) || !num(m.score) || !num(m.kills)) return null;
   if (!arr(m.players) || !arr(m.enemies) || !arr(m.pickups)) return null;
-  for (const s of m.players) if (!arr(s) || s.length !== 9 + WEAPON_KEYS.length + PASSIVE_KEYS.length + SYNERGY_KEYS.length) return null;
+  const plen = 9 + WEAPON_KEYS.length + PASSIVE_KEYS.length + SYNERGY_KEYS.length + CFG.meta.actions.order.length;
+  for (const s of m.players) if (!arr(s) || s.length !== plen) return null;
   for (const s of m.enemies) if (!arr(s) || s.length !== 8) return null;
   for (const s of m.pickups) if (!arr(s) || s.length !== 4) return null;
   return m;

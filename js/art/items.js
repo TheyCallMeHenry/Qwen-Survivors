@@ -538,6 +538,8 @@ const PLATE = {
   weapon: { bgA: '#0f2a30', bgB: '#07161d', line: 'rgba(94,234,212,0.55)', hi: 'rgba(94,234,212,0.16)' },
   passive: { bgA: '#2c2114', bgB: '#1a1207', line: 'rgba(245,198,107,0.55)', hi: 'rgba(245,198,107,0.14)' },
   synergy: { bgA: '#251633', bgB: '#150b21', line: 'rgba(190,140,255,0.6)', hi: 'rgba(190,140,255,0.16)' },
+  // 18.x: level-up screen actions (Phase 18) — soul-blue plates
+  action: { bgA: '#14202c', bgB: '#0a121c', line: 'rgba(140,190,255,0.55)', hi: 'rgba(140,190,255,0.14)' },
 };
 export function buildIcons() {
   const icons = {};
@@ -1482,6 +1484,88 @@ export function buildIcons() {
       }
     }
     glint(g, 36, 42, 2.6, 'rgba(255,170,190,0.85)'); // heart dust at the field center
+  });
+
+  // ================= ACTIONS (Phase 18, D84) =================================
+  icons.skip = make('action', (g) => {
+    // Double forward chevron in motion, an XP gem breaking away up-right with sparks
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    // trailing motion dashes behind the chevrons
+    g.strokeStyle = 'rgba(140,190,255,0.35)'; g.lineWidth = 3.4;
+    seg(g, [[7, 26], [15, 26]]); seg(g, [[5, 36], [14, 36]]); seg(g, [[7, 46], [15, 46]]);
+    // two bold outlined chevrons
+    const chevron = (ox, w, stroke, lw) => {
+      g.strokeStyle = stroke; g.lineWidth = lw;
+      g.beginPath();
+      g.moveTo(ox, 16); g.lineTo(ox + w, 36); g.lineTo(ox, 56);
+      g.stroke();
+    };
+    chevron(16, 3.2, 'rgba(6,14,26,1)', 15); // dark backing outline
+    chevron(16, 3.2, 'rgba(205,228,255,0.95)', 10.5);
+    chevron(33, 3.2, 'rgba(6,14,26,1)', 15);
+    chevron(33, 3.2, 'rgba(140,190,255,0.95)', 10.5);
+    // XP gem breaking ahead, top-right
+    const gg = g.createLinearGradient(48, 6, 62, 20);
+    gg.addColorStop(0, '#cfe6ff'); gg.addColorStop(1, '#4f7fd6');
+    g.fillStyle = gg;
+    poly(g, [[55, 6], [62, 13], [55, 20], [48, 13]]);
+    g.fill();
+    g.strokeStyle = 'rgba(205,228,255,0.85)'; g.lineWidth = 1.4;
+    poly(g, [[55, 6], [62, 13], [55, 20], [48, 13]]);
+    g.stroke();
+    glint(g, 52, 26, 2.2, 'rgba(205,228,255,0.8)');
+  });
+
+  icons.reroll = make('action', (g) => {
+    // Twin-headed cycle arrow (open at the breaks) around a central spark
+    g.lineCap = 'round';
+    const ring = g.createLinearGradient(14, 14, 58, 58);
+    ring.addColorStop(0, '#d5e8ff'); ring.addColorStop(1, '#6f9ae0');
+    g.strokeStyle = ring; g.lineWidth = 8.5;
+    g.beginPath(); g.arc(36, 36, 21, -Math.PI * 0.32, Math.PI * 0.72); g.stroke();
+    g.beginPath(); g.arc(36, 36, 21, Math.PI * 0.68, Math.PI * 1.72); g.stroke();
+    // arrowheads at both open ends, pointing along travel
+    const head = (cx, cy, a) => {
+      g.save(); g.translate(cx, cy); g.rotate(a);
+      g.fillStyle = '#e6f1ff';
+      poly(g, [[0, -8.5], [12, 0], [0, 8.5]]);
+      g.fill();
+      g.restore();
+    };
+    head(36 + Math.cos(-Math.PI * 0.32) * 21, 36 + Math.sin(-Math.PI * 0.32) * 21, Math.PI * 0.18); // upper-right end
+    head(36 + Math.cos(Math.PI * 0.68) * 21, 36 + Math.sin(Math.PI * 0.68) * 21, Math.PI * 1.18); // lower-left end
+    // center spark: four short rays
+    g.strokeStyle = 'rgba(205,228,255,0.9)'; g.lineWidth = 3;
+    seg(g, [[36, 27], [36, 31]]); seg(g, [[36, 41], [36, 45]]);
+    seg(g, [[27, 36], [31, 36]]); seg(g, [[41, 36], [45, 36]]);
+    glint(g, 43, 29, 2.4, 'rgba(230,241,255,0.9)');
+  });
+
+  icons.banish = make('action', (g) => {
+    // Upright card struck through with a bold X, wisps dissolving off to the right
+    g.save(); g.translate(26, 36); g.rotate(-0.07);
+    const cardG = g.createLinearGradient(-15, -22, 15, 22);
+    cardG.addColorStop(0, '#dfe9f7'); cardG.addColorStop(1, '#8b9dbb');
+    g.fillStyle = cardG;
+    roundRectPath(g, -15, -22, 30, 44, 4);
+    g.fill();
+    g.strokeStyle = 'rgba(10,18,30,0.9)'; g.lineWidth = 2;
+    roundRectPath(g, -15, -22, 30, 44, 4);
+    g.stroke();
+    // faint inner motif so it reads as a card, not a blank tile
+    g.strokeStyle = 'rgba(35,50,75,0.55)'; g.lineWidth = 2;
+    seg(g, [[-9, -14], [9, -14]]); seg(g, [[-9, 14], [4, 14]]);
+    // the striking X — dark backing then red
+    g.lineCap = 'round';
+    g.strokeStyle = 'rgba(8,12,22,1)'; g.lineWidth = 12;
+    seg(g, [[-19, -20], [19, 20]]); seg(g, [[19, -20], [-19, 20]]);
+    g.strokeStyle = '#ff6b6b'; g.lineWidth = 7.5;
+    seg(g, [[-19, -20], [19, 20]]); seg(g, [[19, -20], [-19, 20]]);
+    g.restore();
+    // dissolving wisps drifting right
+    g.strokeStyle = 'rgba(140,190,255,0.65)'; g.lineWidth = 2.6;
+    seg(g, [[50, 22], [60, 20]]); seg(g, [[52, 32], [64, 32]]); seg(g, [[50, 42], [60, 44]]);
+    glint(g, 63, 26, 2, 'rgba(205,228,255,0.85)');
   });
 
   return icons;

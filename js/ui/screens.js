@@ -7,7 +7,7 @@
 
 import { CFG } from '../config.js';
 import { fmtTime } from '../utils/math.js';
-import { upgradeCost, isUnlocked, saveSelectedLevel, isCharUnlocked } from '../core/meta.js';
+import { upgradeCost, actionCost, isUnlocked, saveSelectedLevel, isCharUnlocked } from '../core/meta.js';
 import { LEVELS, LEVEL_ORDER } from '../world/levels.js';
 import { cardEffectText } from '../entities/player.js';
 import { selChar } from '../net/coop.js';
@@ -59,6 +59,7 @@ export function initScreens(game, { icons }) {
   const banner = $('banner');
   const hurtFlash = $('hurt-flash');
   const cardsEl = $('cards');
+  const lvActions = $('lv-actions');
   const scoresList = $('scores-list');
   const goTitle = $('go-title');
   const goNewRecord = $('go-newrecord');
@@ -278,7 +279,10 @@ export function initScreens(game, { icons }) {
     else if (st === 'LEVELUP') name = 'levelup';
     else if (st === 'GAMEOVER') name = 'gameover';
     else name = 'none';
-    if (name !== cur) { cur = name; show(name); if (name === 'menu') { renderLevels(); renderDurations(); } }
+    if (name !== cur) {
+      if (cur === 'levelup' && name !== 'levelup') banishMode = false; // leaving the screen disarms banish
+      cur = name; show(name); if (name === 'menu') { renderLevels(); renderDurations(); }
+    }
     coopUI();
     // Banner queue (13.10): a queued banner (e.g. NEW MAP UNLOCKED after DAWN BREAKS)
     // takes over once the current one holds for CFG.ui.bannerMs.
@@ -308,8 +312,62 @@ export function initScreens(game, { icons }) {
     hurtTimer = setTimeout(() => hurtFlash.classList.remove('on'), 140);
   });
 
+  // --- level-up action toolbar (18.3, D84): SKIP / RE-ROLL / BANISH ---
+  // Locked (meta level 0) actions never appear; counts come from the local player's
+  // per-run use counters. Banish is a two-step arm-then-click-a-card interaction.
+  let banishMode = false;
+  const actBtns = {};
+  const actCnt = {};
+  for (const key of CFG.meta.actions.order) {
+    const def = CFG.meta.actions[key];
+    const btn = document.createElement('button');
+    btn.className = 'lv-btn';
+    btn._actKey = key;
+    btn.title = def.desc;
+    const cv = document.createElement('canvas');
+    cv.width = 72; cv.height = 72;
+    cv.getContext('2d').drawImage(icons[def.icon], 0, 0);
+    const lbl = document.createElement('span');
+    lbl.className = 'lv-btn-name';
+    lbl.textContent = def.name;
+    const cnt = document.createElement('span');
+    cnt.className = 'lv-btn-count';
+    btn.append(cv, lbl, cnt);
+    actCnt[key] = cnt;
+    btn.addEventListener('click', () => {
+      if (key === 'skip') { banishMode = false; game.levelupSkip(); }
+      else if (key === 'reroll') { banishMode = false; game.levelupReroll(); }
+      else { // banish: arm/disarm; denied feel via disabled state below
+        if ((game.player.actLeft.banish | 0) <= 0) return;
+        banishMode = !banishMode;
+      }
+      renderLvActions();
+    });
+    actBtns[key] = btn;
+    lvActions.append(btn);
+  }
+  function renderLvActions() {
+    if (!game.player) return;
+    let any = false;
+    for (const key of CFG.meta.actions.order) {
+      const btn = actBtns[key];
+      const unlocked = ((game.meta.actions && game.meta.actions[key]) || 0) > 0;
+      btn.hidden = !unlocked;
+      if (!unlocked) continue;
+      any = true;
+      const left = game.player.actLeft[key] | 0;
+      actCnt[key].textContent = '×' + left;
+      btn.disabled = left <= 0;
+      btn.classList.toggle('armed', key === 'banish' && banishMode);
+    }
+    lvActions.hidden = !any;
+    cardsEl.classList.toggle('banishable', banishMode);
+  }
+  game.bus.on('actions', renderLvActions);
+
   // --- level-up cards ---
   game.bus.on('cards', (cards) => {
+    banishMode = false; // any fresh draw disarms banish
     cardsEl.innerHTML = '';
     cards.forEach((c, i) => {
       const def = c.kind === 'weapon' ? CFG.weapons[c.key]
@@ -358,13 +416,14 @@ export function initScreens(game, { icons }) {
       k.className = 'card-key';
       k.textContent = String(i + 1);
       card.append(badge, plaque, h, pips, pe, p, k);
-      const pick = () => game.pickCard(i);
+      const pick = () => (banishMode ? game.levelupBanish(i) : game.pickCard(i));
       card.addEventListener('click', pick);
       card.addEventListener('keydown', (e) => {
         if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); pick(); }
       });
       cardsEl.append(card);
     });
+    renderLvActions();
   });
 
   // --- game over + high scores ---
@@ -438,6 +497,46 @@ export function initScreens(game, { icons }) {
       btn._upgKey = key;
       btn.disabled = cost === null || game.meta.shards < cost;
       btn.addEventListener('click', () => { game.buyMeta(key); renderUpgrades(); });
+      rowEl.append(cv, info, btn);
+      metaList.append(rowEl);
+    }
+    // 18.2: level-up actions section (Phase 18, D84) — locked at 0; level = uses/run (max 10).
+    const actHead = document.createElement('div');
+    actHead.className = 'meta-section';
+    actHead.textContent = 'Level-Up Actions';
+    metaList.append(actHead);
+    for (const key of CFG.meta.actions.order) {
+      const def = CFG.meta.actions[key];
+      const level = (game.meta.actions && game.meta.actions[key]) || 0;
+      const cost = actionCost(key, level);
+      const rowEl = document.createElement('div');
+      rowEl.className = 'meta-row';
+      const cv = document.createElement('canvas');
+      cv.width = 72; cv.height = 72;
+      cv.getContext('2d').drawImage(icons[def.icon], 0, 0);
+      const info = document.createElement('div');
+      info.className = 'meta-info';
+      const h = document.createElement('h3');
+      h.textContent = level > 0 ? `${def.name} · Lv ${level}/${def.max}` : `${def.name} · Locked`;
+      const pe = document.createElement('p');
+      pe.className = 'meta-effect';
+      pe.textContent = def.desc;
+      const line = document.createElement('div');
+      line.className = 'meta-line';
+      const uses = document.createElement('span');
+      uses.className = 'meta-uses';
+      uses.textContent = `×${level} per run`;
+      const costEl = document.createElement('span');
+      costEl.className = 'meta-cost';
+      costEl.textContent = cost === null ? 'MAX' : cost + ' ◆';
+      line.append(uses, costEl);
+      info.append(h, pe, line);
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-small';
+      btn.textContent = level === 0 ? 'Unlock' : '+1';
+      btn._actKey = key;
+      btn.disabled = cost === null || game.meta.shards < cost;
+      btn.addEventListener('click', () => { game.buyAction(key); renderUpgrades(); });
       rowEl.append(cv, info, btn);
       metaList.append(rowEl);
     }

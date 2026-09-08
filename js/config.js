@@ -452,11 +452,24 @@ export const CFG = {
     shardPerScore: 400,   // shards per score point
     victoryBonus: 25,     // flat bonus shards on victory
     upgrades: {
-      maxHp: { name: 'Vitality',        desc: '+20 max HP',           icon: 'heart', max: 5, val: 20,     cost: [20, 40, 70, 110, 160] },
-      dmg:   { name: 'Ferocity',        desc: '+8% weapon damage',    icon: 'sword', max: 5, val: 0.08,  cost: [25, 50, 85, 130, 190] },
-      speed: { name: 'Swiftness',       desc: '+6% movement speed',   icon: 'boots', max: 5, val: 0.06,  cost: [20, 45, 80, 125, 180] },
-      xp:    { name: 'Soul Attunement', desc: '+12% XP gain',         icon: 'gem',   max: 5, val: 0.12,  cost: [30, 55, 95, 145, 210] },
-      dash:  { name: 'Phantom Step',    desc: '−8% dash cooldown',    icon: 'dash',  max: 5, val: -0.08, cost: [20, 40, 75, 120, 175] },
+      // D84 (2026-09-07): economy slow-down — one shared curve, user-set.
+      maxHp: { name: 'Vitality',        desc: '+20 max HP',           icon: 'heart', max: 5, val: 20,     cost: [50, 100, 200, 400, 1000] },
+      dmg:   { name: 'Ferocity',        desc: '+8% weapon damage',    icon: 'sword', max: 5, val: 0.08,  cost: [50, 100, 200, 400, 1000] },
+      speed: { name: 'Swiftness',       desc: '+6% movement speed',   icon: 'boots', max: 5, val: 0.06,  cost: [50, 100, 200, 400, 1000] },
+      xp:    { name: 'Soul Attunement', desc: '+12% XP gain',         icon: 'gem',   max: 5, val: 0.12,  cost: [50, 100, 200, 400, 1000] },
+      dash:  { name: 'Phantom Step',    desc: '−8% dash cooldown',    icon: 'dash',  max: 5, val: -0.08, cost: [50, 100, 200, 400, 1000] },
+    },
+    // Level-up screen actions (Phase 18, PLAN §3.11, D84). Meta shop: locked at 0;
+    // level 1 = unlock = 1 use/run, each further level +1 → max 10 uses/run each.
+    // NOT cards/items — screen buttons only (user spec, verbatim).
+    actions: {
+      order: ['skip', 'reroll', 'banish'],
+      skip:   { name: 'SKIP',    icon: 'skip',   max: 10, xpRatio: 0.66, cost: [300, 600, 900, 1200, 1500, 1800, 2100, 2400, 2700, 3000],
+        desc: 'Pass on this offer — gain 66% of the next level\u2019s XP instead', },
+      reroll: { name: 'RE-ROLL', icon: 'reroll', max: 10, cost: [300, 600, 900, 1200, 1500, 1800, 2100, 2400, 2700, 3000],
+        desc: 'Discard these cards, draw a fresh set (discarded stay in the pool)', },
+      banish: { name: 'BANISH',  icon: 'banish', max: 10, cost: [300, 600, 900, 1200, 1500, 1800, 2100, 2400, 2700, 3000],
+        desc: 'Remove a card from your offers for the rest of the run (owned cards freeze at their current level)', },
     },
   },
 

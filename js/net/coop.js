@@ -30,12 +30,21 @@ export function unpack(str) {
 export function profileFromMeta(meta) {
   const u = meta.upgrades || {};
   const g = CFG.meta.upgrades;
+  // 18.3 (D84): shop action LEVELS ride the profile (unlock state, like char unlocks)
+  // so the host can seed each seat's per-run use counters. Count DECREMENTS are sim
+  // state and ride snapshots — never the profile.
+  const a = meta.actions || {};
+  const acts = {};
+  for (const k of CFG.meta.actions.order) {
+    acts[k] = Math.min(CFG.meta.actions[k].max, Math.max(0, a[k] | 0));
+  }
   return {
     maxHpBonus: (u.maxHp || 0) * g.maxHp.val,
     dmgMult: 1 + (u.dmg || 0) * g.dmg.val,
     speedMult: 1 + (u.speed || 0) * g.speed.val,
     xpMult: 1 + (u.xp || 0) * g.xp.val,
     dashCdMult: 1 + (u.dash || 0) * g.dash.val,
+    actions: acts,
   };
 }
 

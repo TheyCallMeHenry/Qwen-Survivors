@@ -17,8 +17,8 @@ Rules for every future edit — this file is loaded at every session start; its 
 ## Status — 2026-09-07
 
 
-- **Active: Phases 28 + 17 COMPLETE + PUBLISHED (2026-09-07, session 31, user ask)** — 28: all 27 card icons redesigned from scratch (PLAN §3.19); 17: selectable run durations 5(default)/10/15/20/ENDLESS + boss cadence every 5:00 from 4:00, per-level menu chips, ENDLESS = death-only end (PLAN §3.10, D65+D83). Commits `9977791` (28) + `ca1739a` (17) → ff-merge `main` → Pages build ✓ on `ca1739a`. Feature queue after: **18 → 14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro).
-- **Gates (green on final Phase-17 tree, session 31):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **718/718** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** (×2) — `[10.4-bench]` radial=0.0.
+- **Active: Phase 18 COMPLETE (2026-09-07, session 32) — UNCOMMITTED** — level-up actions SKIP / RE-ROLL / BANISH (PLAN §3.11, D84): meta-shop unlocks (locked default; 10 levels each × [300…3000]), per-run per-player uses, run-long card-key banish with owned-freeze, SKIP = 66% next-level XP; level-up toolbar ≥72 px. Previously: 28 (icons) + 17 (durations) published at `ca1739a`. Feature queue after: **14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
+- **Gates (green on final Phase-18 tree, session 32):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **746/746** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0.
 - **Git:** `overnight-2026-08-22` = `main` = origin at `ca1739a` (Phases 25+27 published session 29; 28+17 published session 31 — `9977791` + `ca1739a`).
 - **Server:** DOWN (port 47893 not listening, re-checked session 27); recipe in `docs/ENV.md`.
 
@@ -62,13 +62,13 @@ Durations 5(default)/10/15/20/ENDLESS; bosses at 4:00/9:00/14:00/19:00 + every 5
 - [x] 17.3 Run machinery: victory at `runDuration` (ENDLESS never); boss events via `_bossIdx` (solo default bit-identical); HUD counts up on ENDLESS; co-op host-authoritative `runstart.dur` (null=ENDLESS, serve relay null-safe, old-host fallback)
 - [x] 17.4 Gates: `bossTimes` tables 5→[240] 10→[240,540] 15→+840 20→+1140 endless→[] + LS round-trip + CSS ≥72 px asserts → **718/718**; boot E2E chips+persist / d10 two bosses 4:00+9:00 / victory gate per duration / ENDLESS past 5:00 no victory + 9:00 cadence; `runs=4` default path untouched (bit-identical 5:00)
 
-### Phase 18 — Level-up actions SKIP / BANISH / RE-ROLL (spec PLAN §3.11, D67; research `RESEARCH_FINDINGS.md` §7; queued after 17)
-Screen actions (NOT items/cards/level-able); unlocked + upgraded in the meta store, max 5 uses/run each.
-- [ ] 18.1 O resolutions: skip-XP ratio · banish granularity/owned-freeze · reroll exclusion (VS semantics) · Soulshard cost curve
-- [ ] 18.2 Meta store: 3 entries × (unlock + levels 1→4 = uses 1→5), persisted, no data loss
-- [ ] 18.3 In-run per-player counters (host-auth; co-op snapshot fields) + level-up screen buttons with live counts, hidden until unlocked
-- [ ] 18.4 Mechanics: SKIP · RE-ROLL (discarded set excluded from redraw only) · BANISH (picker-scoped run-long offer exclusion, mirrors `exclude` plumbing); interplay with 10.7 empty-pool + 15.3 pool fix
-- [ ] 18.5 Gates incl. co-op per-picker isolation E2E + solo invariance (unlocked-0 = today's screen)
+### Phase 18 — Level-up actions SKIP / BANISH / RE-ROLL (COMPLETE 2026-09-07 session 32; spec PLAN §3.11, D67 superseded by D84; **UNCOMMITTED**) 
+Screen actions (NOT items/cards/level-able); unlocked + upgraded in the meta store, **max 10 uses/run each** (D84 supersedes cap-5).
+- [x] 18.1 O resolutions RULED by user = **D84**: skip = floor(66% × next-level XP) · banish = card-key + **owned-freeze** · reroll = excluded from that redraw only · 10 shop levels (level 1 = unlock = 1 use, +1/level) at [300,600,…,3000] · all 5 meta-upgrade curves → [50,100,200,400,1000]
+- [x] 18.2 Meta-shop actions section (`Unlock`/`+1`/`×N per run`/`MAX`): `meta.actions` locked-by-default + legacy-safe `loadMeta` clamp; `actionCost`/`buyAction` in `core/meta.js`; persisted `qsurv.meta.v1` (no storage-version bump — additive + clamped load = no data loss)
+- [x] 18.3 `Player.actLeft` + `Player.banished` (fresh in `reset()`, seeded by `applyMeta` from shop levels); SNAP_V 5→**6** (37 slots: actLeft tail; decrements ride snapshots, shop levels ride the join profile — D53 holds); `#lv-actions` toolbar + `lv-btn` ×N counts/disabled/armed states, hidden while nothing unlocked, ≥72 px
+- [x] 18.4 `levelupSkip` (+`skipXp`, consumes queued step) · `levelupReroll` (banished∪current-keys excluded from that draw only; use banked if redraw empty) · `levelupBanish(i)` arm-then-click-card (red target cue; slot refilled; pick NOT consumed); `cardOffers` 8th param `banished` (pool skip = owned frozen at rank); 10.7 empty-pool paths unchanged
+- [x] 18.5 Co-op per-picker isolation + solo invariance asserts (locked-0 = today's screen) — gates **34/34 · 746/746 (+28) · boot PASS runs=4**; guest-initiated action UI deliberately out of scope (guests never see cards — host auto-picks; counters exist for all seats)
 
 ### Phase 19 — In-run HUD: equipment icons + fuel bar (COMPLETE 2026-09-06, PUBLISHED `eb00702`+`6b9eeda`; spec PLAN §3.12, D68)
 - [x] 19.1–19.4 equip row under XP bar (weapon chips + live level numbers, signature-gated `syncEquip`, no rebuild on change) · fuel bar ABOVE→**beneath the player** (world-space; D68 revises D24; logic untouched) · co-op `.seat-equip` 24 px chips inside seat panels, no overlap · boot E2E incl. fillRect-below-feet assert — check 33/33 · logic 682/682 · boot runs=4
@@ -113,13 +113,13 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 ### Phase 24 — Visual overhaul, 2.5D isometric (COMPLETE + PUBLISHED `7c4f01c`; PLAN §3.16)
 - [x] 24.1–24.9 `formShade()` single top-left key light on every opaque body (chars / enemies / bosses / blade + axe; additive energy sprites deliberately unshaded) · projectile-variant seam (`v` tag at fire sites, `(Var&&Var[v])||Img` lookup, base byte-identical) + 7 distinct synergy projectile skins · `decorShadow` contact shadows under standing decor · death-wisp hue variety · **deferred (user-approved): HUD/menu/CSS chrome restyle**
 
-## Resume Notes — session 31, 2026-09-07 (live state only; rewritten each session per Format contract)
+## Resume Notes — session 32, 2026-09-07 (live state only; rewritten each session per Format contract)
 
-**Where we are (session 31):** **Phases 28 + 17 COMPLETE & PUBLISHED** — 17: selectable run durations (5 default/10/15/20/ENDLESS) + boss cadence every 5:00 from 4:00 + per-level menu chips + ENDLESS death-only end (PLAN §3.10, D65+D83). Commits `9977791` + `ca1739a` on `overnight-2026-08-22`, ff-merge → `main` pushed; Pages build ✓ on `ca1739a` (`gh run list`). Working tree clean.
+**Where we are (session 32 DONE):** **Phase 18 SHIPPED end-to-end** (SKIP/RE-ROLL/BANISH per D84; PLAN §3.11 ticked). Full stack: config (`CFG.meta.actions` + slowed curves) → meta shop (`buyAction`, locked default, legacy-safe) → mechanics (`actLeft`/`banished`/`skipXp`/`cardOffers` banished param/`levelupSkip|Reroll|Banish`) → SNAP_V6 → screens toolbar + CSS + icons → tests. **UNCOMMITTED** (rule 7 — commit/push only on explicit ask).
 
-**NEXT (exact):** feature queue **Phase 18** (level-up actions SKIP/BANISH/RE-ROLL — PLAN §3.11, D67; O-resolutions on 18.1 need user confirm) → 14 → 21 → 2.9.
+**NEXT (exact):** commit ask for Phase 18 (then ff-merge → Pages), then feature queue **14 → 21 → 2.9** (11.13 needs the user's NAS; 22.8 needs a phone — not this environment).
 
-**Gates (green on final Phase-17 tree, session 31):** check.mjs **34/34** · test-logic **718/718** · boot `PASS boot-sim runs=4` ×2 · `[10.4-bench]` radial=0.0. One-off boot flake seen once at 11.5 exclusivity (~L2134, pre-existing seed-sensitivity the harness itself notes) — green on both re-runs; re-run once before bisecting.
+**Gates (green on final Phase-18 tree, session 32):** check.mjs **34/34** · test-logic **746/746** · boot `PASS boot-sim runs=4` · `[10.4-bench]` radial=0.0. Known one-off boot flake at 11.5 pump-rng (~L2134): re-run once before bisecting.
 
 **Git state:** `overnight-2026-08-22` = `main` = origin at `ca1739a` (tree clean; `9977791` = Phase 28 art, `ca1739a` = Phase 17 + tests + docs). `unsloth-tmp/` gitignored.
 
@@ -131,10 +131,11 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 
 ## Decisions (binding)
 
-Full texts + one-line row index for **D1–D83** live in `docs/DECISIONS.md` (append-only numbering, revisions carry new numbers; Format contract §5). Open phases cite: D64 (11.13) · D67 (18) · D54 (14) · D69 (21).
+Full texts + one-line row index for **D1–D84** live in `docs/DECISIONS.md` (append-only numbering, revisions carry new numbers; Format contract §5). Open phases cite: D64 (11.13) · D54 (14) · D69 (21) · Phase 18 shipped under **D84** (supersedes D67 caps/opens).
 
 ## Session Log (append-only, newest first; entries before session 24 archived verbatim to `docs/ARCHIVE.md`)
 
+- **2026-09-07 (session 32) — Phase 18 CLOSED (level-up actions SKIP/RE-ROLL/BANISH, D84):** full vertical slice per user rulings: SKIP = floor(0.66×xpNeed) grant consuming the queued step · RE-ROLL = current-offer keys excluded from that redraw only (use banked if empty) · BANISH = arm-then-click-card, key out of this picker's offers run-long, owned cards frozen at rank, pick not consumed. Meta shop: locked default, 10 levels × [300…3000] (Unlock/+1/×N/MAX row language), legacy saves default-locked (no storage bump — additive+clamped); economy slow-down: 5 existing curves → [50,100,200,400,1000]. Wire: SNAP_V 5→6 (37 slots, actLeft tail; profile carries shop LEVELS, decrements ride snapshots — D53 holds); co-op per-picker isolation proven (seat-A never / seat-B still sees, 30 draws). `#lv-actions` toolbar + 3 procedural 72×72 soul-blue icons + armed/target-cue CSS (≥72 px, rule 6). Boot E2Es: locked-toolbar-hidden solo invariance, purchase ladder persistence, run-seed/reseed, disjoint reroll, banish refill. Playtest claim “1P starts passives at Lv1” investigated: code + Phase-20 asserts prove ZERO passives at start — suspect offer-card “Lv 1/5” grant-label misread; no change. Gates **34/34 · 746/746 (+28) · boot PASS runs=4** (radial 0.0, clean first run). **UNCOMMITTED** — commit ask pending (rule 7). NEXT = commit ask → 14 → 21 → 2.9.
 - **2026-09-07 (session 31) — Phase 17 CLOSED (selectable run durations & boss schedule):** durations data `CFG.run.durations` (d5 default/10/15/20/ENDLESS null) + cadence `bossAt`+`bossEvery` (D83 O-resolutions recorded); pure `bossTimes` in spawner; per-level LS map `qsurv.duration.v1` (`loadDurations`/`durationFor`/`saveDurations` + `Game.setDuration`); `runDuration` per run drives victory (`ENDLESS != null` gate) + boss events via `_bossIdx` (strict `<` run end) + HUD count-up; menu chips `#duration-select` (5 × ≥72 px, radiogroup, re-render on level/duration pick); co-op `runstart.dur` end-to-end (conn.js field, serve.mjs null-safe relay, client fallback). Solo 5:00 path untouched. Gates **34/34 · 718/718 · boot PASS runs=4 ×2** (first run tripped the pre-existing 11.5 pump-rng flake — re-runs green). Commit still pending user ask (rule 7), batched with Phase 28. NEXT = commit ask → 18 → 14 → 21 → 2.9.
 - **2026-09-07 (session 30) — Phase 28 CLOSED (card-icon from-scratch reimagining):** all 27 icon keys rebuilt in `js/art/items.js` (plates kept). Verification-before-docs per user rule: per-icon 4× Playwright shots (`unsloth-tmp/shot7.py` → `z_NN.png`) reviewed all 27; polish pass fixed `pistols` + `boots` (full rewrites), `inferno` rocket misread, `blades` crescents, `tempest`/`stormVolley` cloud legibility (dark-on-violet), `flamingArrows` fan, `snowball` muzzle seat; `napalm` cleared at 4× (no change — small-render misread). Gates **34/34 · 694/694 · boot PASS runs=4** (bench drawImage 838.5 radial 0.0). PLAN §3.19 + USER-INPUT-LOG entry added. Commit pending user ask. NEXT = commit ask → 17 → 18 → 14 → 21 → 2.9.
 

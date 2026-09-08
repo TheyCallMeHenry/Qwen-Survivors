@@ -7,12 +7,12 @@ import { LEVELS, LEVEL_ORDER, getLevel } from '../js/world/levels.js';
 import { HashGrid } from '../js/utils/grid.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint, bossTimes } from '../js/entities/spawner.js';
 import { Enemies } from '../js/entities/enemies.js';
-import { Player, cardOffers, applyCard, recomputeStats, cardEffectText, charDef } from '../js/entities/player.js';
+import { Player, cardOffers, applyCard, recomputeStats, cardEffectText, charDef, skipXp } from '../js/entities/player.js';
 import { Combat } from '../js/entities/combat.js';
 import { Pickups, escapeFromSpots } from '../js/entities/pickups.js';
 import { GEM_PAL, HEART_PAL } from '../js/art/items.js';
 import { SNAP_V, WEAPON_KEYS, PASSIVE_KEYS, SYNERGY_KEYS, ENEMY_KEYS, E_FLAG_FLASH, E_FLAG_BURN, E_FLAG_BLIGHT, E_FLAG_BOSS, E_FLAG_FLIP, playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState } from '../js/net/sync.js';
-import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom, defaultChars, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations } from '../js/core/meta.js';
+import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom, defaultChars, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations, actionCost, buyAction } from '../js/core/meta.js';
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
@@ -638,7 +638,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(m0.shards === 0 && Object.values(m0.upgrades).every((v) => v === 0), 'loadMeta: defaults without storage');
   ok(shardsFor({ score: 800, victory: true }) === 27, 'shardsFor: 800 score + victory → 27');
   ok(shardsFor({ score: 399, victory: false }) === 0, 'shardsFor: 399 score, no victory → 0');
-  ok(upgradeCost('maxHp', 0) === 20, 'upgradeCost: maxHp L0 → 20');
+  ok(upgradeCost('maxHp', 0) === 50, 'upgradeCost: maxHp L0 → 50 (D84 economy slow-down)');
   ok(upgradeCost('maxHp', 5) === null, 'upgradeCost: maxed → null');
   const p = { passives: {} };
   applyMeta(p, { shards: 0, upgrades: { maxHp: 1, dmg: 0, speed: 0, xp: 0, dash: 0 } });
@@ -1110,9 +1110,10 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   applyCard(p, { kind: 'weapon', key: 'axe', level: 2 });
   applyCard(p, { kind: 'passive', key: 'dmg', level: 1 });
   applyCard(p, { kind: 'synergy', key: 'blight', level: 1 });
+  p.actLeft = { skip: 2, reroll: 1, banish: 5 };
   p.xp = 12.345; p.hp = 55.55; p.dashT = 0.333; p.dashCd = 1.666; p.flip = true;
   const ps = playerSnap(p);
-  ok(ps.length === 34, '11.2: playerSnap is 34 slots (SNAP_V=5, 12.6 rebaseline: 10 synergies)');
+  ok(ps.length === 37, '11.2: playerSnap is 37 slots (SNAP_V=6, 18.3 rebaseline: actLeft tail)');
   const p2 = new Player({});
   p2.reset(0, 0);
   applyPlayerSnap(p2, ps);
@@ -1122,6 +1123,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(Object.keys(p2.weapons).length === Object.keys(p.weapons).length && p2.weapons.axe === p.weapons.axe
     && p2.passives.dmg === 1 && p2.synergies.blight === 1,
     '11.2: applyPlayerSnap rebuilds weapon/passive/synergy maps');
+  ok(p2.actLeft.skip === 2 && p2.actLeft.reroll === 1 && p2.actLeft.banish === 5,
+    '18.3: actLeft counters ride the snapshot tail (D53: counts are sim state, shop levels never sync)');
 
   const es = enemySnap({ sid: 3, type: ENEMY_KEYS[1], x: 100.04, y: 200.06, hp: 7.4, maxHp: 10, frame: 2, flash: 0.2, burnT: 1, blightT: 0, boss: true, flip: true });
   ok(es[0] === 3 && es[1] === 1 && near(es[2], 100) && near(es[3], 200.1) && es[4] === 7 && es[5] === 10 && es[6] === 2
@@ -1148,6 +1151,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(unpackState({ ...st, v: 99 }) === null, '11.2: wrong version → null');
   ok(unpackState({ ...st, step: 2.5 }) === null, '11.2: non-integer step → null');
   ok(unpackState({ ...st, players: [ps, [1, 2]] }) === null, '11.2: short player snap → null');
+  ok(unpackState({ ...st, players: [new Array(34).fill(1)] }) === null, '18.3: 34-slot v5-era snap rejected at SNAP_V=6');
   ok(unpackState({ ...st, enemies: [[1, 0, 1, 1, 1, 1, 0]] }) === null, '11.2: short enemy snap → null');
   ok(unpackState({ ...st, pickups: [[0, 0, 1]] }) === null, '11.2: short pickup snap → null');
   ok(unpackState(null) === null, '11.2: null → null');
@@ -1851,8 +1855,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   pSnap.synergies.heartPiercer = 3;
   const snapSlots = playerSnap(pSnap);
   const S_OFF = 9 + WEAPON_KEYS.length + PASSIVE_KEYS.length; // mirrors sync.js header offsets
-  ok(snapSlots.length === 34 && snapSlots[S_OFF + SYNERGY_KEYS.indexOf('heartPiercer')] === 3,
-    '12.6 sync: heartPiercer level 3 survives the wire (34-slot snap)');
+  ok(snapSlots.length === 37 && snapSlots[S_OFF + SYNERGY_KEYS.indexOf('heartPiercer')] === 3,
+    '12.6 sync: heartPiercer level 3 survives the wire (37-slot snap, 18.3 rebaseline)');
 }
 
 // --- 19.1 equipment row (HTML + CSS content asserts; browser render verified on Pages) ---
@@ -1959,6 +1963,109 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(/function renderDurations\(\)/.test(ssrc) && /game\.setDuration\(key\)/.test(ssrc),
     '17.2: renderDurations + game.setDuration wiring live');
   ok(/renderLevels\(\); renderDurations\(\);/.test(ssrc), '17.2: menu screen renders both selects');
+}
+
+// --- Phase 18: level-up screen actions SKIP / RE-ROLL / BANISH (D84) ---
+{
+  // CFG shape: 10 levels each, tier ladder 300→3000; existing curves slowed (D84).
+  const A = CFG.meta.actions;
+  ok(A.order.length === 3 && A.order.every((k) => A[k]), '18.1: actions order = skip/reroll/banish');
+  for (const k of A.order) {
+    ok(A[k].max === 10 && A[k].cost.length === 10 && A[k].cost[0] === 300 && A[k].cost[9] === 3000 &&
+      A[k].cost.every((c, i) => c === 300 * (i + 1)),
+      `18.1: ${k} tiers [300..3000], max 10 (level 1 = unlock, +1 each)`);
+  }
+  ok(Object.values(CFG.meta.upgrades).every((u) => u.cost.length === 5 &&
+    u.cost.every((c, i) => c === [50, 100, 200, 400, 1000][i])),
+    '18.1: D84 slow-down — all 5 upgrade curves = [50,100,200,400,1000]');
+  ok(skipXp(1) === 2 && skipXp(2) === 4 && skipXp(10) === Math.floor(0.66 * CFG.xpNeed(10)),
+    '18.1: skipXp = floor(0.66 × xpNeed(level)) (L1→2, L2→4)');
+
+  // Default locked; legacy saves without the key default locked; clamped on load.
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+  };
+  ok(Object.values(loadMeta('p18.absent').actions).every((v) => v === 0), '18.2: fresh profile → actions locked (level 0)');
+  globalThis.localStorage.setItem(CFG.meta.storageKey, JSON.stringify({ shards: 100, upgrades: { maxHp: 2 } }));
+  const legacy = loadMeta(CFG.meta.storageKey);
+  ok(legacy.upgrades.maxHp === 2 && Object.values(legacy.actions).every((v) => v === 0),
+    '18.2: legacy save (no actions key) → actions default locked, no data loss');
+  globalThis.localStorage.setItem(CFG.meta.storageKey, JSON.stringify({ shards: 1, upgrades: {}, actions: { skip: 99, reroll: -3, banish: 4.7 } }));
+  const clamped = loadMeta(CFG.meta.storageKey);
+  ok(clamped.actions.skip === 10 && clamped.actions.reroll === 0 && clamped.actions.banish === 4,
+    '18.2: loadMeta clamps actions to [0, max]');
+
+  // actionCost + buyAction
+  ok(actionCost('skip', 0) === 300 && actionCost('skip', 9) === 3000 && actionCost('skip', 10) === null,
+    '18.2: actionCost ladder + null at max');
+  const m18 = { shards: 300, upgrades: {}, actions: { skip: 0, reroll: 0, banish: 0 } };
+  ok(buyAction(m18, 'skip') === true && m18.actions.skip === 1 && m18.shards === 0,
+    '18.2: buyAction unlock spends exactly 300');
+  ok(buyAction(m18, 'skip') === false && m18.actions.skip === 1, '18.2: buyAction denied when unaffordable');
+  ok(buyAction(m18, 'bogus') === false, '18.2: buyAction unknown key → false');
+  m18.shards = 9999; m18.actions.skip = 10;
+  ok(buyAction(m18, 'skip') === false && m18.actions.skip === 10, '18.2: buyAction denied at max (10)');
+
+  // applyMeta seeds per-run use counters (capped); legacy meta without actions → all locked.
+  const pm = { passives: {} };
+  applyMeta(pm, { shards: 0, upgrades: {}, actions: { skip: 3, reroll: 20, banish: 0 } });
+  ok(pm.actLeft.skip === 3 && pm.actLeft.reroll === 10 && pm.actLeft.banish === 0,
+    '18.3: applyMeta seeds actLeft from shop levels, capped at max');
+  const pm2 = { passives: {} };
+  applyMeta(pm2, { shards: 0, upgrades: {} });
+  ok(Object.values(pm2.actLeft).every((v) => v === 0), '18.3: applyMeta legacy meta (no actions) → zero uses');
+
+  // Player fields fresh every run + banished Set.
+  const pl = new Player({});
+  pl.reset(0, 0);
+  ok(pl.actLeft.skip === 0 && pl.actLeft.reroll === 0 && pl.actLeft.banish === 0 &&
+    pl.banished instanceof Set && pl.banished.size === 0,
+    '18.3: Player.reset → fresh zeroed actLeft + empty banished (per-run reseed)');
+
+  // cardOffers banished param: excludes unowned AND freezes owned (D84).
+  const w1 = { wand: 1 }, pa1 = { dmg: 2 }, sy1 = {};
+  const seen = (banished, draws = 60) => {
+    const keys = new Set();
+    for (let i = 0; i < draws; i++) {
+      const rng = mulberry32(1000 + i);
+      for (const c of cardOffers(w1, pa1, sy1, rng, 5, null, null, banished)) keys.add(`${c.key}@${c.level}`);
+    }
+    return keys;
+  };
+  ok(seen(null).has('dmg@3'), '18.4: owned dmg Lv2 is offered at Lv3 when not banished');
+  ok(!seen(new Set(['dmg'])).has('dmg@3') && !seen(new Set(['dmg'])).has('dmg@1'),
+    '18.4: banished owned passive freezes at rank — no upgrade offers at all');
+  ok(!seen(new Set(['bow'])).has('bow@1'), '18.4: banished unowned weapon never appears run-long');
+  // Per-picker isolation: the param only touches that picker's pool.
+  {
+    const rngA = mulberry32(5), rngB = mulberry32(5);
+    const banned = cardOffers(w1, pa1, sy1, rngA, 5, null, null, new Set(['wand']));
+    const plain = cardOffers(w1, pa1, sy1, rngB, 5, null, null, new Set());
+    ok(banned.every((c) => c.key !== 'wand'), '18.4: picker A banishes wand → gone from A offers');
+    ok(JSON.stringify(plain) === JSON.stringify(cardOffers(w1, pa1, sy1, mulberry32(5), 5, null, null, null)),
+      '18.4: empty banished Set ≡ null (solo invariance — no pool or rng shift)');
+  }
+
+  // Reroll (VS shape): exclusion applies to THAT redraw only; same rng re-sees the keys.
+  {
+    const keys1 = cardOffers(w1, pa1, sy1, mulberry32(9), 5, null, null, null).map((c) => c.key);
+    const ex = new Set(keys1);
+    const draw2 = cardOffers(w1, pa1, sy1, mulberry32(9), 5, null, null, ex);
+    ok(draw2.every((c) => !ex.has(c.key)), '18.4: reroll draw excludes the current offer keys');
+    const draw3 = cardOffers(w1, pa1, sy1, mulberry32(9), 5, null, null, null);
+    ok(JSON.stringify(draw3.map((c) => c.key)) === JSON.stringify(keys1),
+      '18.4: excluded keys are re-seen on later draws (exclusion is per-reroll, not run-long)');
+  }
+
+  // Profile carries clamped shop LEVELS (host seeds each seat from it).
+  const prof = profileFromMeta({ shards: 5, upgrades: {}, actions: { skip: 12, reroll: -2, banish: 3 } });
+  ok(prof.actions.skip === 10 && prof.actions.reroll === 0 && prof.actions.banish === 3,
+    '18.3: profileFromMeta carries clamped action levels');
+  const prof0 = profileFromMeta({ shards: 0, upgrades: {} });
+  ok(Object.values(prof0.actions).every((v) => v === 0), '18.3: legacy profile (no actions) → locked levels');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

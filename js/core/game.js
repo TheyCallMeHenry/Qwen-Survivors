@@ -13,8 +13,8 @@ import { Particles, Snow } from '../entities/particles.js';
 import { Pickups, escapeFromSpots } from '../entities/pickups.js';
 import { Enemies } from '../entities/enemies.js';
 import { Combat } from '../entities/combat.js';
-import { Player, cardOffers, applyCard, recomputeStats, charDef } from '../entities/player.js';
-import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, loadSelectedLevel, isUnlocked, loadZoom, saveZoom, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations } from './meta.js';
+import { Player, cardOffers, applyCard, recomputeStats, charDef, skipXp } from '../entities/player.js';
+import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, loadSelectedLevel, isUnlocked, loadZoom, saveZoom, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations, buyAction } from './meta.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../entities/spawner.js';
 import { getLevel, LEVEL_ORDER } from '../world/levels.js';
 import { buildCharacters } from '../art/characters.js';
@@ -279,7 +279,7 @@ export class Game {
     this.levelupQueue--;
     this.bus.emit('card', card, i);
     if (this.levelupQueue > 0) {
-      this.cards = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(this.player));
+      this.cards = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(this.player), null, this.player.banished);
       if (this.cards.length) {
         this.bus.emit('cards', this.cards);
       } else {
@@ -287,6 +287,68 @@ export class Game {
       }
     }
     if (this.levelupQueue === 0) {
+      this.cards = null;
+      this.state = 'PLAYING';
+    }
+  }
+
+  // --- 18.3/18.4 level-up screen actions (PLAN §3.11, D84) -----------------
+  // Screen buttons, per-player use counters, never cards. Unlocked-0 = today's
+  // screen (solo invariance): every entry below no-ops unless uses remain.
+
+  // SKIP: pass on the offer (no card), gain 66% of the next level's XP (D84).
+  // Consumes one queued level-up step exactly like pickCard — no applyCard.
+  levelupSkip() {
+    if (this.state !== 'LEVELUP' || (this.player.actLeft.skip | 0) <= 0) return;
+    this.player.actLeft.skip--;
+    this.player.xp += skipXp(this.player.level);
+    this.levelupQueue--;
+    this.bus.emit('actions', this.player.actLeft);
+    if (this.levelupQueue > 0) {
+      this.cards = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(this.player), null, this.player.banished);
+      if (this.cards.length) {
+        this.bus.emit('cards', this.cards);
+      } else {
+        this.levelupQueue = 0; // pool exhausted mid-queue — grant the rest silently
+      }
+    }
+    if (this.levelupQueue === 0) {
+      this.cards = null;
+      this.state = 'PLAYING';
+    }
+  }
+
+  // RE-ROLL: discard the current set, draw fresh. VS semantics (D84): the discarded
+  // keys are excluded from THIS redraw only (later rerolls can see them again).
+  // Use stays banked when nothing else can be offered (the set would be identical).
+  levelupReroll() {
+    if (this.state !== 'LEVELUP' || !this.cards || (this.player.actLeft.reroll | 0) <= 0) return;
+    const ex = new Set(this.player.banished);
+    for (const c of this.cards) ex.add(c.key);
+    const offers = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(this.player), this.player._ghostOffers, ex);
+    if (!offers.length) return;
+    this.player.actLeft.reroll--;
+    this.cards = offers;
+    this.bus.emit('cards', offers);
+    this.bus.emit('actions', this.player.actLeft);
+  }
+
+  // BANISH: remove a card KEY from this picker's offers for the rest of the run
+  // (owned = frozen at rank — the pool skip in cardOffers does both). The banished
+  // slot refills via a redraw; the level-up pick itself is NOT consumed.
+  levelupBanish(i) {
+    if (this.state !== 'LEVELUP' || !this.cards || !this.cards[i] || (this.player.actLeft.banish | 0) <= 0) return;
+    const card = this.cards[i];
+    this.player.actLeft.banish--;
+    this.player.banished.add(card.key);
+    this.bus.emit('actions', this.player.actLeft);
+    const offers = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(this.player), this.player._ghostOffers, this.player.banished);
+    if (offers.length) {
+      this.cards = offers;
+      this.bus.emit('cards', offers);
+    } else {
+      // pool exhausted — the remaining queue grants silently (10.7 shape)
+      this.levelupQueue = 0;
       this.cards = null;
       this.state = 'PLAYING';
     }
@@ -460,7 +522,7 @@ export class Game {
   }
 
   _startLevelUp() {
-    const offers = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(this.player), this.player._ghostOffers);
+    const offers = cardOffers(this.player.weapons, this.player.passives, this.player.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(this.player), this.player._ghostOffers, this.player.banished);
     if (!offers.length) { this.levelupQueue = 0; return; } // every card owned — grant silently
     this.state = 'LEVELUP';
     this.cards = offers;
@@ -476,6 +538,14 @@ export class Game {
       if (owner !== pl && !pl.weapons[k] && !(pl.synergies || {})[k]) s.add(k);
     }
     return s;
+  }
+
+  // 18.2: buy one level of a level-up action (skip/reroll/banish); meta shop in the menu.
+  buyAction(key) {
+    if (!buyAction(this.meta, key)) return false;
+    saveMeta(CFG.meta.storageKey, this.meta);
+    this.bus.emit('meta', this.meta);
+    return true;
   }
 
   // Meta upgrades (Soulshards) — buy one level of `key`; no-op when maxed/unaffordable.
@@ -730,6 +800,10 @@ export class Game {
       pl.metaSpeed = (profile.speedMult || 1) - 1;
       pl.xpMul = profile.xpMult || 1;
       pl.dashCdMul = profile.dashCdMult || 1;
+      // 18.3: seed the seat's per-run action uses from its OWN shop levels (profile)
+      if (profile.actions) {
+        for (const k of Object.keys(pl.actLeft)) pl.actLeft[k] = Math.min(CFG.meta.actions[k].max, Math.max(0, profile.actions[k] | 0));
+      }
     }
     this._applyChar(pl, key, seat); // 11.6.4: the seat's ASSIGNED char (D56/D57) — base stats + starting weapon + sheet
     pl._mx = 0; pl._my = 0; pl._dash = false;
@@ -810,7 +884,7 @@ export class Game {
 
   _remoteLevelUps(pl, ups) {
     for (let i = 0; i < ups; i++) {
-      const offers = cardOffers(pl.weapons, pl.passives, pl.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(pl), pl._ghostOffers);
+      const offers = cardOffers(pl.weapons, pl.passives, pl.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(pl), pl._ghostOffers, pl.banished); // 18.4: per-picker banish honored; guests' own actions arrive via future input (counters + banish are per-player from day one)
       if (!offers.length) break;
       applyCard(pl, offers[0]); // host auto-picks; the client sees it via snapshots
       if (offers[0].level === 1 && (offers[0].kind === 'weapon' || offers[0].kind === 'synergy')) this.weaponOwner[offers[0].key] = pl; // 11.5/11.6b: first picker owns
