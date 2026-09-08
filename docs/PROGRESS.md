@@ -17,7 +17,7 @@ Rules for every future edit — this file is loaded at every session start; its 
 ## Status — 2026-09-07
 
 
-- **Active: Phase 18 COMPLETE (2026-09-07, session 32) — UNCOMMITTED** — level-up actions SKIP / RE-ROLL / BANISH (PLAN §3.11, D84): meta-shop unlocks (locked default; 10 levels each × [300…3000]), per-run per-player uses, run-long card-key banish with owned-freeze, SKIP = 66% next-level XP; level-up toolbar ≥72 px. Previously: 28 (icons) + 17 (durations) published at `ca1739a`. Feature queue after: **14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
+- **Active: none shipping — Phase 18 PUBLISHED (2026-09-07, session 33) at `d8b5955`** — level-up actions SKIP / RE-ROLL / BANISH (PLAN §3.11, D84): meta-shop unlocks (locked default; 10 levels each × [300…3000]), per-run per-player uses, run-long card-key banish with owned-freeze, SKIP = 66% next-level XP; level-up toolbar ≥72 px. Next in feature queue: **14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
 - **Gates (green on final Phase-18 tree, session 32):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **746/746** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0.
 - **Git:** `overnight-2026-08-22` = `main` = origin at `ca1739a` (Phases 25+27 published session 29; 28+17 published session 31 — `9977791` + `ca1739a`).
 - **Server:** DOWN (port 47893 not listening, re-checked session 27); recipe in `docs/ENV.md`.
@@ -62,7 +62,7 @@ Durations 5(default)/10/15/20/ENDLESS; bosses at 4:00/9:00/14:00/19:00 + every 5
 - [x] 17.3 Run machinery: victory at `runDuration` (ENDLESS never); boss events via `_bossIdx` (solo default bit-identical); HUD counts up on ENDLESS; co-op host-authoritative `runstart.dur` (null=ENDLESS, serve relay null-safe, old-host fallback)
 - [x] 17.4 Gates: `bossTimes` tables 5→[240] 10→[240,540] 15→+840 20→+1140 endless→[] + LS round-trip + CSS ≥72 px asserts → **718/718**; boot E2E chips+persist / d10 two bosses 4:00+9:00 / victory gate per duration / ENDLESS past 5:00 no victory + 9:00 cadence; `runs=4` default path untouched (bit-identical 5:00)
 
-### Phase 18 — Level-up actions SKIP / BANISH / RE-ROLL (COMPLETE 2026-09-07 session 32; spec PLAN §3.11, D67 superseded by D84; **UNCOMMITTED**) 
+### Phase 18 — Level-up actions SKIP / BANISH / RE-ROLL (COMPLETE + PUBLISHED 2026-09-07 `d8b5955`; spec PLAN §3.11, D67 superseded by D84)
 Screen actions (NOT items/cards/level-able); unlocked + upgraded in the meta store, **max 10 uses/run each** (D84 supersedes cap-5).
 - [x] 18.1 O resolutions RULED by user = **D84**: skip = floor(66% × next-level XP) · banish = card-key + **owned-freeze** · reroll = excluded from that redraw only · 10 shop levels (level 1 = unlock = 1 use, +1/level) at [300,600,…,3000] · all 5 meta-upgrade curves → [50,100,200,400,1000]
 - [x] 18.2 Meta-shop actions section (`Unlock`/`+1`/`×N per run`/`MAX`): `meta.actions` locked-by-default + legacy-safe `loadMeta` clamp; `actionCost`/`buyAction` in `core/meta.js`; persisted `qsurv.meta.v1` (no storage-version bump — additive + clamped load = no data loss)
@@ -113,15 +113,15 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 ### Phase 24 — Visual overhaul, 2.5D isometric (COMPLETE + PUBLISHED `7c4f01c`; PLAN §3.16)
 - [x] 24.1–24.9 `formShade()` single top-left key light on every opaque body (chars / enemies / bosses / blade + axe; additive energy sprites deliberately unshaded) · projectile-variant seam (`v` tag at fire sites, `(Var&&Var[v])||Img` lookup, base byte-identical) + 7 distinct synergy projectile skins · `decorShadow` contact shadows under standing decor · death-wisp hue variety · **deferred (user-approved): HUD/menu/CSS chrome restyle**
 
-## Resume Notes — session 32, 2026-09-07 (live state only; rewritten each session per Format contract)
+## Resume Notes — session 33, 2026-09-07 (live state only; rewritten each session per Format contract)
 
-**Where we are (session 32 DONE):** **Phase 18 SHIPPED end-to-end** (SKIP/RE-ROLL/BANISH per D84; PLAN §3.11 ticked). Full stack: config (`CFG.meta.actions` + slowed curves) → meta shop (`buyAction`, locked default, legacy-safe) → mechanics (`actLeft`/`banished`/`skipXp`/`cardOffers` banished param/`levelupSkip|Reroll|Banish`) → SNAP_V6 → screens toolbar + CSS + icons → tests. **UNCOMMITTED** (rule 7 — commit/push only on explicit ask).
+**Where we are (session 33 DONE):** **Phase 18 PUBLISHED** — gates re-run green on the dirty tree, single commit `d8b5955` (16 files, code+tests+docs) on `overnight-2026-08-22`, ff-merge → `main`, pushed; Pages serves Phase 18 (SKIP/RE-ROLL/BANISH, D84, PLAN §3.11).
 
-**NEXT (exact):** commit ask for Phase 18 (then ff-merge → Pages), then feature queue **14 → 21 → 2.9** (11.13 needs the user's NAS; 22.8 needs a phone — not this environment).
+**NEXT (exact):** feature queue **14 → 21 → 2.9** — start Phase 14 (in-run Soulshards counter + unified co-op earnings, D54; steps 14.1–14.3 verbatim in checklist); 21.1 needs user O-resolutions first (11.13 needs the user's NAS; 22.8 needs a phone — not this environment).
 
-**Gates (green on final Phase-18 tree, session 32):** check.mjs **34/34** · test-logic **746/746** · boot `PASS boot-sim runs=4` · `[10.4-bench]` radial=0.0. Known one-off boot flake at 11.5 pump-rng (~L2134): re-run once before bisecting.
+**Gates (green on published tree `d8b5955`, session 33):** check.mjs **34/34** · test-logic **746/746** · boot `PASS boot-sim runs=4` · `[10.4-bench]` radial=0.0. Known one-off boot flake at 11.5 pump-rng (~L2134): re-run once before bisecting.
 
-**Git state:** `overnight-2026-08-22` = `main` = origin at `ca1739a` (tree clean; `9977791` = Phase 28 art, `ca1739a` = Phase 17 + tests + docs). `unsloth-tmp/` gitignored.
+**Git state:** `overnight-2026-08-22` = `main` = origin at `d8b5955` (tree clean; `9977791` Phase 28, `ca1739a` Phase 17, `d8b5955` Phase 18). `unsloth-tmp/` gitignored.
 
 **Probe seams:** probes import game modules directly in Node with ctx stubs; fixed seed env; `[10.4-bench]` counters permanent in test-boot (`DEBUG_BOOT=1`). Sprite art check: `node tools/sprite-preview.mjs [char]` → stdout ASCII + `unsloth-tmp/hero-preview.html`. Latest probe capture: `unsloth-tmp/probe-mobile-session27.txt` (disposable).
 
@@ -134,6 +134,8 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 Full texts + one-line row index for **D1–D84** live in `docs/DECISIONS.md` (append-only numbering, revisions carry new numbers; Format contract §5). Open phases cite: D64 (11.13) · D54 (14) · D69 (21) · Phase 18 shipped under **D84** (supersedes D67 caps/opens).
 
 ## Session Log (append-only, newest first; entries before session 24 archived verbatim to `docs/ARCHIVE.md`)
+
+- **2026-09-07 (session 33) — Phase 18 PUBLISHED (user ask):** gates re-run green on the dirty Phase-18 tree (34/34 · 746/746 · boot PASS runs=4, radial 0.0) → single commit `d8b5955` (16 files) on `overnight-2026-08-22` → ff-merge → `main`, pushed `7945436..d8b5955` (both branches); Pages build now serves Phase 18. NEXT = feature queue 14 → 21 → 2.9.
 
 - **2026-09-07 (session 32) — Phase 18 CLOSED (level-up actions SKIP/RE-ROLL/BANISH, D84):** full vertical slice per user rulings: SKIP = floor(0.66×xpNeed) grant consuming the queued step · RE-ROLL = current-offer keys excluded from that redraw only (use banked if empty) · BANISH = arm-then-click-card, key out of this picker's offers run-long, owned cards frozen at rank, pick not consumed. Meta shop: locked default, 10 levels × [300…3000] (Unlock/+1/×N/MAX row language), legacy saves default-locked (no storage bump — additive+clamped); economy slow-down: 5 existing curves → [50,100,200,400,1000]. Wire: SNAP_V 5→6 (37 slots, actLeft tail; profile carries shop LEVELS, decrements ride snapshots — D53 holds); co-op per-picker isolation proven (seat-A never / seat-B still sees, 30 draws). `#lv-actions` toolbar + 3 procedural 72×72 soul-blue icons + armed/target-cue CSS (≥72 px, rule 6). Boot E2Es: locked-toolbar-hidden solo invariance, purchase ladder persistence, run-seed/reseed, disjoint reroll, banish refill. Playtest claim “1P starts passives at Lv1” investigated: code + Phase-20 asserts prove ZERO passives at start — suspect offer-card “Lv 1/5” grant-label misread; no change. Gates **34/34 · 746/746 (+28) · boot PASS runs=4** (radial 0.0, clean first run). **UNCOMMITTED** — commit ask pending (rule 7). NEXT = commit ask → 14 → 21 → 2.9.
 - **2026-09-07 (session 31) — Phase 17 CLOSED (selectable run durations & boss schedule):** durations data `CFG.run.durations` (d5 default/10/15/20/ENDLESS null) + cadence `bossAt`+`bossEvery` (D83 O-resolutions recorded); pure `bossTimes` in spawner; per-level LS map `qsurv.duration.v1` (`loadDurations`/`durationFor`/`saveDurations` + `Game.setDuration`); `runDuration` per run drives victory (`ENDLESS != null` gate) + boss events via `_bossIdx` (strict `<` run end) + HUD count-up; menu chips `#duration-select` (5 × ≥72 px, radiogroup, re-render on level/duration pick); co-op `runstart.dur` end-to-end (conn.js field, serve.mjs null-safe relay, client fallback). Solo 5:00 path untouched. Gates **34/34 · 718/718 · boot PASS runs=4 ×2** (first run tripped the pre-existing 11.5 pump-rng flake — re-runs green). Commit still pending user ask (rule 7), batched with Phase 28. NEXT = commit ask → 18 → 14 → 21 → 2.9.
@@ -160,6 +162,6 @@ See `docs/ENV.md` (moved out of this file 2026-09-05 per Format contract §6 —
 ## How to Resume a Session
 
 1. Read `AGENTS.md` → this file (Status → Master Checklist active phases → **Resume Notes**) → `docs/ENV.md`. Architecture: `docs/PLAN.md` §3–§4; decisions + pitfalls: `docs/DECISIONS.md`; user's own words: `docs/USER-INPUT-LOG.md`. The code is the API record — read the module before changing it.
-2. Work **NEXT** from Resume Notes (currently: Phases 28+17 commit ask → feature queue 18 → 14 → 21 → 2.9; leftovers 11.13 NAS-side, 22.8 device repro). New scope → Master Checklist first.
+2. Work **NEXT** from Resume Notes (currently: feature queue 14 → 21 → 2.9; leftovers 11.13 NAS-side, 22.8 device repro). New scope → Master Checklist first.
 3. Validate with **all three gates** before any tick: `"/c/Program Files/nodejs/node.exe" tools/check.mjs` (34 modules) · `tools/test-logic.mjs` (**718**) · `tools/test-boot.mjs` (`PASS boot-sim runs=4`).
 4. On completion: tick + date + ≤2-line note in the checklist, ≤10-line Session Log entry, rewrite Resume Notes (≤25 lines), update Status — *before* declaring done (Format contract §1–§4).
