@@ -17,9 +17,9 @@ Rules for every future edit — this file is loaded at every session start; its 
 ## Status — 2026-09-07
 
 
-- **Active: none shipping — Phase 18 PUBLISHED (2026-09-07, session 33) at `d8b5955`** — level-up actions SKIP / RE-ROLL / BANISH (PLAN §3.11, D84): meta-shop unlocks (locked default; 10 levels each × [300…3000]), per-run per-player uses, run-long card-key banish with owned-freeze, SKIP = 66% next-level XP; level-up toolbar ≥72 px. Next in feature queue: **14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
-- **Gates (green on final Phase-18 tree, session 32):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **746/746** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0.
-- **Git:** `overnight-2026-08-22` = `main` = origin at `ca1739a` (Phases 25+27 published session 29; 28+17 published session 31 — `9977791` + `ca1739a`).
+- **Active: Phase 22 r4 fixes LOCAL (session 33) — UNCOMMITTED** — menu scroll trap (22.9), touch-dash leak on menus (22.10), duration chips 40 px tall (22.11, D85); gates green — commit/publish on user ask. Phase 18 PUBLISHED at `d8b5955` — level-up actions SKIP / RE-ROLL / BANISH (PLAN §3.11, D84). Next in feature queue: **14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
+- **Gates (green with r4 fixes, session 33):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **750/750** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0.
+- **Git:** `overnight-2026-08-22` = `main` = origin at `c64da72` (Phase 18 published `d8b5955` + docs `c64da72`, Pages verified live); r4 fixes dirty on top.
 - **Server:** DOWN (port 47893 not listening, re-checked session 27); recipe in `docs/ENV.md`.
 
 ## Master Checklist
@@ -85,9 +85,12 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 - [ ] 21.5 Roster sync: pool/icons audit, cap review, README 10→19 weapons / 2 items / 4→9 chars + ghost
 - [ ] 21.6 Gates: all new content exercised; roster-count asserts rebased
 
-### Phase 22 — Playtest defects r2 + r3 (user reports 2026-08-28 / 2026-09-04)
+### Phase 22 — Playtest defects r2 + r3 + r4 (user reports 2026-08-28 / 2026-09-04 / 2026-09-07; r4 **UNCOMMITTED**)
 - [x] 22.1–22.7 weapon visibility+damage audit (all 8 observed live; garlic/blades report = Pages staleness, D73) · gem `escapeFromSpots` radial projection + per-step nudge (`CFG.gems.escapePad`) · M03 hearts → coral · flame damage radius = **flat 150** all levels (visible-stream aligned) · death slow-mo beat REMOVED per user verdict (never reintroduce a DYING transient) · synergy surfacing fix (×8 draw weight; superseded by D81 uniform draw in Phase 15) — 2026-09-04, pushed `e502417`
 - [ ] 22.8 Mobile "View zoom" non-functional (user report, Pages build): feature verified present+correct in-tree and in published main; real defect found = lighting half-res canvas stretches under the zoom transform. **Needs device repro** (no phone in this environment)
+- [x] 22.9 Menu hid maps (Android Firefox, live Pages): `.screen` flex-center + `overflow:auto` = unreachable top when content taller than viewport → `align-items: safe center` (centers when it fits, top-aligns + scrolls when it doesn't) — `css/main.css`
+- [x] 22.10 DASH ring visible on menu screens: `#touch-ui` displayed on `body.touch` alone → `hud.update()` sets `touchUi.hidden = !show` (PLAYING/LEVELUP/PAUSED) + CSS `body.touch #touch-ui[hidden]{display:none}` (beats specificity 111); boot E2E MENU hidden → PLAYING visible → GAMEOVER hidden
+- [x] 22.11 Duration chips half-height (user ruling → D85): `.dur-chip` min-height 72→**40 px** (width floor 72 px kept; rule 6 unchanged elsewhere); 17.2 test assert rebased — gates **34/34 · 750/750 (+4) · boot PASS runs=4**
 
 ### Phase 23 — Projectile feel & Sunder Bombs rework (COMPLETE 2026-09-04; PLAN §3.14; tuning rule: change only what the user names)
 - [x] 23.1–23.4 Bow charge-up wind-up + cadence ordering pistols < wand < bow at every level · Sunder Bombs radius ×1.5 / damage ×2 / centre-radial knockback / blast visual from true damage radius · over-heal synergy REPLACING Phoenix Heart in place (full-HP hearts → over-health to 200% max, ~1%/s decay, HUD bonus segment) · gates + boot E2Es for all three
@@ -115,13 +118,13 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 
 ## Resume Notes — session 33, 2026-09-07 (live state only; rewritten each session per Format contract)
 
-**Where we are (session 33 DONE):** **Phase 18 PUBLISHED** — gates re-run green on the dirty tree, single commit `d8b5955` (16 files, code+tests+docs) on `overnight-2026-08-22`, ff-merge → `main`, pushed; Pages serves Phase 18 (SKIP/RE-ROLL/BANISH, D84, PLAN §3.11).
+**Where we are (session 33 DONE):** **Phase 18 PUBLISHED** (`d8b5955` + docs `c64da72`, Pages live). Then user's first field test (Android Firefox) → **Phase 22 r4 fixed locally, UNCOMMITTED**: 22.9 menu scroll trap (`align-items: safe center` in `css/main.css`), 22.10 DASH ring leaked onto menus (`hud.js` sets `touchUi.hidden = !show` + CSS `body.touch #touch-ui[hidden]`), 22.11 duration chips 40 px tall (D85).
 
-**NEXT (exact):** feature queue **14 → 21 → 2.9** — start Phase 14 (in-run Soulshards counter + unified co-op earnings, D54; steps 14.1–14.3 verbatim in checklist); 21.1 needs user O-resolutions first (11.13 needs the user's NAS; 22.8 needs a phone — not this environment).
+**NEXT (exact):** commit/publish ask for the r4 fixes (5 files: css/main.css, js/ui/hud.js, tools/test-boot.mjs, tools/test-logic.mjs, docs), then feature queue **14 → 21 → 2.9** (21.1 needs user O-resolutions; 11.13 needs the NAS; 22.8 needs a phone).
 
-**Gates (green on published tree `d8b5955`, session 33):** check.mjs **34/34** · test-logic **746/746** · boot `PASS boot-sim runs=4` · `[10.4-bench]` radial=0.0. Known one-off boot flake at 11.5 pump-rng (~L2134): re-run once before bisecting.
+**Gates (green with r4 fixes, session 33):** check.mjs **34/34** · test-logic **750/750** (+4, one 17.2 assert rebased to 40 px) · boot `PASS boot-sim runs=4` · radial=0.0. Known boot flake 11.5 pump-rng: re-run once before bisecting.
 
-**Git state:** `overnight-2026-08-22` = `main` = origin at `d8b5955` (tree clean; `9977791` Phase 28, `ca1739a` Phase 17, `d8b5955` Phase 18). `unsloth-tmp/` gitignored.
+**Git state:** `overnight-2026-08-22` = `main` = origin at `c64da72`; dirty tree = the 22.9–22.11 fixes (4 code/test files + 3 docs). `unsloth-tmp/` gitignored.
 
 **Probe seams:** probes import game modules directly in Node with ctx stubs; fixed seed env; `[10.4-bench]` counters permanent in test-boot (`DEBUG_BOOT=1`). Sprite art check: `node tools/sprite-preview.mjs [char]` → stdout ASCII + `unsloth-tmp/hero-preview.html`. Latest probe capture: `unsloth-tmp/probe-mobile-session27.txt` (disposable).
 
@@ -134,6 +137,8 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 Full texts + one-line row index for **D1–D84** live in `docs/DECISIONS.md` (append-only numbering, revisions carry new numbers; Format contract §5). Open phases cite: D64 (11.13) · D54 (14) · D69 (21) · Phase 18 shipped under **D84** (supersedes D67 caps/opens).
 
 ## Session Log (append-only, newest first; entries before session 24 archived verbatim to `docs/ARCHIVE.md`)
+
+- **2026-09-07 (session 33) — Phase 18 PUBLISHED + playtest defects r4 fixed (22.9–22.11, UNCOMMITTED):** gates green → commit `d8b5955` + docs `c64da72`, ff-merge → `main`, pushed (Pages serves Phase 18; verified via live `meta.js`). User's Android-Firefox field test found 2 defects: menus taller than viewport were unscrollable at the top (flex center + overflow trap → `align-items: safe center`) and the touch DASH ring showed on every screen (`body.touch` alone → hud gates `#touch-ui` `[hidden]` to PLAYING/LEVELUP/PAUSED). User ruling: duration chips → 40 px tall (D85; rule 6 carve-out). USER-INPUT-LOG: 3 entries (approval, bug report, ruling). Gates **34/34 · 750/750 (+4) · boot PASS runs=4**. NEXT = r4 commit/publish ask → 14 → 21 → 2.9.
 
 - **2026-09-07 (session 33) — Phase 18 PUBLISHED (user ask):** gates re-run green on the dirty Phase-18 tree (34/34 · 746/746 · boot PASS runs=4, radial 0.0) → single commit `d8b5955` (16 files) on `overnight-2026-08-22` → ff-merge → `main`, pushed `7945436..d8b5955` (both branches); Pages build now serves Phase 18. NEXT = feature queue 14 → 21 → 2.9.
 
@@ -163,5 +168,5 @@ See `docs/ENV.md` (moved out of this file 2026-09-05 per Format contract §6 —
 
 1. Read `AGENTS.md` → this file (Status → Master Checklist active phases → **Resume Notes**) → `docs/ENV.md`. Architecture: `docs/PLAN.md` §3–§4; decisions + pitfalls: `docs/DECISIONS.md`; user's own words: `docs/USER-INPUT-LOG.md`. The code is the API record — read the module before changing it.
 2. Work **NEXT** from Resume Notes (currently: feature queue 14 → 21 → 2.9; leftovers 11.13 NAS-side, 22.8 device repro). New scope → Master Checklist first.
-3. Validate with **all three gates** before any tick: `"/c/Program Files/nodejs/node.exe" tools/check.mjs` (34 modules) · `tools/test-logic.mjs` (**718**) · `tools/test-boot.mjs` (`PASS boot-sim runs=4`).
+3. Validate with **all three gates** before any tick: `"/c/Program Files/nodejs/node.exe" tools/check.mjs` (34 modules) · `tools/test-logic.mjs` (**750**) · `tools/test-boot.mjs` (`PASS boot-sim runs=4`).
 4. On completion: tick + date + ≤2-line note in the checklist, ≤10-line Session Log entry, rewrite Resume Notes (≤25 lines), update Status — *before* declaring done (Format contract §1–§4).

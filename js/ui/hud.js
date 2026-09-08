@@ -211,6 +211,8 @@ export function initHud(game, { icons } = {}) {
     const show = st === 'PLAYING' || st === 'LEVELUP' || st === 'PAUSED'; // 22.6: no DYING transient — death flips straight to GAMEOVER
     hud.classList.toggle('hidden', !show);
     hud.setAttribute('aria-hidden', show ? 'false' : 'true');
+    // 22.10: the touch dash ring lived on every screen (body.touch alone) — gate it to run states.
+    touchUi.hidden = !show;
     if (!show) return;
     const coop = !!(game.net && game.netRole !== 'solo');
     const chars = coop ? resolveChars(game.netRoster) : null;

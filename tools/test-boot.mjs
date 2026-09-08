@@ -497,6 +497,8 @@ function steer() {
     }
     if (!soloHudDone && st === 'PLAYING' && game.t >= 6) {
       soloHudDone = true;
+      // 22.10: touch dash ring visible in-run
+      assert(byId['touch-ui'].hidden === false, '22.10: #touch-ui hidden during PLAYING');
       // 11.7 solo invariance (11.11): no coop class, TL (#hud-left) driven by the local player
       assert(!byId['hud'].classList.contains('coop'), '11.7: coop class present on #hud during a solo run');
       assert(byId['hp-label'].textContent === `${Math.max(0, Math.ceil(game.player.hp))} / ${game.player.maxHp}`,
@@ -698,6 +700,8 @@ function pumpUntil(pred, frames) {
 
 // menu, then the user's exact action
 pump(90);
+// 22.10: the touch dash/joy overlay must stay hidden on menu screens (was body.touch-only)
+assert(byId['touch-ui'].hidden === true, '22.10: #touch-ui visible during MENU');
 
 // 13.7 — level select E2E (fresh LS: 0 wins → only m01 unlocked + selected)
 {
@@ -847,6 +851,8 @@ game.combat.damagePlayer(game.player, 5, game.player.x, game.player.y);
 // 22.6: death now ends the run immediately (no DYING transient), so assert GAMEOVER directly.
 assert(game.state === 'GAMEOVER', `run 1: forced death did not end the run (state=${game.state})`);
 assert(!game.victory, 'run 1: death must not be a victory');
+pump(2); // let the render hook (hud.update) see GAMEOVER
+assert(byId['touch-ui'].hidden === true, '22.10: #touch-ui visible on the game-over screen');
 
 // meta flow: run 1's gameover must have persisted the Soulshards profile
 assert(typeof JSON.parse(localStorage.getItem(CFG.meta.storageKey)).shards === 'number',

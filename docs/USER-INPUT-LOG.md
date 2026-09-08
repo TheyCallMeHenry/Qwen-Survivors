@@ -13,6 +13,36 @@
 
 ## Entries (newest first)
 
+### 2026-09-07 — Ruling: run-duration chips may be half height on mobile
+- **Received:** 2026-09-07 (no time in message; date only)
+- **Classification:** `design decision` (touch-target sizing exception; recorded as D85)
+- **Context:** Follow-up while fixing the two menu defects the user reported from the live Pages build.
+- **Verbatim input:**
+
+  ```
+  The run duration selection buttons could easily be half the height they currently are and would still be easily accessible on mobile.
+  ```
+
+### 2026-09-07 — Playtest defects r4: main menu hides maps; Dash button visible on menu (screenshot)
+- **Received:** 2026-09-07 (no time in message; date only)
+- **Classification:** `bug report` ×2
+- **Context:** First field test of the freshly published Phase-18 Pages build on Android Firefox (screenshot attached showing m01 card clipped at viewport top, DASH ring bleeding through the menu).
+- **Verbatim input:**
+
+  ```
+  I just went to test out the new build and noticed that I can no longer see all of the maps in the main menu. Additionally, the Dash button in the bottom-right corner is visible on the main menu screen.
+  ```
+
+### 2026-09-07 — Approval: commit + push Phase 18, update Pages
+- **Received:** 2026-09-07 (no time in message; date only)
+- **Classification:** `answer/approval` (answers session 33's pending commit/publish question)
+- **Context:** Explicit rule-7 ask to ship Phase 18.
+- **Verbatim input:**
+
+  ```
+  yes, commit, push, and update the Pages build
+  ```
+
 ### 2026-09-07 — Resume directive: get up-to-speed from docs, propose + proceed with the next implementation phase
 - **Received:** 2026-09-07 (no time in message; date only)
 - **Classification:** `answer/approval` (go for the agent-proposed Phase 17 — durations/boss schedule — incl. its adopted O-resolutions, recorded as D83)

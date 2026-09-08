@@ -1957,7 +1957,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     '17.2: #duration-select radiogroup beside the level select');
   const css = readFileSync(fileURLToPath(new URL('../css/main.css', import.meta.url)), 'utf8');
   ok(/\.duration-select \{[^}]*flex-wrap: wrap/.test(css), '17.2: duration chips wrap (mobile layout)');
-  ok(/\.dur-chip \{[^}]*min-width: 72px[^}]*min-height: 72px/.test(css), '17.2: duration chips ≥72 px touch targets (rule 6)');
+  ok(/\.dur-chip \{[^}]*min-width: 72px[^}]*min-height: 40px/.test(css), '17.2+22.11: duration chips 72 px wide × 40 px tall (user ruling 2026-09-07: half height, still accessible)');
   ok(/\.dur-chip\.sel \{/.test(css), '17.2: selected-chip style present');
   const ssrc = readFileSync(fileURLToPath(new URL('../js/ui/screens.js', import.meta.url)), 'utf8');
   ok(/function renderDurations\(\)/.test(ssrc) && /game\.setDuration\(key\)/.test(ssrc),
@@ -2066,6 +2066,20 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     '18.3: profileFromMeta carries clamped action levels');
   const prof0 = profileFromMeta({ shards: 0, upgrades: {} });
   ok(Object.values(prof0.actions).every((v) => v === 0), '18.3: legacy profile (no actions) → locked levels');
+}
+
+// --- 22.9–22.11 playtest defects r4 (menu scroll trap, dash leak, chip height) ---
+{
+  const css = readFileSync(fileURLToPath(new URL('../css/main.css', import.meta.url)), 'utf8');
+  ok(/\.screen \{[^}]*align-items: safe center/.test(css),
+    '22.9: .screen uses safe centering (tall menus top-align + scroll; no unreachable clipped top)');
+  ok(/body\.touch #touch-ui\[hidden\] \{ display: none; \}/.test(css),
+    '22.10: #touch-ui[hidden] beats the body.touch display rule (outranks specificity 111)');
+  const hsrc = readFileSync(new URL('../js/ui/hud.js', import.meta.url), 'utf8');
+  ok(/touchUi\.hidden = !show;/.test(hsrc),
+    '22.10: hud.update() gates #touch-ui to run states (PLAYING/LEVELUP/PAUSED only)');
+  ok(/\.dur-chip \{[^}]*min-width: 72px[^}]*min-height: 40px/.test(css),
+    '22.11: duration chips 72 px wide × 40 px tall (user ruling: half height still accessible)');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

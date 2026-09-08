@@ -229,6 +229,9 @@ html, body {
 /* ============ touch UI (shown only when body.touch is set by main.js) ============ */
 #touch-ui { position: fixed; inset: 0; z-index: 20; pointer-events: none; display: none; }
 body.touch #touch-ui { display: block; }
+/* 22.10: hud.js sets #touch-ui[hidden] outside run states — dash/joy must not
+   bleed through the translucent menu screens (rule 6 targets apply in-run only). */
+body.touch #touch-ui[hidden] { display: none; }
 #joy-base {
   position: absolute; width: 128px; height: 128px;
   margin: -64px 0 0 -64px; border-radius: 50%;
@@ -263,7 +266,10 @@ body.touch #touch-ui { display: block; }
 /* ============ screens ============ */
 .screen {
   position: fixed; inset: 0; z-index: 30;
-  display: flex; align-items: center; justify-content: center;
+  /* 22.9: 'safe center' — plain center + overflow:auto made the top of tall menus
+     (level cards) unreachable; safe centering keeps centering but top-aligns
+     (scrollable) when content exceeds the viewport. */
+  display: flex; align-items: safe center; justify-content: center;
   padding: 20px;
   padding: calc(20px + var(--safe-t)) calc(20px + var(--safe-l)) calc(20px + var(--safe-b)) calc(20px + var(--safe-r));
   background: linear-gradient(180deg, rgba(5, 7, 15, 0.38), rgba(5, 7, 15, 0.72));
@@ -343,7 +349,9 @@ body.touch #touch-ui { display: block; }
 /* ============ duration select (17.2) ============ */
 .duration-select { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: min(86vw, 420px); }
 .dur-chip {
-  flex: 1 1 72px; min-width: 72px; min-height: 72px; padding: 6px 8px;
+  /* 22.11: user ruling 2026-09-07 — duration chips half-height (still comfortably tappable);
+     width keeps the 72 px floor from rule 6. */
+  flex: 1 1 72px; min-width: 72px; min-height: 40px; padding: 6px 8px;
   border: 1px solid var(--line); border-radius: 12px;
   background: linear-gradient(180deg, rgba(30, 40, 64, 0.92), rgba(15, 21, 38, 0.92));
   color: var(--text); font-family: inherit; font-size: 15px; font-weight: 800; letter-spacing: 0.03em;
