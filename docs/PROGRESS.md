@@ -17,7 +17,7 @@ Rules for every future edit — this file is loaded at every session start; its 
 ## Status — 2026-09-07
 
 
-- **Active: Phase 22 r4 fixes LOCAL (session 33) — UNCOMMITTED** — menu scroll trap (22.9), touch-dash leak on menus (22.10), duration chips 40 px tall (22.11, D85); gates green — commit/publish on user ask. Phase 18 PUBLISHED at `d8b5955` — level-up actions SKIP / RE-ROLL / BANISH (PLAN §3.11, D84). Next in feature queue: **14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
+- **Active: none shipping — Phase 22 r4 PUBLISHED (2026-09-07, session 33) at `dbfe4f1`** (menu scroll trap 22.9, touch-dash leak 22.10, duration chips 40 px 22.11/D85; Pages verified live) — after Phase 18 (`d8b5955`, SKIP/RE-ROLL/BANISH, PLAN §3.11, D84). Next in feature queue: **14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
 - **Gates (green with r4 fixes, session 33):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **750/750** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0.
 - **Git:** `overnight-2026-08-22` = `main` = origin at `c64da72` (Phase 18 published `d8b5955` + docs `c64da72`, Pages verified live); r4 fixes dirty on top.
 - **Server:** DOWN (port 47893 not listening, re-checked session 27); recipe in `docs/ENV.md`.
@@ -85,7 +85,7 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 - [ ] 21.5 Roster sync: pool/icons audit, cap review, README 10→19 weapons / 2 items / 4→9 chars + ghost
 - [ ] 21.6 Gates: all new content exercised; roster-count asserts rebased
 
-### Phase 22 — Playtest defects r2 + r3 + r4 (user reports 2026-08-28 / 2026-09-04 / 2026-09-07; r4 **UNCOMMITTED**)
+### Phase 22 — Playtest defects r2 + r3 + r4 (user reports 2026-08-28 / 2026-09-04 / 2026-09-07; r4 PUBLISHED `dbfe4f1`)
 - [x] 22.1–22.7 weapon visibility+damage audit (all 8 observed live; garlic/blades report = Pages staleness, D73) · gem `escapeFromSpots` radial projection + per-step nudge (`CFG.gems.escapePad`) · M03 hearts → coral · flame damage radius = **flat 150** all levels (visible-stream aligned) · death slow-mo beat REMOVED per user verdict (never reintroduce a DYING transient) · synergy surfacing fix (×8 draw weight; superseded by D81 uniform draw in Phase 15) — 2026-09-04, pushed `e502417`
 - [ ] 22.8 Mobile "View zoom" non-functional (user report, Pages build): feature verified present+correct in-tree and in published main; real defect found = lighting half-res canvas stretches under the zoom transform. **Needs device repro** (no phone in this environment)
 - [x] 22.9 Menu hid maps (Android Firefox, live Pages): `.screen` flex-center + `overflow:auto` = unreachable top when content taller than viewport → `align-items: safe center` (centers when it fits, top-aligns + scrolls when it doesn't) — `css/main.css`
@@ -118,13 +118,13 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 
 ## Resume Notes — session 33, 2026-09-07 (live state only; rewritten each session per Format contract)
 
-**Where we are (session 33 DONE):** **Phase 18 PUBLISHED** (`d8b5955` + docs `c64da72`, Pages live). Then user's first field test (Android Firefox) → **Phase 22 r4 fixed locally, UNCOMMITTED**: 22.9 menu scroll trap (`align-items: safe center` in `css/main.css`), 22.10 DASH ring leaked onto menus (`hud.js` sets `touchUi.hidden = !show` + CSS `body.touch #touch-ui[hidden]`), 22.11 duration chips 40 px tall (D85).
+**Where we are (session 33 DONE):** **Phase 18 (`d8b5955`) + Phase 22 r4 (`dbfe4f1`) both PUBLISHED** — r4 = menu scroll trap (`align-items: safe center`), touch-DASH gate (`touchUi.hidden = !show` + `body.touch #touch-ui[hidden]`), duration chips 40 px (D85). Pages verified live via served `main.css` + `hud.js` markers.
 
-**NEXT (exact):** commit/publish ask for the r4 fixes (5 files: css/main.css, js/ui/hud.js, tools/test-boot.mjs, tools/test-logic.mjs, docs), then feature queue **14 → 21 → 2.9** (21.1 needs user O-resolutions; 11.13 needs the NAS; 22.8 needs a phone).
+**NEXT (exact):** feature queue **14 → 21 → 2.9** — start Phase 14 (in-run Soulshards counter + unified co-op earnings, D54; 14.1–14.3 verbatim in checklist); 21.1 needs user O-resolutions first (11.13 needs the NAS; 22.8 needs a phone — not this environment).
 
-**Gates (green with r4 fixes, session 33):** check.mjs **34/34** · test-logic **750/750** (+4, one 17.2 assert rebased to 40 px) · boot `PASS boot-sim runs=4` · radial=0.0. Known boot flake 11.5 pump-rng: re-run once before bisecting.
+**Gates (green on published tree `dbfe4f1`, session 33):** check.mjs **34/34** · test-logic **750/750** (+4, one 17.2 assert rebased to 40 px) · boot `PASS boot-sim runs=4` · radial=0.0. Known boot flake 11.5 pump-rng: re-run once before bisecting.
 
-**Git state:** `overnight-2026-08-22` = `main` = origin at `c64da72`; dirty tree = the 22.9–22.11 fixes (4 code/test files + 3 docs). `unsloth-tmp/` gitignored.
+**Git state:** `overnight-2026-08-22` = `main` = origin at `dbfe4f1` (tree clean). `unsloth-tmp/` gitignored.
 
 **Probe seams:** probes import game modules directly in Node with ctx stubs; fixed seed env; `[10.4-bench]` counters permanent in test-boot (`DEBUG_BOOT=1`). Sprite art check: `node tools/sprite-preview.mjs [char]` → stdout ASCII + `unsloth-tmp/hero-preview.html`. Latest probe capture: `unsloth-tmp/probe-mobile-session27.txt` (disposable).
 
@@ -138,6 +138,7 @@ Full texts + one-line row index for **D1–D84** live in `docs/DECISIONS.md` (ap
 
 ## Session Log (append-only, newest first; entries before session 24 archived verbatim to `docs/ARCHIVE.md`)
 
+- **2026-09-07 (session 33b) — r4 fixes PUBLISHED:** gates re-run green (34/34 · 750/750 · boot runs=4) → commit `dbfe4f1` (7 files), ff-merge → `main`, pushed; Pages verified via live `main.css` (safe center / 40 px chip / touch-ui[hidden]) + `hud.js` (hidden gate). NEXT = feature queue 14 → 21 → 2.9.
 - **2026-09-07 (session 33) — Phase 18 PUBLISHED + playtest defects r4 fixed (22.9–22.11, UNCOMMITTED):** gates green → commit `d8b5955` + docs `c64da72`, ff-merge → `main`, pushed (Pages serves Phase 18; verified via live `meta.js`). User's Android-Firefox field test found 2 defects: menus taller than viewport were unscrollable at the top (flex center + overflow trap → `align-items: safe center`) and the touch DASH ring showed on every screen (`body.touch` alone → hud gates `#touch-ui` `[hidden]` to PLAYING/LEVELUP/PAUSED). User ruling: duration chips → 40 px tall (D85; rule 6 carve-out). USER-INPUT-LOG: 3 entries (approval, bug report, ruling). Gates **34/34 · 750/750 (+4) · boot PASS runs=4**. NEXT = r4 commit/publish ask → 14 → 21 → 2.9.
 
 - **2026-09-07 (session 33) — Phase 18 PUBLISHED (user ask):** gates re-run green on the dirty Phase-18 tree (34/34 · 746/746 · boot PASS runs=4, radial 0.0) → single commit `d8b5955` (16 files) on `overnight-2026-08-22` → ff-merge → `main`, pushed `7945436..d8b5955` (both branches); Pages build now serves Phase 18. NEXT = feature queue 14 → 21 → 2.9.
