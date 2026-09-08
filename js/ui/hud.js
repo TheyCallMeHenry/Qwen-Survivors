@@ -9,6 +9,7 @@
 
 import { CFG } from '../config.js';
 import { clamp, fmtTime } from '../utils/math.js';
+import { shardsFor } from '../core/meta.js';
 import { buildGhost } from '../art/heroes.js';   // Phase 27 from-scratch sheets
 import { drawIconScaled } from '../art/items.js';
 import { charAccent, ghostColor, resolveChars } from '../net/coop.js';
@@ -24,6 +25,7 @@ export function initHud(game, { icons } = {}) {
   const lvlBadge = $('lvl-badge');
   const timer = $('timer');
   const score = $('score');
+  const hudShards = $('hud-shards');
   const btnPause = $('btn-pause');
   const btnDash = $('btn-dash');
   const btnDashHud = $('btn-dash-hud');
@@ -241,6 +243,9 @@ export function initHud(game, { icons } = {}) {
     const rd = game.runDuration === null ? null : (game.runDuration == null ? CFG.run.time : game.runDuration);
     setTxt(timer, fmtTime(rd === null ? game.t : rd - game.t));
     setTxt(score, String(game.liveScore()));
+    // 14.1 (D54): live projected Soulshard award — same formula the run-end uses
+    // (victory bonus can only land at the end; the game-over screen shows the total).
+    setTxt(hudShards, `${shardsFor({ score: game.liveScore(), victory: false })} ◆`);
     const cd = String(clamp(p.dashCd / CFG.player.dashCd, 0, 1));
     if (cd !== cdStr) { cdStr = cd; btnDash.style.setProperty('--cd', cd); btnDashHud.style.setProperty('--cd', cd); }
     // 11.7: co-op corners — visible count = current player count, join order (A5).

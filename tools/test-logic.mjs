@@ -16,7 +16,7 @@ import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, record
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
-import { MSG, pack, unpack, profileFromMeta, joinProfile, sanitizeChars, allStarterLobby, ghostColor, charAccent, allocateGhostOffers, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap, bossCount, selChar, assignChars, resolveChars } from '../js/net/coop.js';
+import { MSG, pack, unpack, profileFromMeta, joinProfile, sanitizeChars, allStarterLobby, ghostColor, charAccent, allocateGhostOffers, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap, bossCount, selChar, assignChars, resolveChars, sanitizeShards } from '../js/net/coop.js';
 import { encodeFrame, consumeFrames, wsAcceptKey } from './serve.mjs';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -2080,6 +2080,39 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     '22.10: hud.update() gates #touch-ui to run states (PLAYING/LEVELUP/PAUSED only)');
   ok(/\.dur-chip \{[^}]*min-width: 72px[^}]*min-height: 40px/.test(css),
     '22.11: duration chips 72 px wide × 40 px tall (user ruling: half height still accessible)');
+}
+
+// --- Phase 14: in-run Soulshards counter + unified co-op earnings (D54) ---
+{
+  // 14.2 sanitizer: positive integer passes (floored), everything else → null (no accrual)
+  ok(sanitizeShards(52) === 52 && sanitizeShards(52.9) === 52,
+    '14.2: sanitizeShards keeps positive integers (floored)');
+  ok(sanitizeShards(0) === null && sanitizeShards(-5) === null && sanitizeShards(Number.NaN) === null &&
+     sanitizeShards(Infinity) === null && sanitizeShards('52') === null && sanitizeShards(null) === null &&
+     sanitizeShards(undefined) === null,
+    '14.2: sanitizeShards rejects 0/negative/NaN/Infinity/non-number → null');
+  // 14.1 projected award = the run-end formula on the live score (no economy change, O1=A)
+  ok(shardsFor({ score: 400, victory: false }) === 1 && shardsFor({ score: 399, victory: false }) === 0,
+    '14.1: live projection floor(score/400) boundary exact');
+  ok(shardsFor({ score: 3999, victory: false }) === 9 && shardsFor({ score: 4000, victory: true }) === 35,
+    '14.1: projection mid-run + victory bonus (+25) unchanged');
+  // HTML + CSS + wiring content asserts
+  const html = readFileSync(fileURLToPath(new URL('../index.html', import.meta.url)), 'utf8');
+  ok(/<div id="hud-shards"[^>]*>0 ◆<\/div>/.test(html), '14.1: #hud-shards counter in #hud-top markup');
+  const css = readFileSync(fileURLToPath(new URL('../css/main.css', import.meta.url)), 'utf8');
+  ok(/#hud-shards \{/.test(css), '14.1: #hud-shards styled');
+  const hsrc = readFileSync(new URL('../js/ui/hud.js', import.meta.url), 'utf8');
+  ok(/setTxt\(hudShards, `\$\{shardsFor\(\{ score: game\.liveScore\(\), victory: false \}\)} ◆`\);/.test(hsrc),
+    '14.1: hud.update() drives #hud-shards change-detected (setTxt) from liveScore');
+  const gsrc = readFileSync(new URL('../js/core/game.js', import.meta.url), 'utf8');
+  ok(/sendClosed\('run-end', gain\)/.test(gsrc),
+    '14.2: host run-end rides the run-level shard total on the room close');
+  ok(/case MSG\.closed: this\._netClosed\(m\); break;/.test(gsrc) &&
+     /sanitizeShards\(m && m\.shards\)/.test(gsrc),
+    '14.2: client _netClosed accrues the sanitized wire total locally');
+  const ssrc = readFileSync(new URL('../tools/serve.mjs', import.meta.url), 'utf8');
+  ok(/Math\.floor\(num\(m\.shards\)\)/.test(ssrc) && /shards > 0 \? \{ t: MSG\.closed, reason: 'host', shards \}/.test(ssrc),
+    '14.2: serve relays a sanitized shards field on host close only');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

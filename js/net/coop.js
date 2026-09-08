@@ -18,6 +18,12 @@ export const MSG = {
 
 export function pack(obj) { return JSON.stringify(obj); }
 
+// D54 (14.2): the host's run-level Soulshard total rides the room-close message;
+// every client accrues it in full locally. Wire sanitizer: positive integer or null.
+export function sanitizeShards(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : null;
+}
+
 export function unpack(str) {
   try {
     const o = JSON.parse(str);

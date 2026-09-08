@@ -17,9 +17,9 @@ Rules for every future edit — this file is loaded at every session start; its 
 ## Status — 2026-09-07
 
 
-- **Active: none shipping — Phase 22 r4 PUBLISHED (2026-09-07, session 33) at `dbfe4f1`** (menu scroll trap 22.9, touch-dash leak 22.10, duration chips 40 px 22.11/D85; Pages verified live) — after Phase 18 (`d8b5955`, SKIP/RE-ROLL/BANISH, PLAN §3.11, D84). Next in feature queue: **14 → 21 → 2.9** (leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
-- **Gates (green with r4 fixes, session 33):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **750/750** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0.
-- **Git:** `overnight-2026-08-22` = `main` = origin at `c64da72` (Phase 18 published `d8b5955` + docs `c64da72`, Pages verified live); r4 fixes dirty on top.
+- **Active: Phase 14 COMPLETE (2026-09-07, session 34) — UNCOMMITTED.** In-run `#hud-shards` projected-award counter + unified co-op earnings (guests now accrue the host's run-level total in full, D54). Next in feature queue: **21 → 2.9** (21.1 needs user O-resolutions first; leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
+- **Gates (green on the Phase 14 tree, session 34):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **760/760** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0.
+- **Git:** `overnight-2026-08-22` = `main` = origin at `7acad05` (Phase 22 r4 `dbfe4f1` published, Pages live); Phase 14 dirty on top — commit only on user ask (rule 7).
 - **Server:** DOWN (port 47893 not listening, re-checked session 27); recipe in `docs/ENV.md`.
 
 ## Master Checklist
@@ -44,10 +44,10 @@ Completed phases = one line each; full step detail lives verbatim in `docs/ARCHI
 ### Phase 13 — Multi-level expansion (COMPLETE 2026-08-22; spec PLAN §3.9)
 - [x] 13.1–13.13 `js/world/levels.js` single-source level defs (`generateWorld(seed, levelKey)`, m01 goldens) · Higan (m02, ×1.25, Oni + Ryū) · Drowned City (m03 1.5× area, ×1.56 chained, Great White) · unlock chain = 3 cumulative wins chained (LS `qsurv.wins.v1`) · level select + locked-card progress/denied blip · zoom 0.80/1.0 + Pause Settings (D48) · per-level scores/flavor tints/unlock banner/audio (muffle lowpass)
 
-### Phase 14 — In-run Soulshards counter + unified co-op earnings (queued after 21)
-- [ ] 14.1 In-run counter: live projected award `floor(score/400)` (+25 victory) — no economy change (O1=A); state-gated visible-during-runs-only; change-detected DOM
-- [ ] 14.2 Unified co-op earnings: one run-level total from host sim, every client accrues in full locally (D54 supersedes D53 earnings clause; meta stays player-specific)
-- [ ] 14.3 Gates: test-logic pure helpers + boot solo/co-op E2E
+### Phase 14 — In-run Soulshards counter + unified co-op earnings (COMPLETE 2026-09-07 session 34; D54; UNCOMMITTED)
+- [x] 14.1 `#hud-shards` under the in-run score: live projection `shardsFor({score: liveScore()})` via change-detected `setTxt`; state-gated by `#hud` (runs only); zero economy change (O1=A)
+- [x] 14.2 Host `_gameOver` gain rides the room close (`sendClosed('run-end', gain)`; serve sanitizes + relays on host-seat closes only — `host-leave`/`leave` carry none); client `_netClosed` accrues `sanitizeShards()` in full into local meta + saveMeta + `meta` emit (guests previously earned nothing); meta stays player-specific (D53 holds otherwise)
+- [x] 14.3 Gates: +10 logic (sanitizeShards boundaries, projection identity, HTML/CSS/source wiring asserts) + boot E2Es (solo HUD counter exact-match ×2 incl. non-zero latch; 14.2 room-close accrual E2E on real serve.mjs: relay carries total, client accrues in full, upgrades untouched, back-to-menu-solo) → **34/34 · 760/760 · boot PASS runs=4**
 
 ### Phase 15 — Level-up offer coverage DEFECT (COMPLETE 2026-09-05; user playtest 2026-08-22)
 - [x] **Phase 15 COMPLETE 2026-09-05 (D81)** — offer-coverage defect: root cause = cap-fill hard-stop DOMINANT (at cap 5, P(new-weapon offer)=0%; 81% of a run's level-up steps happen at cap) + 3-of-N dilution below cap; fix SHIPPED = **uniform sample-without-replacement** (`drawOffers` partial Fisher-Yates in `player.js`; `CFG.offer={slots:3}`) — offer-in-run spread 60–86% (Pyre Lance 34–40% never-offered) → 61–66% equal; acquisition 41–47% = irreducible cap-5-of-10 ceiling. Detail: `docs/ARCHIVE.md`
@@ -116,15 +116,15 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 ### Phase 24 — Visual overhaul, 2.5D isometric (COMPLETE + PUBLISHED `7c4f01c`; PLAN §3.16)
 - [x] 24.1–24.9 `formShade()` single top-left key light on every opaque body (chars / enemies / bosses / blade + axe; additive energy sprites deliberately unshaded) · projectile-variant seam (`v` tag at fire sites, `(Var&&Var[v])||Img` lookup, base byte-identical) + 7 distinct synergy projectile skins · `decorShadow` contact shadows under standing decor · death-wisp hue variety · **deferred (user-approved): HUD/menu/CSS chrome restyle**
 
-## Resume Notes — session 33, 2026-09-07 (live state only; rewritten each session per Format contract)
+## Resume Notes — session 34, 2026-09-07 (live state only; rewritten each session per Format contract)
 
-**Where we are (session 33 DONE):** **Phase 18 (`d8b5955`) + Phase 22 r4 (`dbfe4f1`) both PUBLISHED** — r4 = menu scroll trap (`align-items: safe center`), touch-DASH gate (`touchUi.hidden = !show` + `body.touch #touch-ui[hidden]`), duration chips 40 px (D85). Pages verified live via served `main.css` + `hud.js` markers.
+**Where we are (session 34 DONE):** **Phase 14 COMPLETE (UNCOMMITTED)** — `#hud-shards` live projection (`setTxt(shardsFor({score: liveScore()})) ◆`, `hud.js`) + unified co-op earnings: host gain on `sendClosed('run-end', gain)` → serve relays sanitized `shards` (host-seat close only) → client `_netClosed` accrues full amount locally (`sanitizeShards` in `net/coop.js`). Docs/README/PLAN §3.20/ENV synced. Published baseline unchanged: `dbfe4f1` (Phase 22 r4, Pages live).
 
-**NEXT (exact):** feature queue **14 → 21 → 2.9** — start Phase 14 (in-run Soulshards counter + unified co-op earnings, D54; 14.1–14.3 verbatim in checklist); 21.1 needs user O-resolutions first (11.13 needs the NAS; 22.8 needs a phone — not this environment).
+**NEXT (exact):** feature queue **21 → 2.9** — Phase 21 (extended roster, PLAN §3.13 verbatim) starts at **21.1 O-resolutions: needs user confirm** (per-weapon stats, item slot rules, character archetypes/stats/unlock costs, Cannonball×leash, boulder auto-kill size class). 11.13 needs the NAS; 22.8 needs a phone — not this environment.
 
-**Gates (green on published tree `dbfe4f1`, session 33):** check.mjs **34/34** · test-logic **750/750** (+4, one 17.2 assert rebased to 40 px) · boot `PASS boot-sim runs=4` · radial=0.0. Known boot flake 11.5 pump-rng: re-run once before bisecting.
+**Gates (green on Phase 14 tree, session 34):** check.mjs **34/34** · test-logic **760/760** (+10) · boot `PASS boot-sim runs=4` · radial=0.0. Known boot flake 11.5 pump-rng: re-run once before bisecting.
 
-**Git state:** `overnight-2026-08-22` = `main` = origin at `dbfe4f1` (tree clean). `unsloth-tmp/` gitignored.
+**Git state:** dirty on top of `7acad05`: `index.html` `css/main.css` `js/core/game.js` `js/net/conn.js` `js/net/coop.js` `js/ui/hud.js` `tools/serve.mjs` `tools/test-boot.mjs` `tools/test-logic.mjs` `README.md` `docs/PLAN.md` `docs/ENV.md` `docs/PROGRESS.md`. Commit only on user ask (rule 7). `unsloth-tmp/` gitignored.
 
 **Probe seams:** probes import game modules directly in Node with ctx stubs; fixed seed env; `[10.4-bench]` counters permanent in test-boot (`DEBUG_BOOT=1`). Sprite art check: `node tools/sprite-preview.mjs [char]` → stdout ASCII + `unsloth-tmp/hero-preview.html`. Latest probe capture: `unsloth-tmp/probe-mobile-session27.txt` (disposable).
 
@@ -137,6 +137,8 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 Full texts + one-line row index for **D1–D84** live in `docs/DECISIONS.md` (append-only numbering, revisions carry new numbers; Format contract §5). Open phases cite: D64 (11.13) · D54 (14) · D69 (21) · Phase 18 shipped under **D84** (supersedes D67 caps/opens).
 
 ## Session Log (append-only, newest first; entries before session 24 archived verbatim to `docs/ARCHIVE.md`)
+
+- **2026-09-07 (session 34) — Phase 14 CLOSED (in-run Soulshards counter + unified co-op earnings, D54):** `#hud-shards` under the score = live `shardsFor(liveScore)` projection, change-detected, runs-only (no economy change, O1=A). Co-op gap found + fixed: guests earned NOTHING (room closed bare, clients → menu) — now host gain rides the close (`sendClosed('run-end', gain)`), serve sanitizes/relays `shards` on host-seat closes only, client `_netClosed(m)` accrues `sanitizeShards()` in full into local meta (meta stays player-specific, D53 otherwise holds; old-host/old-client wire additive). Latent serve fix: `closed` handler now guards `room &&` (null-room TypeError). 3 boot wire-mirror `sendClosed`s upgraded. Gates **34/34 · 760/760 (+10) · boot PASS runs=4** (radial 0.0, clean first run). PLAN §3.20 + README + ENV baselines synced. **UNCOMMITTED** — commit ask pending (rule 7). NEXT = 21 (21.1 O-resolutions need user) → 2.9.
 
 - **2026-09-07 (session 33b) — r4 fixes PUBLISHED:** gates re-run green (34/34 · 750/750 · boot runs=4) → commit `dbfe4f1` (7 files), ff-merge → `main`, pushed; Pages verified via live `main.css` (safe center / 40 px chip / touch-ui[hidden]) + `hud.js` (hidden gate). NEXT = feature queue 14 → 21 → 2.9.
 - **2026-09-07 (session 33) — Phase 18 PUBLISHED + playtest defects r4 fixed (22.9–22.11, UNCOMMITTED):** gates green → commit `d8b5955` + docs `c64da72`, ff-merge → `main`, pushed (Pages serves Phase 18; verified via live `meta.js`). User's Android-Firefox field test found 2 defects: menus taller than viewport were unscrollable at the top (flex center + overflow trap → `align-items: safe center`) and the touch DASH ring showed on every screen (`body.touch` alone → hud gates `#touch-ui` `[hidden]` to PLAYING/LEVELUP/PAUSED). User ruling: duration chips → 40 px tall (D85; rule 6 carve-out). USER-INPUT-LOG: 3 entries (approval, bug report, ruling). Gates **34/34 · 750/750 (+4) · boot PASS runs=4**. NEXT = r4 commit/publish ask → 14 → 21 → 2.9.
@@ -168,6 +170,6 @@ See `docs/ENV.md` (moved out of this file 2026-09-05 per Format contract §6 —
 ## How to Resume a Session
 
 1. Read `AGENTS.md` → this file (Status → Master Checklist active phases → **Resume Notes**) → `docs/ENV.md`. Architecture: `docs/PLAN.md` §3–§4; decisions + pitfalls: `docs/DECISIONS.md`; user's own words: `docs/USER-INPUT-LOG.md`. The code is the API record — read the module before changing it.
-2. Work **NEXT** from Resume Notes (currently: feature queue 14 → 21 → 2.9; leftovers 11.13 NAS-side, 22.8 device repro). New scope → Master Checklist first.
-3. Validate with **all three gates** before any tick: `"/c/Program Files/nodejs/node.exe" tools/check.mjs` (34 modules) · `tools/test-logic.mjs` (**750**) · `tools/test-boot.mjs` (`PASS boot-sim runs=4`).
+2. Work **NEXT** from Resume Notes (currently: feature queue 21 → 2.9 — 21.1 needs user O-resolutions; leftovers 11.13 NAS-side, 22.8 device repro). New scope → Master Checklist first.
+3. Validate with **all three gates** before any tick: `"/c/Program Files/nodejs/node.exe" tools/check.mjs` (34 modules) · `tools/test-logic.mjs` (**760**) · `tools/test-boot.mjs` (`PASS boot-sim runs=4`).
 4. On completion: tick + date + ≤2-line note in the checklist, ≤10-line Session Log entry, rewrite Resume Notes (≤25 lines), update Status — *before* declaring done (Format contract §1–§4).

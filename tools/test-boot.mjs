@@ -277,6 +277,7 @@ let wandOffDone = false, wandOffAsserted = false, wandOffAt = 0, wandOffKills = 
 let stickDone = false, stickUp = false, stickT = 0, stickX0 = 0;
 let dashBtnDone = false, dashBtnAsserted = false;
 let soloHudDone = false; // 11.7 solo invariance (11.11): no coop class, TL = local player
+let shardCountDone = false; // 14.1: non-zero in-run Soulshards projection observed
 let soloInvDone = false; // 11.11 solo invariance: a 1P run carries NO co-op overhead
 let sawBullets = false, sawBombs = false, sawFlames = false, sawArrows = false;
 let sawBolts = false, sawAxes = false, sawBlades = false, sawGarlic = false; // 22.1: all-weapon E2E observation
@@ -503,6 +504,15 @@ function steer() {
       assert(!byId['hud'].classList.contains('coop'), '11.7: coop class present on #hud during a solo run');
       assert(byId['hp-label'].textContent === `${Math.max(0, Math.ceil(game.player.hp))} / ${game.player.maxHp}`,
         '11.7: solo TL panel not driven by the local player');
+      // 14.1: in-run Soulshards counter shows the live projected award
+      const proj14 = Math.floor(game.liveScore() / CFG.meta.shardPerScore);
+      assert(byId['hud-shards'].textContent === `${proj14} ◆`,
+        `14.1: #hud-shards not showing the live projection (got "${byId['hud-shards'].textContent}", want "${proj14} ◆")`);
+    }
+    if (!shardCountDone && st === 'PLAYING' && game.liveScore() >= CFG.meta.shardPerScore) {
+      shardCountDone = true; // non-zero projection: time score alone ≥ 400 by ~27 s
+      assert(byId['hud-shards'].textContent === `${Math.floor(game.liveScore() / CFG.meta.shardPerScore)} ◆`,
+        '14.1: #hud-shards tracks the projection once it turns non-zero');
     }
     if (!soloInvDone && st === 'PLAYING' && game.bossSpawned) {
       soloInvDone = true;
@@ -2016,7 +2026,7 @@ m03RunDone = true;
       sendInput: (mx, my, dash) => raw.send({ t: 'input', mx, my, dash }),
       sendState: (id, body) => raw.send(Object.assign({ t: 'state' }, body, { id })),
       sendRunStart: (id, seed, levelKey, dur) => raw.send({ t: 'runstart', id, seed, levelKey, dur }),
-      sendClosed: (reason) => raw.send({ t: 'closed', reason }),
+      sendClosed: (reason, shards) => raw.send(shards == null ? { t: 'closed', reason } : { t: 'closed', reason, shards }),
     };
     raw.w.addEventListener('message', (ev) => { const m = JSON.parse(String(ev.data)); conn.onMessage && conn.onMessage(m); });
     g.net = conn;
@@ -2229,7 +2239,7 @@ m03RunDone = true;
       sendInput: (mx, my, dash) => raw.send({ t: 'input', mx, my, dash }),
       sendState: (id, body) => raw.send(Object.assign({ t: 'state' }, body, { id })),
       sendRunStart: (id, seed, levelKey, dur) => raw.send({ t: 'runstart', id, seed, levelKey, dur }),
-      sendClosed: (reason) => raw.send({ t: 'closed', reason }),
+      sendClosed: (reason, shards) => raw.send(shards == null ? { t: 'closed', reason } : { t: 'closed', reason, shards }),
     };
     raw.w.addEventListener('message', (ev) => { const m = JSON.parse(String(ev.data)); conn.onMessage && conn.onMessage(m); });
     g.net = conn;
@@ -2400,7 +2410,7 @@ m03RunDone = true;
       sendInput: (mx, my, dash) => raw.send({ t: 'input', mx, my, dash }),
       sendState: (id, body) => raw.send(Object.assign({ t: 'state' }, body, { id })),
       sendRunStart: (id, seed, levelKey, dur) => raw.send({ t: 'runstart', id, seed, levelKey, dur }),
-      sendClosed: (reason) => raw.send({ t: 'closed', reason }),
+      sendClosed: (reason, shards) => raw.send(shards == null ? { t: 'closed', reason } : { t: 'closed', reason, shards }),
     };
     raw.w.addEventListener('message', (ev) => { const m = JSON.parse(String(ev.data)); conn.onMessage && conn.onMessage(m); });
     g.net = conn;
@@ -2802,6 +2812,91 @@ m03RunDone = true;
   game.toMenu(); pump(10);
 }
 
+// --- 14.2 E2E: unified co-op earnings (D54) — the host sim's run-level shard total
+// rides the room close; every client accrues it in FULL locally, meta stays player-specific ---
+{
+  const { createGameServer, attachCoopRoom } = await import('../tools/serve.mjs');
+  const { joinProfile } = await import('../js/net/coop.js');
+  const srv = createGameServer();
+  attachCoopRoom(srv);
+  await new Promise((res) => srv.listen(0, '127.0.0.1', res));
+  const url = `ws://127.0.0.1:${srv.address().port}`;
+  const mkRaw = () => {
+    const c = { w: new WebSocket(url), msgs: [] };
+    c.opened = new Promise((res) => { c.w.addEventListener('open', res); c.w.addEventListener('error', () => res()); });
+    c.w.addEventListener('message', (ev) => c.msgs.push(JSON.parse(String(ev.data))));
+    c.wait = (pred, what, ms = 4000) => new Promise((res, rej) => {
+      const t0 = Date.now();
+      const to = setInterval(() => {
+        const i = c.msgs.findIndex(pred);
+        if (i !== -1) { clearInterval(to); res(c.msgs.splice(i, 1)[0]); }
+        else if (Date.now() - t0 > ms) { clearInterval(to); rej(new Error('14.2 E2E timeout: ' + what)); }
+      }, 5);
+    });
+    c.send = (m) => c.w.send(JSON.stringify(m));
+    return c;
+  };
+  const rawA = mkRaw(), rawB = mkRaw();
+  await Promise.all([rawA, rawB].map((c) => c.opened));
+  const dummyLoop = { timescale: 1, hitStop() {} };
+  const mkGame = () => {
+    const g = new Game({
+      input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
+      loop: dummyLoop, ctx: makeCtx(), mctx, characters, items,
+    });
+    g.resize(1280, 800);
+    return g;
+  };
+  const hostG = mkGame(), c1G = mkGame();
+  const wire = (g, raw) => {
+    const conn = {
+      onMessage: null,
+      send: (o) => raw.send(o),
+      close: () => raw.w.close(),
+      sendInput: (mx, my, dash) => raw.send({ t: 'input', mx, my, dash }),
+      sendState: (id, body) => raw.send(Object.assign({ t: 'state' }, body, { id })),
+      sendRunStart: (id, seed, levelKey, dur) => raw.send({ t: 'runstart', id, seed, levelKey, dur }),
+      sendClosed: (reason, shards) => raw.send(shards == null ? { t: 'closed', reason } : { t: 'closed', reason, shards }),
+    };
+    raw.w.addEventListener('message', (ev) => { const m = JSON.parse(String(ev.data)); conn.onMessage && conn.onMessage(m); });
+    g.net = conn;
+    g.net.onMessage = (m) => g._netMsg(m);
+  };
+  wire(hostG, rawA); wire(c1G, rawB);
+  rawA.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(hostG.meta, hostG.chars) });
+  await rawA.wait((m) => m.t === 'joined', '14.2 host joined');
+  rawB.send({ t: 'hello', levelKey: 'm01', profile: joinProfile(c1G.meta, c1G.chars) });
+  await rawB.wait((m) => m.t === 'joined', '14.2 client joined');
+  await rawA.wait((m) => m.t === 'roster' && m.players.length === 2, '14.2 roster 2');
+  hostG.startRun('m01');
+  if (hostG._ghost && hostG.state === 'LEVELUP') hostG.pickCard(0); // all-starter lobby → ghost entry pick
+  await rawB.wait((m) => m.t === 'runstart', '14.2 client runstart');
+  const DT = 1 / 60;
+  const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+  for (let i = 0; i < 60; i++) {
+    for (const p of hostG.players) if (p.dead || p.hp < p.maxHp * 0.5) { p.dead = false; p.hp = p.maxHp; p.iframes = 5; }
+    if (hostG.state === 'LEVELUP') hostG.pickCard(0);
+    hostG.update(DT); c1G.update(DT);
+    if (i % 15 === 14) await tick();
+  }
+  // Deterministic run-level total: pin the host sim's score, end the run.
+  hostG.score = 800;
+  const hBefore = hostG.meta.shards, cBefore = c1G.meta.shards;
+  const cUpgBefore = JSON.stringify(c1G.meta.upgrades);
+  hostG._gameOver(false);
+  const cm = await rawB.wait((m) => m.t === 'closed', '14.2 client closed');
+  assert(cm.reason === 'host' && typeof cm.shards === 'number' && cm.shards >= 2,
+    `14.2: room close relays the run-level shard total (got ${cm.shards})`);
+  await tick();
+  assert(c1G.meta.shards === cBefore + cm.shards,
+    `14.2: client accrues the full run-level total locally (${c1G.meta.shards - cBefore} of ${cm.shards})`);
+  assert(hostG.meta.shards === hBefore + cm.shards, '14.2: host accrues the same run-level total once');
+  assert(JSON.stringify(c1G.meta.upgrades) === cUpgBefore, '14.2: meta stays player-specific (upgrades untouched by the wire)');
+  assert(c1G.state === 'MENU' && c1G.net === null && c1G.netRole === 'solo', '14.2: client back to menu, solo again');
+  rawA.w.close(); rawB.w.close();
+  await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });
+}
+
 // self-verification: every one-shot path above must have actually fired
 assert(keyPickDone, 'keyboard card pick never exercised');
 assert(heartDone && heartAsserted, 'heart pickup path never exercised');
@@ -2826,5 +2921,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 8 weapons (wand-off kill window) · ` +
   `all 8 weapons observed live (bolts/axes/blades/garlic/bullets/bombs/flames/arrows) · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 12.8 per-synergy E2Es (flamingArrows burn-on-hit · heartPiercer bonus+pierce exactly 1 extra · blueFlame freeze+burn on burst · stormVolley 4th-volley both-rounds strike + chain shock) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · 14 in-run Soulshards counter (live floor(score/400) projection, change-detected) + 14.2 unified co-op earnings (run-level total rides the room close, client accrues in full, meta player-specific) · loop alive throughout`,
 );

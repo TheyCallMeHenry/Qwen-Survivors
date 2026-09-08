@@ -128,6 +128,15 @@ html, body {
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 3px #000;
 }
+/* 14.1: in-run projected Soulshard award (rides #hud-top under the score) */
+#hud-shards {
+  margin-top: 2px;
+  font-size: clamp(11px, 2vmin, 15px);
+  font-weight: 700; color: var(--accent2);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px #000;
+  opacity: 0.9;
+}
 
 #hud-right {
   position: absolute; top: calc(10px + var(--safe-t));

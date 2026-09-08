@@ -24,7 +24,7 @@ import { buildVignette } from '../art/terrain.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
 import { buildMinimapBase, drawMinimapLive } from '../world/minimap.js';
 import { playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState, ENEMY_KEYS } from '../net/sync.js';
-import { MSG, profileFromMeta, joinProfile, ghostColor, allocateGhostOffers, coopScale, leashClamp, weaponCap, bossCount, resolveChars, selChar } from '../net/coop.js';
+import { MSG, profileFromMeta, joinProfile, ghostColor, allocateGhostOffers, coopScale, leashClamp, weaponCap, bossCount, resolveChars, selChar, sanitizeShards } from '../net/coop.js';
 import { CoopConn } from '../net/conn.js';
 
 export class Game {
@@ -654,7 +654,8 @@ export class Game {
     }
     this.bus.emit('meta', this.meta);
     this.bus.emit('gameover', { ...st, shards: gain });
-    if (this.net && this.netRole === 'host') this.net.sendClosed('run-end'); // co-op: end the room
+    // co-op: end the room — 14.2 (D54) the run-level shard total rides the close message
+    if (this.net && this.netRole === 'host') this.net.sendClosed('run-end', gain);
   }
 
   // --- co-op (11.2): host-authoritative sync ---
@@ -699,7 +700,7 @@ export class Game {
       case MSG.input: this._netInput(m); break;
       case MSG.state: if (this.netRole === 'client') this._netState(m); break;
       case MSG.left: break; // roster covers it
-      case MSG.closed: this._netClosed(); break;
+      case MSG.closed: this._netClosed(m); break;
       case 'netclosed': this._netClosed(); break; // WS dropped
     }
   }
@@ -1061,7 +1062,17 @@ export class Game {
     return this.netRoster.findIndex((e) => e.id === this.netMyId);
   }
 
-  _netClosed() {
+  _netClosed(m) {
+    // 14.2 (D54): unified co-op earnings — the host's run-level total accrues here,
+    // in full, on this player's local meta (meta itself stays player-specific).
+    if (this.net && this.netRole === 'client') {
+      const gain = sanitizeShards(m && m.shards);
+      if (gain !== null) {
+        this.meta.shards += gain;
+        saveMeta(CFG.meta.storageKey, this.meta);
+        this.bus.emit('meta', this.meta);
+      }
+    }
     // Run over (host) or transport gone: back to the menu, solo again.
     if (this.net) { this.net.close(); }
     this.net = null;

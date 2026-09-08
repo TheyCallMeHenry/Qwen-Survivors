@@ -172,10 +172,13 @@ export function attachCoopRoom(server) {
                 ? { t: MSG.state, id: from.id, v: num(m.v), step: num(m.step), time: num(m.time), score: num(m.score), kills: num(m.kills), players: arr(m.players, 4), enemies: arr(m.enemies, 512), pickups: arr(m.pickups, 512) }
                 : { t: MSG.runstart, id: from.id, seed: num(m.seed), levelKey: typeof m.levelKey === 'string' ? m.levelKey.slice(0, 16) : 'm01', dur: m.dur === null ? null : num(m.dur) || undefined }; // dur (17.3): null = ENDLESS; absent → client falls back to its own map
             for (const v of conns.values()) if (v.id !== c.id) send(v, msg);
-          } else if (m.t === MSG.closed) {
+          } else if (room && m.t === MSG.closed) {
             // host ends the room explicitly (run over / quit)
             const from = room.players.find((p) => p.id === c.id);
-            if (from && from.seat === 0) { closeRoom(room, 'host'); for (const v of conns.values()) send(v, { t: MSG.closed, reason: 'host' }); room = null; }
+            // 14.2 (D54): the host's run-level Soulshard total rides the close (sanitized);
+            // every client accrues it in full locally.
+            const shards = Math.floor(num(m.shards));
+            if (from && from.seat === 0) { closeRoom(room, 'host'); for (const v of conns.values()) send(v, shards > 0 ? { t: MSG.closed, reason: 'host', shards } : { t: MSG.closed, reason: 'host' }); room = null; }
           }
         } else if (ev.type === 'ping') sock.write(encodeFrame(OP_PONG, ev.payload));
         else if (ev.type === 'close') sock.end(encodeFrame(OP_CLOSE, ev.payload));

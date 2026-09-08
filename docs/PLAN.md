@@ -325,6 +325,12 @@ User tested the published Pages build. Six asks, scoped below against in-tree co
 
 **Art check with a browser:** Playwright element screenshots at `device_scale_factor=4` per canvas (`unsloth-tmp/shot7.py` → `z_NN.png` against `unsloth-tmp/icon-preview.html` order array). Full-page `clip=` screenshots proved unreliable — use per-element shots.
 
+### 3.20 In-run Soulshards counter + unified co-op earnings (Phase 14 — D54, DONE 2026-09-07)
+
+**14.1 Counter:** `#hud-shards` rides `#hud-top` under the score — text `${shardsFor({score: liveScore(), victory: false})} ◆`, driven every frame through the change-detected `setTxt` (DOM write only when the number changes). State-gated by `#hud` itself (PLAYING/LEVELUP/PAUSED). No economy change: the projection IS the run-end formula minus the victory bonus (which can only land at the end; the game-over screen shows the total).
+
+**14.2 Unified co-op earnings (guests previously earned nothing):** score is already run-level (host sim; clients mirror it), so the host's `_gameOver` gain rides the room close — `sendClosed('run-end', gain)` → serve relays a sanitized `shards` field (host-seat closes only; `host-leave`/`leave` carry none) → each client's `_netClosed` accrues `sanitizeShards(m.shards)` into its own `meta` + `saveMeta` + `meta` bus emit. Wire contract additive: old hosts/clients ignore the extra field. Meta stays player-specific (D53 holds; only the shard AMOUNT is unified, per D54).
+
 ## 4. Phases & Tasks
 
 ### Phase 0 — Scaffold & Docs *(done first, always)*

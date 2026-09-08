@@ -7,8 +7,8 @@ Owned here; never re-narrated in PROGRESS.md.
 
 - **Node on PATH:** `node` resolves directly in the current shell (verified 2026-09-05, v24.11.0). If a shell lacks it, use `"/c/Program Files/nodejs/node.exe"`. Session 15 reported v24.14.1 in its environment — version may differ per shell; check `node --version` at session start.
 - Gates (canonical commands, run from repo root):
-  - `node tools/check.mjs` → 33/33 modules import-clean
-  - `node tools/test-logic.mjs` → 694/694
+  - `node tools/check.mjs` → 34/34 modules import-clean
+  - `node tools/test-logic.mjs` → 760/760
   - `node tools/test-boot.mjs` → `PASS boot-sim runs=4`
 
 ## Git

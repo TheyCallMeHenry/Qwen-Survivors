@@ -34,7 +34,8 @@ export class CoopConn {
   sendInput(mx, my, dash) { this.send({ t: 'input', mx, my, dash }); }
   sendState(id, body) { this.send(Object.assign({ t: 'state' }, body, { id })); }
   sendRunStart(id, seed, levelKey, dur) { this.send({ t: 'runstart', id, seed, levelKey, dur }); } // dur: seconds | null = ENDLESS (17.3)
-  sendClosed(reason) { this.send({ t: 'closed', reason }); }
+  // shards (14.2, D54): host run-end only — the run-level award every client accrues.
+  sendClosed(reason, shards) { this.send(shards == null ? { t: 'closed', reason } : { t: 'closed', reason, shards }); }
 
   close() {
     if (this.ws) { try { this.ws.close(); } catch { /* already gone */ } this.ws = null; }
