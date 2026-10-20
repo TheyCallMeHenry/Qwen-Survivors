@@ -13,6 +13,17 @@
 
 ## Entries (newest first)
 
+### 2026-10-20 — Rule 19 rationale: single-lane local model; parallel spawns slow workflows
+- **Received:** 2026-10-20 (no time in message; date only)
+- **Classification:** `design decision` (rule 19 rationale correction; recorded as D89)
+- **Context:** answers research-review question on whether rule 19 should be relaxed given cloud parallel-agent evidence
+- **Verbatim input:**
+
+```
+The 1-sub-agent-at-a-time rule is *PURELY* because both the orchestration and sub-agent utilize the same, single-lane locally hosted model. If more than 1 sub-agent is triggered at a time then it forces repeated context switching which I have tested in real-world work and it *drastically slows down* workflows.
+Utilizing single sub-agents enables completion of numerous tasks without muddying or rapidly filling the main orchestration agent's context window.
+```
+
 ### 2026-09-07 — Ruling: run-duration chips may be half height on mobile
 - **Received:** 2026-09-07 (no time in message; date only)
 - **Classification:** `design decision` (touch-target sizing exception; recorded as D85)
