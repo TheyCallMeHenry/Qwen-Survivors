@@ -19,7 +19,7 @@ Rules for every future edit — this file is loaded at every session start; its 
 
 - **Active: none shipping — Phase 14 PUBLISHED (2026-09-07, session 34) at `533f730`** (in-run `#hud-shards` counter + unified co-op earnings, D54; Pages verified live). Next in feature queue: **21 → 2.9** (21.1 needs user O-resolutions first; leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
 - **Gates (green on published tree `533f730`, session 34):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **760/760** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0.
-- **Git:** `overnight-2026-08-22` = `main` = origin at `533f730` (tree clean; Pages serving Phase 14).
+- **Git:** `overnight-2026-08-22` = `main` = origin (docs publish 2026-10-20: AGENTS lawset D86–D90 + research doc; last feature code still Phase 14 `533f730`, Pages serving that).
 - **Server:** DOWN (port 47893 not listening, re-checked session 27); recipe in `docs/ENV.md`.
 
 ## Master Checklist
@@ -137,6 +137,8 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 Full texts + one-line row index for **D1–D84** live in `docs/DECISIONS.md` (append-only numbering, revisions carry new numbers; Format contract §5). Open phases cite: D64 (11.13) · D54 (14) · D69 (21) · Phase 18 shipped under **D84** (supersedes D67 caps/opens).
 
 ## Session Log (append-only, newest first; entries before session 24 archived verbatim to `docs/ARCHIVE.md`)
+
+- **2026-10-20 (session 36d) — PUBLISHED to main (docs only):** ff-merge `overnight-2026-08-22` → `main` (`ed19ed4..9cbd54e`: lawset D86–D90 + dated research doc + USER-INPUT-LOG entry), both branches pushed; Pages unaffected (zero code change; last shipped code remains Phase 14 `533f730`). Backup branch `backup-agents-local` kept per user for later improve/revert assessment of the new rules. NEXT = feature queue 21 → 2.9.
 
 - **2026-10-20 (session 36c) — approved review edits applied + D89/D90 batch pushed (docs only):** rules 13/14/16 amended per D90 (dated topic-file research home; rule 18 precedence inside rule 14; rule 16 inline sources — arXiv 2609.09242 + GitClear 2026); D89 (rule 19 rationale, prior turn) committed alongside with the dated research doc + USER-INPUT-LOG entry; committed + pushed to `overnight-2026-08-22` on explicit ask (remote re-fetched first — lesson from the stale-tree rebase). Gates: zero code edits; session-36 run stands (34/34 · 760/760 · boot runs=4). NEXT = feature queue 21 → 2.9.
 
