@@ -52,6 +52,9 @@ export class Enemies {
       state: 'chase', stateT: 0, cd: rand(1, 2.5),
       flip: false, frame: 0, dead: false,
       burnT: 0, burnDps: 0, blightT: 0, blightDps: 0,
+      // Phase 21 status channels (same D21 tick pattern): wolf bleed, tongue
+      // poison; hold = freeze-like movement stop (web burst / tongue drag).
+      bleedT: 0, bleedDps: 0, poisonT: 0, poisonDps: 0, holdT: 0,
       // 12.5 status pipeline: slow→freeze + shock→stun (12.4). Each stack entry expires
       // independently after CFG.combat.statusStackTtl.
       slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0,
@@ -105,6 +108,8 @@ export class Enemies {
       }
     }
     if (e.stunT > 0) e.stunT -= dt;
+    // P21 web hold: expires on its own (movement pinned below, like freeze).
+    if (e.holdT > 0) e.holdT -= dt;
     const player = nearestPlayer(e, players); // nearest LIVE player (solo: the only one)
     const dx = player.x - e.x, dy = player.y - e.y;
     const d = Math.hypot(dx, dy) || 1;
@@ -117,10 +122,10 @@ export class Enemies {
       tvx *= 1 - Math.min(e.slowStacks.length, C.slowMaxStacks) * C.slowPct;
       tvy *= 1 - Math.min(e.slowStacks.length, C.slowMaxStacks) * C.slowPct;
     }
-    if (e.freezeT > 0 || e.stunT > 0) { tvx = 0; tvy = 0; }
+    if (e.freezeT > 0 || e.stunT > 0 || e.holdT > 0) { tvx = 0; tvy = 0; }
 
-    // Stunned/frozen foes hold pattern: no weave, and ranged firing is suppressed too.
-    const locked = e.freezeT > 0 || e.stunT > 0;
+    // Stunned/frozen/webbed foes hold pattern: no weave, and ranged firing is suppressed too.
+    const locked = e.freezeT > 0 || e.stunT > 0 || e.holdT > 0;
 
     if (e.weave && !locked) {
       const w = Math.sin(e.phase + e.animT * A.weaveFreq) * A.weaveAmp;
@@ -231,7 +236,9 @@ export class Enemies {
       o.y += o.vy * dt;
       o.life -= dt;
       let gone = o.life <= 0 || o.x < 0 || o.x > CFG.world.w || o.y < 0 || o.y > CFG.world.h;
-      if (!gone) {
+      // P21 Mirror Shield: a reflected orb is ally-side — it can never hit a
+      // player again (combat._shieldStep spends it against foes instead).
+      if (!gone && !o.reflected) {
         for (const p of players) {
           if (p.dead) continue;
           const dx = p.x - o.x, dy = p.y - o.y;
@@ -323,6 +330,21 @@ export class Enemies {
       ctx.lineTo(e.x - 3 + Math.sin(a0) * 2, e.y - def.h - 10);
       ctx.lineTo(e.x + 2, e.y - def.h - 5);
       ctx.lineTo(e.x + 10, e.y - def.h - 11 + Math.cos(a0) * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    // P21 hold tell: a pale silk X pinned over the foe (web / drag in progress).
+    if (e.holdT > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = '#e6ecf2';
+      ctx.lineWidth = 1.8;
+      const cx = e.x, cy = e.y - def.h * 0.55, q = def.w * 0.34;
+      ctx.beginPath();
+      ctx.moveTo(cx - q, cy - q);
+      ctx.lineTo(cx + q, cy + q);
+      ctx.moveTo(cx + q, cy - q);
+      ctx.lineTo(cx - q, cy + q);
       ctx.stroke();
       ctx.restore();
     }

@@ -13,6 +13,21 @@
 
 ## Entries (newest first)
 
+### 2026-10-20 — Post-cliff orders: reconstruct from primary sources, repair docs first, then run the E2E + fix everything noticed
+- **Received:** 2026-10-20 (no time in message; date only)
+- **Verbatim:** "The last session ended at the context limit and documentation may be stale. Reconstruct state from primary sources first: git status, the last 10 commits, then docs/PROGRESS.md. Identify the last verified completed step. Repair the docs to match reality BEFORE any development work. Where docs and reality disagree, reality wins — tell me where they diverged. Run the E2E, and make all noticed fixes, and additionally keep an eye out for areas where further optimizations could be made."
+- **Context:** resume directive after the session-38/39 cliff; covered the whole Phase-21 completion path (docs repair → 21.2 boot battery → noticed fixes → optimization notes).
+
+### 2026-10-20 — Phase 21 answers: Swashbuckler→Sunder Bombs; items = passives; bundle approved
+- **Received:** 2026-10-20 (no time in message; date only)
+- **Classification:** `answer/approval` (21.1 O-resolutions; recorded as D94–D96)
+- **Context:** answers to `docs/phase21-resolutions-2026-10-20.md` — two amendments (starter re-tool; items-as-passives) + approval of the remaining tables/mechanics
+- **Verbatim input:** the full message was NOT captured at the time (capture-before-reason missed it; lost to the session-38 context cliff). Only the fragment preserved in D95 survives:
+
+```
+Items are same type as existing heart, magnet, etc.
+```
+
 ### 2026-10-20 — Rule 19 rationale: single-lane local model; parallel spawns slow workflows
 - **Received:** 2026-10-20 (no time in message; date only)
 - **Classification:** `design decision` (rule 19 rationale correction; recorded as D89)

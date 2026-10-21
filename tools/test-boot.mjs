@@ -70,7 +70,7 @@ const ctx2d = makeCtx();
 // roster frame's draw stream. Boot stub ctx counts stay on the global `drawOps`.
 async function sheetDetail(sheetObj) {
   const heroes = await import('../js/art/heroes.js');
-  const b = { mage: heroes.mageFrame, warden: heroes.wardenFrame, ranger: heroes.rangerFrame, swash: heroes.swashFrame };
+  const b = { mage: heroes.mageFrame, warden: heroes.wardenFrame, ranger: heroes.rangerFrame, swash: heroes.swashFrame, baseball: heroes.baseballFrame, werewolf: heroes.werewolfFrame, golem: heroes.golemFrame, toad: heroes.toadFrame, gunslinger: heroes.gunslingerFrame };
   Object.keys(drawOps).forEach((k) => { drawOps[k] = 0; });
   (b[sheetObj] || ((c, dy, l, r) => heroes.ghostFrame('#ff4b4b', dy, l, r)))(0, 4, 0);
   return { grads: drawOps.radial, strokes: drawOps.stroke };
@@ -201,21 +201,21 @@ assert(!characters.player, '27.1: playable sheets retired from buildCharacters (
     && roster.warden.w * roster.warden.h < 64 * 60, '11.6.1 D62: player < warden area < brute (64×60)');
   buildRoster('#4be3ff'); // D62 per-seat tint rebuild — no crash
   assert(buildGhost('#ff7bd9').idle.length === 2, '27.1: ghost tint sheet rebuilds standalone');
-  for (const k of ['mage', 'warden', 'ranger', 'swash'])
+  for (const k of ['mage', 'warden', 'ranger', 'swash', 'baseball', 'werewolf', 'golem', 'toad', 'gunslinger'])
     assert(roster[k].run.every((f) => f.width > 0), `27.1: ${k} run frame built`);
   // 26.3 redesign contract: exact footprints + shadowR per sheet (hitboxes/anchors depend on these)
-  const fp = { mage: [56, 64, 12], warden: [58, 66, 13], ranger: [52, 60, 11], swash: [54, 62, 12], ghost: [56, 64, 12] };
+  const fp = { mage: [56, 64, 12], warden: [58, 66, 13], ranger: [52, 60, 11], swash: [54, 62, 12], ghost: [56, 64, 12], baseball: [56, 64, 12], werewolf: [54, 62, 11], golem: [62, 68, 14], toad: [58, 60, 13], gunslinger: [54, 64, 11] };
   for (const [k, [w, h, sr]] of Object.entries(fp))
     assert(roster[k].w === w && roster[k].h === h && roster[k].shadowR === sr,
       `26.3: ${k} sheet footprint/shadowR changed (${w}×${h}/r${sr} required)`);
   // 27.2 run-cycle contract: every frame is its own canvas (no shared/reused frames).
-  for (const k of ['mage', 'warden', 'ranger', 'swash', 'ghost']) {
+  for (const k of ['mage', 'warden', 'ranger', 'swash', 'ghost', 'baseball', 'werewolf', 'golem', 'toad', 'gunslinger']) {
     const sh = roster[k], all = [...sh.idle, ...sh.run];
     assert(new Set(all).size === all.length, `27.2: ${k} shares a frame canvas`);
   }
   // 27.4 detail floor: every sheet draws a rich op stream (radial glows + strokes,
   // not primitive blocks) — fresh build per char via the instrumented boot ctx.
-  for (const k of ['mage', 'warden', 'ranger', 'swash', 'ghost']) {
+  for (const k of ['mage', 'warden', 'ranger', 'swash', 'ghost', 'baseball', 'werewolf', 'golem', 'toad', 'gunslinger']) {
     const d = await sheetDetail(k);
     assert(d.grads >= 1 && d.strokes >= 3, `27.4: ${k} sheet too plain (glows=${d.grads} strokes=${d.strokes})`);
   }
@@ -290,6 +290,7 @@ let benchPhase = 0, benchStartT = 0; // 10.4 one-shot worst-case bench: 0=off ·
 let bench = null;
 let m02RunDone = false; // 13.3 — M02 real run one-shot
 let syn128Done = false; // 12.8 — per-synergy combat E2Es (flamingArrows/heartPiercer/blueFlame/stormVolley)
+let p21Done = false; // 21.2 — P21 boot battery (9 weapons + shield/skates + 5 chars + 5 fused offers live)
 let m03RunDone = false; // 13.5 — M03 real run one-shot
 
 // 16.1 — foreground snow path probe (D70: quantify what actually draws). The ctx
@@ -781,7 +782,7 @@ assert(byId['touch-ui'].hidden === true, '22.10: #touch-ui visible during MENU')
   pump(30);
   assert(!byId['screen-select'].classList.contains('hidden'), '11.6.2: select screen not shown');
   assert(byId['screen-menu'].classList.contains('hidden'), '11.6.2: menu screen not hidden under the select');
-  assert(cs().length === 4, `11.6.2: expected 4 char cards, got ${cs().length}`);
+  assert(cs().length === 9, `11.6.2: expected 9 char cards, got ${cs().length}`);
   const [cm, cw, cr, csw] = cs();
   assert(cm.classList.contains('sel'), '11.6.2: starter (mage) selected by default');
   assert(cw.classList.contains('locked') && cr.classList.contains('locked') && csw.classList.contains('locked'),
@@ -1910,6 +1911,344 @@ m03RunDone = true;
   assert(lead > 30, `16.3: momentum adds lead travel (${lead.toFixed(1)} px > 30 px) — the jet does not trail the player`);
 }
 
+// 21.2 — P21 boot battery: every Phase-21 weapon + the 2 item-passives + the 5 new
+// characters + the 5 fused synergy offers + the P21 sprite draw pass, exercised live in
+// one controlled m01 game. Isolation per the 12.8 pitfalls: one weapon under test, foes
+// pinned with EVERY status field zeroed (pool reuse), regrid every tick, combat driven
+// between player ticks only. Assertions are presence/effect — exact math is pinned in test-logic.mjs.
+{
+  const gP = new Game({
+    input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
+    loop: { timescale: 1, hitStop() {} }, ctx: makeCtx(), mctx, characters, items,
+  });
+  gP.resize(1280, 800);
+  gP.startRun('m01');
+  const pP = gP.player;
+  const Cp = CFG.combat;
+  const Wp = CFG.weapons;
+  gP.combat.enemies = gP.enemies; // batSwing reads this.enemies directly (host-sim side)
+  const dmgBakP = gP.combat.damagePlayer;
+  gP.combat.damagePlayer = () => false; // contact/self damage never kills the pinned probe player
+  const clearFoesP = () => { gP.enemies.list.length = 0; gP.enemies.grid.clear(); gP.enemies.orbs.length = 0; };
+  const regridP = () => { gP.enemies.grid.clear(); for (const e of gP.enemies.list) if (!e.dead) gP.enemies.grid.add(e.x, e.y, e); };
+  const mkFoeP = (type, x, y) => {
+    const e = gP.enemies.spawn(type, x, y);
+    // Pool reuse inherits prior-probe status — zero everything the P21 pipeline touches.
+    e.hp = 1e6; e.maxHp = 1e6; e.vx = e.vy = 0; e.state = 'idle';
+    e.burnT = 0; e.burnDps = 0; e.blightT = 0; e.slowStacks = []; e.freezeT = 0;
+    e.shockStacks = []; e.stunT = 0; e.poisonT = 0; e.poisonDps = 0; e.holdT = 0;
+    e.bleedT = 0; e.bleedDps = 0; e.drag = null; e.cd = 0;
+    return e;
+  };
+  const torsoP = () => pP.y - pP.def.h * Cp.spawnOriginFrac; // mid-torso projectile line (16.2)
+  const resetP21 = () => {
+    pP.weapons = {}; pP.synergies = {}; pP.passives = {};
+    // Every P21 cooldown must reset too — a prior probe's shot cd (cannon 2.6 s,
+    // boulder 7 s, tongue 2.2 s…) would otherwise gate the next probe's fire pass.
+    pP._cannonCd = 0; pP._laserCd = 0; pP._laserT = 0; pP._webCd = 0; pP._gatCd = 0;
+    pP._gatMag = Wp.gatling.burst; pP._gatReload = 0; pP._batCd = 0; pP._boulderCd = 0;
+    pP._tongueCd = 0; pP._ballCd = 0;
+    pP._companion = null; pP._boulder = null; pP._ball = null; pP._shieldBank = null; pP._tongueFx = null;
+    for (const arr of [gP.combat.shells, gP.combat.beams, gP.combat.boulders, gP.combat.webs,
+      gP.combat.bullets, gP.combat.bolts, gP.combat.explosions]) arr.length = 0;
+    clearFoesP();
+  };
+  const fireP = () => pP.update(1 / 60, { x: 0, y: 0 }, gP.combat, gP.enemies, gP.world);
+
+  // --- Tank Cannon: full punch through the first foe, SECOND terminates in the blast ---
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    const ty = torsoP();
+    const c1 = mkFoeP('goblin', pP.x + 140, ty);
+    const c2 = mkFoeP('goblin', pP.x + 180, ty);
+    pP.weapons.cannon = 1;
+    let t = 0;
+    while (!gP.combat.shells.length && t < 60) { regridP(); fireP(); t++; }
+    assert(gP.combat.shells.length === 1, 'P21 cannon: shell spawn');
+    t = 0;
+    while (gP.combat.shells.length && t < 120) { regridP(); gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
+    assert(gP.combat.shells.length === 0 && 1e6 - c1.hp > 0 && 1e6 - c2.hp > 0,
+      `P21 cannon: shell consumed at the second foe; punch + blast both bite (c1=${(1e6 - c1.hp).toFixed(0)} c2=${(1e6 - c2.hp).toFixed(0)})`);
+  }
+  // --- Shells of Perdition: the blast ignites every caught foe with the row's burn ---
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    const ty = torsoP();
+    const HS = CFG.synergies.heShell.levels[0];
+    const c1 = mkFoeP('goblin', pP.x + 140, ty);
+    const c2 = mkFoeP('goblin', pP.x + 180, ty);
+    pP.weapons.cannon = 1; pP.synergies.heShell = 1;
+    let t = 0;
+    while (!gP.combat.shells.length && t < 60) { regridP(); fireP(); t++; }
+    t = 0;
+    while (gP.combat.shells.length && t < 120) { regridP(); gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
+    assert((c1.burnT || 0) > 0 && (c1.burnDps || 0) >= HS.dps && (c2.burnT || 0) > 0,
+      `P21 heShell: blast ignites both caught foes (c1 burnT=${c1.burnT} dps=${c1.burnDps})`);
+  }
+  // --- Continuous Laser: beam lives for dur, sears via dpsTick, NO knockback ---
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    const e = mkFoeP('goblin', pP.x + 150, torsoP());
+    pP.weapons.laser = 1;
+    let t = 0;
+    while (!gP.combat.beams.length && t < 60) { regridP(); fireP(); t++; }
+    assert(gP.combat.beams.length === 1 && pP._laserT > 0, 'P21 laser: beam emits, sear timer running');
+    t = 0;
+    while (gP.combat.beams.length && t < 200) { regridP(); gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
+    assert(gP.combat.beams.length === 0 && 1e6 - e.hp > 0 && e.vx === 0,
+      `P21 laser: sears the foe with no knockback, beam dies at dur (dealt=${(1e6 - e.hp).toFixed(1)})`);
+  }
+  // --- Wolf Companion: pounce + bite + bleed, leash clamp, staticPelt shock ---
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    const e = mkFoeP('goblin', pP.x + 150, pP.y);
+    pP.weapons.wolf = 1;
+    regridP();
+    let t = 0;
+    while (1e6 - e.hp <= 0 && t < 150) { gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
+    const WL = Wp.wolf.levels[0];
+    assert(pP._companion && 1e6 - e.hp > 0 && e.bleedT > 0 && e.bleedDps >= WL.bleed,
+      `P21 wolf: companion bites + bleeds (dealt=${(1e6 - e.hp).toFixed(0)} bleedT=${e.bleedT} dps=${e.bleedDps})`);
+    pP.x += 500; // owner bolts away — the leash clamp must drag the wolf back
+    for (let n = 0; n < 30; n++) gP.combat.update(1 / 60, gP.players, gP.enemies);
+    const cd = Math.hypot(pP._companion.x - pP.x, pP._companion.y - pP.y);
+    assert(cd <= Cp.companionLeash + 2, `P21 wolf: leash clamp holds (dist=${cd.toFixed(1)} ≤ ${Cp.companionLeash})`);
+  }
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    const e = mkFoeP('goblin', pP.x + 150, pP.y);
+    pP.weapons.wolf = 1; pP.synergies.staticPelt = 1;
+    regridP();
+    let t = 0;
+    while (e.shockStacks.length === 0 && t < 150) { gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
+    assert(e.shockStacks.length >= 1, 'P21 staticPelt: the bite adds a shock stack (chain burst live)');
+  }
+  // --- Rolling Boulder: squish-kills the small class, decay^hits, ONE on screen, crumble ---
+  resetP21();
+  pP.x = 300; pP.y = 600;
+  {
+    const foes = [];
+    for (const [i, dx] of [120, 200, 280, 360, 440, 520].entries()) foes.push(mkFoeP(i % 2 ? 'rat' : 'goblin', pP.x + dx, pP.y));
+    pP.weapons.boulder = 1;
+    let t = 0;
+    while (!gP.combat.boulders.length && t < 30) { regridP(); fireP(); t++; }
+    assert(gP.combat.boulders.length === 1 && pP._boulder, 'P21 boulder: roll starts, owner tracks it');
+    pP._boulderCd = 0; fireP(); // re-fire attempt mid-roll — the one-at-a-time rule must hold
+    assert(gP.combat.boulders.length === 1, 'P21 boulder: exactly one boulder on screen');
+    t = 0;
+    while (gP.combat.boulders.length && t < 600) { regridP(); gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
+    const d1 = 1e6 - foes[0].hp, d3 = 1e6 - foes[2].hp;
+    assert(gP.combat.boulders.length === 0 && !pP._boulder &&
+      foes.filter((f) => f.dead).length === 3 && d1 > 0 && d3 > 0 && d3 < d1,
+      `P21 boulder: squishes the 3 small rats, decays goblin hits, crumbles at maxHits (d1=${d1.toFixed(0)} d3=${d3.toFixed(0)})`);
+  }
+  resetP21();
+  pP.x = 300; pP.y = 600;
+  {
+    const e = mkFoeP('goblin', pP.x + 120, pP.y);
+    pP.weapons.boulder = 1; pP.synergies.avalanche = 1;
+    let t = 0;
+    while (!gP.combat.boulders.length && t < 30) { regridP(); fireP(); t++; }
+    t = 0;
+    while (gP.combat.boulders.length && t < 900) { regridP(); gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
+    assert(e.slowStacks.length === 1, 'P21 avalanche: boulder hits lay 1 slow-stack at L1');
+  }
+  // --- Web-slingers: strand bursts ON arrival, HOLDING everything inside r, far foe free ---
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    const near = mkFoeP('goblin', pP.x + 140, pP.y);
+    const far = mkFoeP('goblin', pP.x + 400, pP.y);
+    pP.weapons.webs = 1;
+    let t = 0;
+    while (!gP.combat.webs.length && t < 60) { regridP(); fireP(); t++; }
+    assert(gP.combat.webs.length === 1, 'P21 webs: strand launches');
+    t = 0;
+    while (gP.combat.webs.length && t < 120) { regridP(); gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
+    assert(gP.combat.webs.length === 0 && (near.holdT || 0) > 0 && 1e6 - near.hp > 0,
+      `P21 webs: burst pins + damages the caught foe (holdT=${near.holdT})`);
+    assert(!(far.holdT > 0) && far.hp === 1e6, 'P21 webs: foe outside the burst is untouched');
+  }
+  // --- Gatling Gun: mag drains to 0 → reload → full mag again, rounds land ---
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    const e = mkFoeP('goblin', pP.x + 150, pP.y);
+    pP.weapons.gatling = 1;
+    let magDrop = false, reloadSeen = false, refilled = false, dmgSeen = false;
+    for (let n = 0; n < 900; n++) {
+      regridP(); fireP(); gP.combat.update(1 / 60, gP.players, gP.enemies);
+      if (n > 20 && pP._gatMag < Wp.gatling.burst) magDrop = true;
+      if (pP._gatReload > 0) reloadSeen = true;
+      if (reloadSeen && pP._gatReload <= 0 && pP._gatMag === Wp.gatling.burst) refilled = true;
+      if (1e6 - e.hp > 0) dmgSeen = true;
+    }
+    assert(magDrop && reloadSeen && refilled && dmgSeen,
+      `P21 gatling: burst drains (magDrop=${magDrop}), reloads (${reloadSeen}), refills to full (${refilled}), deals damage (${dmgSeen})`);
+  }
+  // --- Baseball Bat: heavy knockback, and the HOMERUN one-hit-KO branch (rand pinned) ---
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    const realRandom = Math.random;
+    const e = mkFoeP('goblin', pP.x + 40, torsoP());
+    pP.weapons.bat = 1;
+    Math.random = () => 0.99; // rand(0,500) → 495 — no HOMERUN
+    regridP(); // batSwing queries the grid — the foe must be IN it (pitfall: fireP alone never regrids)
+    fireP();
+    assert(!e.dead && 1e6 - e.hp > 0 && e.vx >= Cp.batKbImpulse,
+      `P21 bat: swing deals normal dmg with huge knockback (vx=${e.vx.toFixed(0)} ≥ ${Cp.batKbImpulse})`);
+    const e2 = mkFoeP('goblin', pP.x + 40, torsoP());
+    pP._batCd = 0;
+    Math.random = () => 0; // rand → 0 < 1 — the HOMERUN branch fires
+    regridP();
+    fireP();
+    assert(e2.dead, 'P21 bat: HOMERUN one-hit-KOs a non-boss regardless of pinned HP');
+    Math.random = realRandom;
+  }
+  // --- Frog Tongue: eat a kill (Gut Feast ×mul heal); poison + drag the survivors in ---
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    const GF = CFG.synergies.gutFeast.levels[0];
+    const TL = Wp.tongue.levels[0];
+    pP.hp = 10;
+    const snack = gP.enemies.spawn('rat', pP.x + 200, pP.y);
+    snack.hp = 10; snack.maxHp = 100; snack.vx = snack.vy = 0; snack.state = 'idle';
+    pP.weapons.tongue = 1; pP.passives = { hp: 3 }; pP.synergies.gutFeast = 1;
+    regridP(); fireP();
+    const healed = pP.hp - 10;
+    assert(snack.dead && healed === Math.min(Cp.tongueHealCap, 2 + Cp.tongueHealK * snack.maxHp) * GF.mul,
+      `P21 gutFeast: eaten foe heals exactly the Gut Feast row (healed=${healed})`);
+  }
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    const e = mkFoeP('goblin', pP.x + 200, pP.y);
+    pP.weapons.tongue = 1;
+    regridP(); fireP();
+    assert(e.poisonT > 0 && e.poisonDps > 0 && e.drag && (e.holdT || 0) > 0,
+      `P21 tongue: survivor latched — poison + drag set (poisonT=${e.poisonT})`);
+    for (let n = 0; n < 30; n++) gP.combat.update(1 / 60, gP.players, gP.enemies);
+    assert(Math.abs(e.x - pP.x) < 12, `P21 tongue: the drag hauls the foe onto the owner (dx=${(e.x - pP.x).toFixed(1)})`);
+  }
+  // --- Cannonball: roll state — self-propelled, deals hits, i-frames gate damagePlayer ---
+  resetP21();
+  pP.x = 400; pP.y = 600; pP.hp = pP.maxHp;
+  {
+    gP.combat.damagePlayer = dmgBakP; // the real i-frame gate is what's under test here
+    const e = mkFoeP('goblin', pP.x + 200, pP.y);
+    pP.weapons.ball = 5;
+    let t = 0;
+    while (!pP._ball && t < 30) { regridP(); fireP(); t++; }
+    assert(pP._ball, 'P21 cannonball: ball-state engages');
+    fireP(); // one more update — _ballStep runs ABOVE _weapons, so i-frames rise next tick
+    assert(pP.iframes > 0, 'P21 cannonball: i-frames held mid-roll');
+    const hpA = pP.hp;
+    assert(gP.combat.damagePlayer(pP, 999, pP.x, pP.y) === false && pP.hp === hpA,
+      'P21 cannonball: damagePlayer blocked mid-roll');
+    const x0 = pP.x;
+    t = 0;
+    while (pP._ball && t < 300) { regridP(); fireP(); t++; }
+    assert(Math.abs(pP.x - x0) > 50 && 1e6 - e.hp > 0 && !pP._ball,
+      `P21 cannonball: player rockets into the foe (Δx=${(pP.x - x0).toFixed(0)} dealt=${(1e6 - e.hp).toFixed(0)})`);
+    pP.iframes = 0;
+    const hpB = pP.hp;
+    assert(gP.combat.damagePlayer(pP, 40, pP.x, pP.y) === true && pP.hp === hpB - 40,
+      'P21 cannonball: the gate opens again once the roll ends');
+    pP.hp = pP.maxHp;
+    gP.combat.damagePlayer = () => false;
+  }
+  // --- Mirror Shield: reflect an inbound orb (bank debit), reflected orb spends on a foe ---
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    const oy = pP.y - pP.def.h * 0.5; // shield centerline = mid-body
+    const e = mkFoeP('goblin', pP.x + 118, oy);
+    gP.enemies.orbs.push({ x: pP.x + 100, y: oy, vx: -150, vy: 0, life: 9, r: Cp.orbR, dmg: 10 });
+    pP.passives.shield = 1;
+    regridP();
+    gP.combat.update(1 / 60, gP.players, gP.enemies);
+    assert(pP._shieldBank.n === Cp.shieldCharges - 1, `P21 shield: charge bank debited (${pP._shieldBank.n})`);
+    assert(gP.enemies.orbs.length === 0 && 1e6 - e.hp > 0,
+      `P21 shield: orb reflected (vx flipped) and spent on the nearest foe (dealt=${(1e6 - e.hp).toFixed(0)})`);
+    assert(pP.hp === pP.maxHp, 'P21 shield: the owner is never touched by the reflected orb');
+  }
+  // --- Ice Skates: glide drift on release + slide damage both ways with the re-hit lock ---
+  resetP21();
+  {
+    const coast = (skates) => {
+      pP.x = 300; pP.y = 600; pP.vx = 0; pP.vy = 0;
+      pP.passives = skates ? { skates: 1 } : {};
+      for (let n = 0; n < 40; n++) pP.update(1 / 60, { x: 1, y: 0 }, gP.combat, gP.enemies, gP.world); // wind up
+      const x0 = pP.x;
+      for (let n = 0; n < 40; n++) pP.update(1 / 60, { x: 0, y: 0 }, gP.combat, gP.enemies, gP.world); // release
+      return pP.x - x0;
+    };
+    const dCtl = coast(false), dGl = coast(true);
+    assert(dGl > dCtl, `P21 skates: glide drifts farther after release (${dGl.toFixed(0)} > ${dCtl.toFixed(0)})`);
+  }
+  {
+    pP.x = 400; pP.y = 600; pP.vx = 400; pP.vy = 0;
+    pP.passives = { skates: 1 };
+    const e = mkFoeP('goblin', pP.x + 20, pP.y);
+    regridP();
+    let selfHits = 0;
+    gP.combat.damagePlayer = (...a) => { selfHits++; return false; };
+    pP.update(1 / 60, { x: 0, y: 0 }, gP.combat, gP.enemies, gP.world); // gliding brush
+    const dealt1 = 1e6 - e.hp;
+    pP.update(1 / 60, { x: 0, y: 0 }, gP.combat, gP.enemies, gP.world); // instant second contact — locked
+    assert(dealt1 > 0 && selfHits >= 1, `P21 skates: sliding into a foe hurts BOTH (dealt=${dealt1.toFixed(0)})`);
+    assert(1e6 - e.hp === dealt1, 'P21 skates: 0.5 s per-foe re-hit lock holds');
+    gP.combat.damagePlayer = () => false;
+  }
+  // --- 5 new characters: selectable, pre-owned starter weapon, zero passives, per-char stats ---
+  {
+    gP.chars = [...CFG.characters.order]; // unlock the full roster for the probe (in-memory only)
+    for (const k of ['baseball', 'werewolf', 'golem', 'toad', 'gunslinger']) {
+      assert(gP.setCharacter(k) === k, `P21 chars: ${k} selectable`);
+      gP.startRun('m01');
+      const c = CFG.characters[k];
+      assert(pP.charKey === k && Object.keys(pP.weapons).length === 1 && pP.weapons[c.weapon] === 1 &&
+        Object.keys(pP.passives).length === 0 && pP.maxHp === c.hp + pP.metaHp &&
+        Math.abs(pP.dmgMul - (1 + (pP.metaDmg || 0)) * c.dmg) < 1e-9,
+        `P21 chars: ${c.name} starts with ONLY ${c.weapon}, zero passives, hp=${c.hp}+meta, dmg=${c.dmg}`);
+    }
+    gP.setCharacter('mage');
+    gP.startRun('m01');
+  }
+  // --- The 5 fused synergies reach the offer pool when their pair is owned at max (reqAtMax) ---
+  {
+    const w9 = { cannon: 5, flame: 5, wolf: 5, ringLightning: 5, bat: 5, bow: 5, tongue: 5, boulder: 5, snowball: 5 };
+    const seen = new Set();
+    for (let s = 1; s <= 60; s++) for (const c of cardOffers(w9, { hp: 3 }, {}, mulberry32(s), 5, null, null, null)) seen.add(c.key);
+    for (const k of ['heShell', 'staticPelt', 'homerKing', 'gutFeast', 'avalanche'])
+      assert(seen.has(k), `P21 offers: ${k} never surfaced across 60 seeds`);
+  }
+  // --- P21 draw pass: shell/boulder/web sprites + beam + companion emit real draw ops ---
+  {
+    resetP21();
+    pP.x = 400; pP.y = 600; pP.aimAng = 0;
+    gP.combat.fireShell(pP.x, torsoP(), 0, 50, 70, null, pP);
+    gP.combat.fireBoulder(pP, pP.x + Cp.boulderR, pP.y, 1, 0, 50, null);
+    gP.combat.fireWeb(pP.x, torsoP(), pP.x + 120, pP.y, 10, 90, 0.7, pP);
+    gP.combat.fireBeam(pP, { dur: 1.0, dps: 10, len: Cp.wandRange, w: 12 });
+    pP.weapons.wolf = 1;
+    pP._companion = { x: pP.x, y: pP.y - 12, state: 'follow', target: null, cd: 0, flip: false, animT: 0 };
+    const before = drawOps.drawImage;
+    gP.combat.draw(makeCtx(), 1, gP.players, gP.enemies);
+    assert(drawOps.drawImage - before > 0, `P21 draw pass: sprites blit (${drawOps.drawImage - before} drawImage)`);
+    resetP21();
+    gP.combat.damagePlayer = dmgBakP;
+  }
+  p21Done = true;
+}
+
 // 11.1 — co-op transport E2E: the real serve.mjs (WS upgrade + frame codec +
 // room relay) on an ephemeral loopback port, driven by native WebSocket clients
 // (Node 22+). Ephemeral port 0 — the only fixed port stays 47893 (serve.mjs).
@@ -2477,7 +2816,7 @@ m03RunDone = true;
   // absent (host-owned), phoenix + heartMagnet (unowned) must be present.
   const pl1P0 = { ...pl1.passives };
   pl1.weapons = { wand: 5, garlic: 5, axe: 5 }; // 3 maxed = cap 3 filled; gates blight(wand+garlic)+phoenix(passives) only
-  pl1.passives = { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3 };
+  pl1.passives = { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3, shield: 5, skates: 5 }; // P21: item-passives maxed too — pool stays pure synergies
   const pl1Excl = cardOffers(pl1.weapons, pl1.passives, pl1.synergies, hostG.rng, weaponCap(3), hostG._ownerExclusion(pl1));
   assert(pl1Excl.every((c) => c.kind === 'synergy' && (c.key === 'phoenix' || c.key === 'heartMagnet'))
     && !pl1Excl.some((c) => c.key === 'blight') && pl1Excl.some((c) => c.key === 'phoenix'),
@@ -2544,8 +2883,8 @@ m03RunDone = true;
   await rawA.wait((m) => m.t === 'roster' && m.players.length === 4, 'host roster 4');
   await tick(60);
   const pl3 = hostG.players[3];
-  assert(pl3 && pl3.charKey === 'swash' && pl3.maxHp === CFG.characters.swash.hp + pl3.metaHp && pl3.weapons.pistols === 1,
-    '11.6.4: late joiner with a TAKEN pick is reassigned its next unlocked char (swash, Twin Fangs)');
+  assert(pl3 && pl3.charKey === 'swash' && pl3.maxHp === CFG.characters.swash.hp + pl3.metaHp && pl3.weapons.bombs === 1,
+    '11.6.4: late joiner with a TAKEN pick is reassigned its next unlocked char (swash, Sunder Bombs — D94)');
   assert(resolveChars(hostG.netRoster).join() === 'mage,warden,ranger,swash',
     '11.6.4: host-authoritative resolution — every seat unique, seat order');
   await rawD.wait((m) => m.t === 'runstart', 'c3 runstart');
@@ -2649,7 +2988,7 @@ m03RunDone = true;
   document.getElementById('btn-character').click();
   pump(10);
   const cs4 = byId['char-list'].children;
-  assert(cs4.length === 4, '11.6.4: select shows all 4 chars');
+  assert(cs4.length === 9, '11.6.4: select shows all 9 chars (P21)');
   assert(cs4[1].classList.contains('taken') && cs4[2].classList.contains('taken')
     && !cs4[0].classList.contains('taken') && !cs4[3].classList.contains('taken'),
     '11.6.4: co-op — warden/ranger (held by other seats) are greyed TAKEN, own + free stay open');
@@ -2909,6 +3248,7 @@ assert(burnDone && burnAsserted, 'burn DoT kill path never exercised');
 assert(dashIFrameStep === 2, 'dash i-frame E2E never completed');
 assert(synDone, 'synergy E2E (blight) never completed');
 assert(syn128Done, '12.8 per-synergy combat E2Es never completed');
+assert(p21Done, 'P21 boot battery never completed');
 assert(e107ADone && e107BDone, '10.7 empty-pool guard E2E never completed');
 assert(gemDone && gemAsserted, 'gem pickup SFX event never exercised');
 assert(benchPhase === 2, '10.4 worst-case bench never completed');
@@ -2923,5 +3263,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 8 weapons (wand-off kill window) · ` +
   `all 8 weapons observed live (bolts/axes/blades/garlic/bullets/bombs/flames/arrows) · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 12.8 per-synergy E2Es (flamingArrows burn-on-hit · heartPiercer bonus+pierce exactly 1 extra · blueFlame freeze+burn on burst · stormVolley 4th-volley both-rounds strike + chain shock) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · 14 in-run Soulshards counter (live floor(score/400) projection, change-detected) + 14.2 unified co-op earnings (run-level total rides the room close, client accrues in full, meta player-specific) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · 14 in-run Soulshards counter (live floor(score/400) projection, change-detected) + 14.2 unified co-op earnings (run-level total rides the room close, client accrues in full, meta player-specific)P21 boot battery (9 new weapons + 2 item-passives live: cannon punch→blast + heShell ignite · laser sear no-kb · wolf pounce/bleed/leash/staticPelt shock · boulder squish/decay/one-at-a-time/avalanche stacks · web burst hold · gatling mag→reload→full-mag refill · bat knockback + HOMERUN KO branch (rand-pinned) · tongue poison/drag/eat-heal with gutFeast ×mul · cannonball roll self-propelled + i-frame gate open/close; Mirror Shield reflect+bank+spend; Ice Skates glide drift + slide-hits-both with re-hit lock; 5 new chars selectable: pre-owned starter, zero passives, per-char hp/dmg; 5 fused synergies offered across 60 seeds; P21 sprite draw pass) · loop alive throughout`,
 );

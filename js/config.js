@@ -45,11 +45,16 @@ export const CFG = {
   // UI theming color (11.8; ghost = null → per-seat Pac-Man tint, D62 channel).
   // STAT VALUES (O) user-approved 2026-08-22 (revisions: mage 60hp/275sp, ranger 110hp/320sp, warden 230sp).
   characters: {
-    order: ['mage', 'warden', 'ranger', 'swash'],
+    order: ['mage', 'warden', 'ranger', 'swash', 'baseball', 'werewolf', 'golem', 'toad', 'gunslinger'],
     mage:    { name: 'Mage',         weapon: 'wand',   cost: 0,    hp: 60,  dmg: 1.35, speed: 275, accent: '#9fe8ff', desc: 'Glass cannon — +35% weapon damage, low max HP. Starts with the Moonbolt Wand.' },
     warden:  { name: 'Warden',       weapon: 'garlic', cost: 3500, hp: 150, dmg: 0.85, speed: 230, accent: '#ffb454', desc: 'Tanky, slowest move speed, lower-medium damage. Starts with the Wraith Garlic aura.' },
     ranger:  { name: 'Ranger',       weapon: 'bow',    cost: 1500, hp: 110, dmg: 1.0,  speed: 320, accent: '#a4ffc9', desc: 'Fast and balanced. Starts with the Bow & Arrow.' },
-    swash:   { name: 'Swashbuckler', weapon: 'pistols', cost: 7500, hp: 90,  dmg: 1.15, speed: 300, accent: '#e8b45a', desc: 'Agile, upper-medium damage. Starts with the Twin Fangs.' },
+    swash:   { name: 'Swashbuckler', weapon: 'bombs', cost: 7500, hp: 90,  dmg: 1.15, speed: 300, accent: '#e8b45a', desc: 'Agile, upper-medium damage. Starts with Sunder Bombs. (D94 re-tool.)' },
+    baseball: { name: 'Baseball Player', weapon: 'bat', cost: 5000, hp: 120, dmg: 1.1, speed: 285, accent: '#f06543', desc: 'Bruiser — massive knockback control. Starts with the Baseball Bat.' },
+    werewolf: { name: 'Werewolf',    weapon: 'wolf',   cost: 7500, hp: 110, dmg: 1.05, speed: 305, accent: '#c084fc', desc: 'Fast striker with an autonomous pack-hunter. Starts bonded to a Wolf companion.' },
+    golem:   { name: 'Stone Golem',  weapon: 'boulder', cost: 10000, hp: 190, dmg: 0.9, speed: 195, accent: '#9aa7b8', desc: 'Slowest juggernaut — crushes small fries outright. Starts with the Rolling Boulder.' },
+    toad:    { name: 'Giant Toad',   weapon: 'tongue', cost: 12500, hp: 140, dmg: 0.95, speed: 240, accent: '#7ed957', desc: 'Sustain tank — hauls foes in and eats them to heal. Starts with the Frog Tongue.' },
+    gunslinger: { name: 'Wild West Gunslinger', weapon: 'pistols', cost: 15000, hp: 85, dmg: 1.2, speed: 295, accent: '#d9a066', desc: 'Deadliest duo — high damage, thinnest skin. Starts with the Twin Fangs. (D94.)' },
     ghost:   { name: 'Ghost',        weapon: null,     cost: 0,    hp: 100, dmg: 1.0,  speed: 265, accent: null, desc: 'Faceless fallback — baseline stats, no starting weapon.' },
   },
 
@@ -213,6 +218,119 @@ export const CFG = {
         { rate: 0.39, dmg: 42 },
       ],
     },
+    // ---- Phase 21 (D96) — nine new weapons; stat tables verbatim from
+    // docs/phase21-resolutions-2026-10-20.md §B (user-approved 2026-10-20) ----
+    cannon: {
+      name: 'Tank Cannon',
+      desc: 'Fires a heavy shell that punches one foe, then detonates on the next.',
+      icon: 'cannon',
+      levels: [
+        { cd: 2.6, dmg: 90, blastR: 70 },
+        { cd: 2.4, dmg: 115, blastR: 76 },
+        { cd: 2.2, dmg: 145, blastR: 82 },
+        { cd: 2.0, dmg: 180, blastR: 88 },
+        { cd: 1.8, dmg: 225, blastR: 95 },
+      ],
+    },
+    laser: {
+      name: 'Continuous Laser',
+      desc: 'A sustained beam that sears every foe it sweeps. Long cooldown.',
+      icon: 'laser',
+      levels: [
+        { cd: 5.0, dur: 1.2, dps: 34, len: 240, w: 12 },
+        { cd: 4.6, dur: 1.3, dps: 42, len: 250, w: 12 },
+        { cd: 4.2, dur: 1.4, dps: 52, len: 260, w: 14 },
+        { cd: 3.8, dur: 1.5, dps: 64, len: 270, w: 14 },
+        { cd: 3.4, dur: 1.6, dps: 78, len: 285, w: 16 },
+      ],
+    },
+    wolf: {
+      name: 'Wolf Companion',
+      desc: 'A bonded wolf that hounds foes near you and bleeds them. Never dies.',
+      icon: 'wolf',
+      levels: [
+        { dmg: 30, bleed: 8, bleedDur: 3.0 },
+        { dmg: 38, bleed: 10, bleedDur: 3.0 },
+        { dmg: 48, bleed: 13, bleedDur: 3.0 },
+        { dmg: 60, bleed: 16, bleedDur: 3.2 },
+        { dmg: 75, bleed: 20, bleedDur: 3.5 },
+      ],
+    },
+    boulder: {
+      name: 'Rolling Boulder',
+      desc: 'Sends a boulder rolling in a cardinal line, crushing small fries. One at a time.',
+      icon: 'boulder',
+      levels: [
+        { cd: 7.0, dmg: 70 },
+        { cd: 6.5, dmg: 90 },
+        { cd: 6.0, dmg: 110 },
+        { cd: 5.5, dmg: 130 },
+        { cd: 5.0, dmg: 155 },
+      ],
+    },
+    webs: {
+      name: 'Web-slingers',
+      desc: 'Webs burst on impact, pinning everything nearby in place.',
+      icon: 'webs',
+      levels: [
+        { cd: 1.6, dmg: 18, r: 90, hold: 0.7 },
+        { cd: 1.5, dmg: 24, r: 96, hold: 0.8 },
+        { cd: 1.4, dmg: 31, r: 102, hold: 0.9 },
+        { cd: 1.3, dmg: 39, r: 110, hold: 1.0 },
+        { cd: 1.2, dmg: 48, r: 118, hold: 1.2 },
+      ],
+    },
+    gatling: {
+      name: 'Gatling Gun',
+      desc: '40-round buzzsaw bursts — pea-shooter damage, then a 3 s reload.',
+      icon: 'gatling',
+      burst: 40, reload: 3.0, // spec-fixed (Phase 21 verbatim): growth stays in the table
+      levels: [
+        { cd: 0.075, dmg: 4, spread: 0.16 },
+        { cd: 0.075, dmg: 5, spread: 0.14 },
+        { cd: 0.070, dmg: 6, spread: 0.12 },
+        { cd: 0.065, dmg: 7, spread: 0.11 },
+        { cd: 0.060, dmg: 9, spread: 0.10 },
+      ],
+    },
+    bat: {
+      name: 'Baseball Bat',
+      desc: 'Frantic short swings with huge knockback. 1-in-500 HOMERUN (one-hit KO).',
+      icon: 'bat',
+      homerun: 500, // spec-fixed odds (non-boss only) — homerKing synergy upgrades them
+      levels: [
+        { cd: 0.34, dmg: 26, kb: 3.0, arc: 100 },
+        { cd: 0.30, dmg: 31, kb: 3.0, arc: 100 },
+        { cd: 0.27, dmg: 36, kb: 3.5, arc: 105 },
+        { cd: 0.24, dmg: 41, kb: 3.5, arc: 105 },
+        { cd: 0.22, dmg: 48, kb: 4.0, arc: 110 },
+      ],
+    },
+    tongue: {
+      name: 'Frog Tongue',
+      desc: 'Latches on, drags foes in, and poisons them. Foes killed by the lash are eaten.',
+      icon: 'tongue',
+      levels: [
+        { cd: 2.2, dmg: 34, poison: 4, poisonDur: 3.0 },
+        { cd: 2.05, dmg: 44, poison: 5, poisonDur: 3.0 },
+        { cd: 1.9, dmg: 56, poison: 6, poisonDur: 3.2 },
+        { cd: 1.75, dmg: 70, poison: 8, poisonDur: 3.4 },
+        { cd: 1.6, dmg: 86, poison: 10, poisonDur: 3.5 },
+      ],
+    },
+    ball: {
+      name: 'Cannonball',
+      desc: 'Tuck into a ball and rocket into foes — ricochets, invulnerable, 10 s cooldown.',
+      icon: 'ball',
+      cd: 10.0, // spec-fixed at every level; growth = +1 bounce/level (hits 2→6)
+      levels: [
+        { dmg: 60, hits: 2 },
+        { dmg: 72, hits: 3 },
+        { dmg: 85, hits: 4 },
+        { dmg: 97, hits: 5 },
+        { dmg: 110, hits: 6 },
+      ],
+    },
   },
 
   // Weapon/passive synergies: a single-level card offered only when every
@@ -305,6 +423,51 @@ export const CFG = {
         { pull: 1.0 }, { pull: 1.25 }, { pull: 1.5 }, { pull: 1.75 }, { pull: 2.0 },
       ],
     },
+    // ---- Phase 21 (D96) — five new synergies (doc §E, user-approved) ----
+    heShell: {
+      name: 'Shells of Perdition',
+      desc: 'Tank Cannon blasts now set every caught foe alight.',
+      icon: 'heShell', requires: ['cannon', 'flame'],
+      levels: [
+        { dps: 12, dur: 2.5 }, { dps: 16, dur: 2.75 }, { dps: 20, dur: 3.0 },
+        { dps: 25, dur: 3.25 }, { dps: 30, dur: 3.5 },
+      ],
+    },
+    staticPelt: {
+      name: 'Static Pelt',
+      desc: 'The wolf\u2019s pounce shocks its quarry and calls a chain burst.',
+      icon: 'staticPelt', requires: ['wolf', 'ringLightning'],
+      levels: [
+        { jumps: 2 }, { jumps: 3 }, { jumps: 4 }, { jumps: 5 }, { jumps: 6 },
+      ],
+    },
+    homerKing: {
+      name: 'Homerun King',
+      desc: 'Swing for the fences — the 1-in-500 HOMERUN gets far luckier.',
+      icon: 'homerKing', requires: ['bat', 'bow'],
+      // odds = the HOMERUN is 1-in-`odds` (500 base)
+      levels: [
+        { odds: 250 }, { odds: 150 }, { odds: 100 }, { odds: 75 }, { odds: 50 },
+      ],
+    },
+    gutFeast: {
+      name: 'Gut Feast',
+      desc: 'A heartier appetite — eaten foes restore far more HP.',
+      icon: 'gutFeast', requires: ['tongue', 'hp'],
+      levels: [
+        { mul: 1.25 }, { mul: 1.5 }, { mul: 1.75 }, { mul: 2.0 }, { mul: 2.5 },
+      ],
+    },
+    avalanche: {
+      name: 'Avalanche',
+      desc: 'The boulder plows slow-deepening drifts and hits harder.',
+      icon: 'avalanche', requires: ['boulder', 'snowball'],
+      // stacks = slow stacks per hit; bonus = extra flat damage per hit
+      levels: [
+        { stacks: 1, bonus: 0 }, { stacks: 1, bonus: 8 }, { stacks: 1, bonus: 16 },
+        { stacks: 2, bonus: 16 }, { stacks: 2, bonus: 30 },
+      ],
+    },
   },
 
   passives: {
@@ -313,6 +476,29 @@ export const CFG = {
     dmg:    { name: 'Rune of Might',  desc: '+12% weapon damage', icon: 'sword', max: 5, val: 0.12 },
     magnet: { name: 'Lodestone',      desc: '+60% pickup range', icon: 'magnet', max: 3, val: 0.60 },
     regen:  { name: 'Moon Sigil',     desc: 'Regenerate 0.8 HP/s', icon: 'sigil', max: 3, val: 0.8 },
+    // Phase 21 "run-equipable items" (D95): passive-pool entries with per-level `levels`
+    // tables (behavior lookups in combat/player), not scalar `val` increments.
+    shield: {
+      name: 'Mirror Shield',
+      desc: 'Ricochets enemy projectiles — 3 every 5 s, radius grows, window shortens.',
+      icon: 'shield', max: 5,
+      levels: [
+        { r: 130, window: 5.0 }, { r: 145, window: 4.5 }, { r: 160, window: 4.0 },
+        { r: 175, window: 3.5 }, { r: 190, window: 3.0 },
+      ],
+    },
+    skates: {
+      name: 'Ice Skates',
+      desc: 'Slippery glide + speed; sliding into foes hurts both of you.',
+      icon: 'skates', max: 5,
+      // spd = extra move-speed fraction; glideK = deceleration multiplier on release;
+      // slideDmg = per-impact damage to BOTH (0.5 s re-hit lock per foe; cap 6 at max)
+      levels: [
+        { spd: 0.05, glideK: 0.35, slideDmg: 2 }, { spd: 0.075, glideK: 0.30, slideDmg: 3 },
+        { spd: 0.10, glideK: 0.25, slideDmg: 4 }, { spd: 0.125, glideK: 0.20, slideDmg: 5 },
+        { spd: 0.15, glideK: 0.15, slideDmg: 6 },
+      ],
+    },
   },
 
   // Level-up offer draw (Phase 15 rework, D81). UNIFORM sample-without-replacement over
@@ -400,6 +586,19 @@ export const CFG = {
     flameSpeed: 520, flameSpeedVar: 160, flameLife: 0.33, flameLifeVar: 0.075,
     flameSize: 18, flameR: 12, flameDrag: 2.0, flameRise: 140, flameMomentum: 0.5,
     flameWobAmp: 14, flameWobFreq: 9, flameHit: 0.22,
+
+    // Phase 21 (D96) — new-weapon mechanics knobs (per-level damage lives in CFG.weapons)
+    shellSpeed: 460, shellR: 11, shellBlastK: 0.5,           // Tank Cannon
+    laserSpeed: 720, laserTick: 0.1,                         // Continuous Laser sweep rate + tick
+    companionLeash: 192, companionPounceCd: 2.0, companionSpeed: 380, // Wolf (pounce cd spec-fixed)
+    boulderSpeed: 300, boulderR: 34, boulderDecay: 0.75, boulderMaxHits: 6, boulderSquishR: 12,
+    webSpeed: 430, webR: 9,                                  // Web-slingers
+    gatlingSpeed: 640, gatlingLife: 0.55, gatlingR: 4,       // Gatling Gun
+    batRange: 62, batKbImpulse: 520, homerunFx: 1.2,         // Baseball Bat (HOMERUN fx = fx lifetime s)
+    tongueRange: 240, tongueSpeed: 760, tonguePullDur: 0.4, tongueHealK: 0.06, tongueHealCap: 15,
+    ballSpeed: 620, ballDecay: 0.9, ballMaxHits: 6, ballSearchR: 260, // Cannonball (player ball-state)
+    shieldCharges: 3,                                        // Mirror Shield window/r at level lookup
+    skateSlideMin: 200, skateSlideLock: 0.5,                 // Ice Skates slide-damage gate
   },
 
   spawner: {

@@ -4,7 +4,7 @@
 // only sim outputs (D53). Keys follow CFG order (stable across clients).
 import { CFG } from '../config.js';
 
-export const SNAP_V = 6; // v6 (18.3): playerSnap 34 → 37 slots (actLeft skip/reroll/banish ride the end; D53 holds — counts are sim state, meta levels never sync)
+export const SNAP_V = 7; // v7 (P21/D96): roster expansion re-layout (19 weapons + 7 passives + 15 synergies) + a 4-slot companion tail per player (wolf sim rides the wire — companions never cross any other way); actLeft counts unchanged (D53 holds — counts are sim state, meta levels never sync)
 
 export const WEAPON_KEYS = Object.keys(CFG.weapons);    // 10
 export const PASSIVE_KEYS = Object.keys(CFG.passives);  // 5
@@ -15,16 +15,20 @@ export const E_FLAG_FLASH = 1, E_FLAG_BURN = 2, E_FLAG_BLIGHT = 4, E_FLAG_BOSS =
 
 const r1 = (n) => Math.round(n * 10) / 10;
 
-// Player snapshot (37 slots, SNAP_V=6):
+// Player snapshot (SNAP_V=7; offsets derived from the key tables):
 // [0] x  [1] y  [2] hp  [3] maxHp  [4] xp  [5] level
 // [6] dashT  [7] dashCd  [8] flip(0/1)
-// [9..18] weapons (CFG order, 0..5)  [19..23] passives  [24..33] synergies (level 0..5)
-// [34..36] actLeft skip/reroll/banish (CFG.meta.actions.order; 18.3 per PLAN §3.11)
+// [9..] weapons (CFG order, 0..5) · passives · synergies (level 0..5)
+// [..] actLeft skip/reroll/banish (CFG.meta.actions.order; 18.3 per PLAN §3.11)
+// TAIL (4 slots, P21): wolf companion — 0 when the seat has no live companion:
+// [x, y, state*2+flip (state: follow=0/pounce=1), animT]
 // Offsets are derived from key-table lengths so a roster change can't desync them.
 const W_OFF = 9;
 const P_OFF = W_OFF + WEAPON_KEYS.length;
 const S_OFF = P_OFF + PASSIVE_KEYS.length;
 const A_OFF = S_OFF + SYNERGY_KEYS.length;
+const C_OFF = A_OFF + CFG.meta.actions.order.length; // companion tail start
+export const SNAP_PLEN = C_OFF + 4;
 const ACT_ORDER = CFG.meta.actions.order; // ['skip','reroll','banish']
 export function playerSnap(p) {
   const s = [r1(p.x), r1(p.y), r1(p.hp), r1(p.maxHp), r1(p.xp), p.level | 0,
@@ -33,6 +37,9 @@ export function playerSnap(p) {
   for (const k of PASSIVE_KEYS) s.push(p.passives[k] || 0);
   for (const k of SYNERGY_KEYS) s.push(p.synergies[k] || 0);
   for (const k of ACT_ORDER) s.push(p.actLeft ? (p.actLeft[k] | 0) : 0);
+  const c = p._companion;
+  if (c) s.push(r1(c.x), r1(c.y), (c.state === 'pounce' ? 2 : 0) + (c.flip ? 1 : 0), r1(c.animT));
+  else s.push(0, 0, 0, 0);
   return s;
 }
 
@@ -47,6 +54,17 @@ export function applyPlayerSnap(p, s) {
   for (let i = 0; i < SYNERGY_KEYS.length; i++) { const v = s[S_OFF + i]; if (v) p.synergies[SYNERGY_KEYS[i]] = v; }
   p.actLeft = {};
   for (let i = 0; i < ACT_ORDER.length; i++) p.actLeft[ACT_ORDER[i]] = s[A_OFF + i] | 0;
+  // P21 companion tail: a client's remote/local player carries a RENDER-ONLY
+  // companion object (host sim streams its position + anim; nothing is simulated
+  // client-side). Zeroed tail = no companion.
+  if (s[C_OFF] || s[C_OFF + 1]) {
+    p._companion = {
+      x: s[C_OFF], y: s[C_OFF + 1],
+      state: s[C_OFF + 2] >= 2 ? 'pounce' : 'follow',
+      flip: (s[C_OFF + 2] & 1) !== 0,
+      animT: s[C_OFF + 3],
+    };
+  } else p._companion = null;
 }
 
 // Enemy snapshot: [sid, typeIdx, x, y, hp, maxHp, frame, flags]
@@ -121,7 +139,7 @@ export function unpackState(m) {
   if (!m || m.v !== SNAP_V) return null;
   if (!Number.isInteger(m.step) || !num(m.time) || !num(m.score) || !num(m.kills)) return null;
   if (!arr(m.players) || !arr(m.enemies) || !arr(m.pickups)) return null;
-  const plen = 9 + WEAPON_KEYS.length + PASSIVE_KEYS.length + SYNERGY_KEYS.length + CFG.meta.actions.order.length;
+  const plen = SNAP_PLEN;
   for (const s of m.players) if (!arr(s) || s.length !== plen || !allNum(s)) return null;
   // s[1] is fed straight into ENEMY_KEYS[...] on the client — keep it indexable.
   for (const s of m.enemies) if (!arr(s) || s.length !== 8 || !allNum(s) || s[1] < 0 || s[1] >= ENEMY_KEYS.length) return null;

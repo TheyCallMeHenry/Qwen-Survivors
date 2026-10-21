@@ -90,6 +90,10 @@ export class Game {
     this.combat.bombImg = items.bomb;
     this.combat.flameImg = items.flame;
     this.combat.explosionImg = items.explosion;
+    // Phase 21 (D96) projectile sprites
+    this.combat.shellImg = items.shell;
+    this.combat.boulderImg = items.boulder;
+    this.combat.webImg = items.web;
     // 24.3 synergy variant maps (nil on base path → combat.draw falls back to *Img).
     this.combat.boltVar = items.boltVar;
     this.combat.bulletVar = items.bulletVar;
@@ -100,6 +104,15 @@ export class Game {
     this.enemies.blightImg = items.blight;
     this.combat.pulse = (n) => this.bus.emit(n);
     this.combat.onBomb = () => this.camera.addShake(CFG.camera.shake.bomb);
+    // P21 cosmetic bursts (particles only — damage already resolved in combat).
+    this.combat.onFx = (kind, x, y) => {
+      const P = this.particles;
+      if (kind === 'homerun') { P.spark(x, y, 16, 320, 255, 216, 120, 3, 0.9, 260); P.spark(x, y, 8, 200, 255, 140, 90, 2.4, 0.7, 260); }
+      else if (kind === 'crag') P.spark(x, y, 10, 220, 154, 167, 184, 2.8, 0.6, 420);
+      else if (kind === 'reflect') P.spark(x, y, 8, 240, 170, 210, 255, 2.4, 0.5, 0);
+      else if (kind === 'ball') P.spark(x, y, 8, 180, 200, 200, 210, 2.2, 0.45, 200);
+      else if (kind === 'slide') P.spark(x, y, 6, 160, 230, 240, 250, 2, 0.4, 0);
+    };
 
     this.meta = loadMeta(CFG.meta.storageKey);
     this.wins = loadWins(CFG.meta.winsKey); // per-level cumulative victories (13.6)
@@ -1217,7 +1230,7 @@ export class Game {
     // world space: projectiles → orbs → particles
     ctx.save();
     ctx.translate(vw / 2 - view.x, vh / 2 - view.y);
-    this.combat.draw(ctx, t, this.players);
+    this.combat.draw(ctx, t, this.players, this.enemies);
     this.enemies.drawOrbs(ctx);
     this.particles.draw(ctx, x0, y0, x1, y1);
     ctx.restore();

@@ -1,6 +1,6 @@
 // Playable character sheets (11.6 roster art; Phase 27 full from-scratch reimagining,
-// user directive 2026-09-07). Five concepts drawn off the binding D62 archetypes —
-// every silhouette is built around ONE readable shape + two or three identity props so
+// user directive 2026-09-07; Phase 21 adds five more off the D96 archetypes).
+// Every silhouette is built around ONE readable shape + two or three identity props so
 // it still reads at 1× on a crowded screen, then refined with garment layering,
 // material-specific gradients and the Phase 24 top-left key light (`formShade`).
 //
@@ -12,6 +12,16 @@
 //                                  frame, leaf mantle, vertical branch bow, trailing scarf
 //   swash   "the Ember Duelist"   agile, upper-medium · Pyre Lance → wide-brim + plume,
 //                                  open longcoat with tails, brass pyre lance held lit
+//   baseball "the Slugger"        bruiser · Baseball Bat      → bat on shoulder reads
+//                                  at any angle, pinstripes + accent helmet
+//   werewolf "the Moonbound"      fast striker · Wolf         → sprinter crouch, spiked
+//                                  mantle, violet moon-tips + glowing eye
+//   golem    "the Long Walk"      slowest juggernaut · Boulder→ neckless stacked stone
+//                                  slabs, glowing seams, floating head, boulder fists
+//   toad     "the Muncher"        sustain tank · Tongue       → neckless wide squat dome,
+//                                  mouth line = widest element, bulging top-edge eyes
+//   gunslinger "the Quick"        glass cannon · Pistols      → lean vertical duster,
+//                                  face in brim shadow, twin muzzle line out front
 //   ghost   "ragged sheet"        faceless fallback (D62)        → cloth-in-motion
 //                                  silhouette: dome + torn hem rippling with the stride
 //
@@ -497,6 +507,372 @@ export function swashFrame(dy, legL, legR) {
   });
 }
 
+// ── Baseball Player 56×64 · "the Slugger" (bruiser: 120 hp / ×1.10 dmg / 285) ──
+// Shape language: broad-shouldered athlete — the bat resting ON the shoulder is the
+// one long line that makes the silhouette instantly readable (and previews the Bat
+// weapon). Pinstripes + helmet in the #f06543 accent carry the identity props.
+export function baseballFrame(dy, legL, legR) {
+  return sheet(56, 64, (g) => {
+    g.save();
+    g.translate(0, dy);
+    const s = legL / 4;
+    const legF = legL, legB = -(legR || legL);
+
+    // ── bat on the back shoulder, tilting slightly with the stride ──
+    g.save();
+    g.translate(20, 26);
+    g.rotate(-1.02 + s * 0.02);
+    g.fillStyle = lg(g, 0, 0, 0, -30, [[0, '#6d4a2b'], [0.5, '#c08a52'], [1, '#e6bd90']]);
+    roundRectPath(g, -2.4, -34, 4.8, 34, 2.2); g.fill();
+    roundRectPath(g, -3.6, -34, 7.2, 10, 3.2); g.fill(); // barrel swell
+    g.fillStyle = '#3d2a18'; roundRectPath(g, -1.8, -6, 3.6, 7, 1.4); g.fill(); // grip
+    dot(g, 0, 1.6, 2.4, '#3d2a18'); // knob
+    g.restore();
+
+    // ── legs: baseball pants + accent stripe, cleats ──
+    g.fillStyle = lg(g, 0, 44, 0, 58, [[0, '#e8e6e0'], [1, '#b9b6ae']]);
+    roundRectPath(g, 20 + legB, 44, 9.6, 13, 3); g.fill();
+    roundRectPath(g, 30 + legF, 44, 9.6, 13, 3); g.fill();
+    g.strokeStyle = '#f06543'; g.lineWidth = 1.6; // pant stripe
+    g.beginPath(); g.moveTo(24.8 + legB, 45.6); g.lineTo(24.8 + legB, 55.4); g.stroke();
+    g.beginPath(); g.moveTo(34.8 + legF, 45.6); g.lineTo(34.8 + legF, 55.4); g.stroke();
+    g.fillStyle = '#232830'; // cleats
+    roundRectPath(g, 18.4 + legB, 55.6, 13, 5.4, 2); g.fill();
+    roundRectPath(g, 28.4 + legF, 55.6, 13, 5.4, 2); g.fill();
+    g.fillStyle = '#cfd6de';
+    for (let i = 0; i < 3; i++) { g.fillRect(20 + legB + i * 3.8, 60.4, 2.2, 1.2); g.fillRect(30 + legF + i * 3.8, 60.4, 2.2, 1.2); }
+
+    // ── back arm hanging free ──
+    g.strokeStyle = '#d8b48c'; g.lineWidth = 4.6; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(20.6, 31.4); g.quadraticCurveTo(17.4 - s * 0.4, 38, 18.4 - s * 0.7, 44.4); g.stroke();
+
+    // ── torso: pinstriped jersey over an accent undershirt ──
+    g.fillStyle = lg(g, 17, 26, 41, 46, [[0, '#f3f1ea'], [0.6, '#ded9cf'], [1, '#b7b2a8']]);
+    g.beginPath();
+    g.moveTo(18.6, 30); g.quadraticCurveTo(28, 26.4, 37.6, 30);
+    g.lineTo(38.6, 43); g.quadraticCurveTo(28, 46.4, 17.6, 43);
+    g.closePath(); g.fill();
+    formShade(g, 17, 26, 22, 17);
+    g.strokeStyle = 'rgba(90,96,108,0.5)'; g.lineWidth = 0.9; // pinstripes
+    for (const px of [22, 26, 30, 34]) { g.beginPath(); g.moveTo(px, 28.4); g.lineTo(px + 0.6, 44.6); g.stroke(); }
+    g.fillStyle = '#f06543'; roundRectPath(g, 18.6, 28.6, 19, 3.2, 1.4); g.fill(); // collar band
+    dot(g, 33.6, 36.4, 3.4, '#f06543'); // chest number patch (abstract)
+    g.fillStyle = '#e8e6e0'; roundRectPath(g, 16.6, 41.6, 23, 4.6, 1.8); g.fill(); // belt line
+    g.fillStyle = '#232830'; roundRectPath(g, 26.2, 42, 4.4, 4, 1.2); g.fill();    // buckle
+
+    // ── front arm up to the bat grip ──
+    g.strokeStyle = '#e2bd94'; g.lineWidth = 4.8; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(35.8, 31.2); g.quadraticCurveTo(39.4, 34, 37.6, 38.8); g.stroke();
+    dot(g, 37, 39.8, 2.6, '#e2bd94');
+
+    // ── head: batting helmet (accent) + face ──
+    g.fillStyle = '#e2bd94'; ell(g, 29.6, 18.4, 7.4, 8, 0, '#e2bd94');
+    eyeGlint(g, 33.4, 18, 1.5, '#241a10', 'rgba(255,250,240,0.85)');
+    g.fillStyle = lg(g, 20, 6, 38, 14, [[0, '#f06543'], [1, '#b03f24']]); // helmet shell
+    g.beginPath();
+    g.moveTo(21.4, 18.6); g.quadraticCurveTo(21.2, 6.6, 29.6, 6.2);
+    g.quadraticCurveTo(38, 6.6, 38.2, 17.4);
+    g.quadraticCurveTo(33, 15.4, 21.4, 18.6);
+    g.closePath(); g.fill();
+    formShade(g, 21, 6, 17, 12);
+    dot(g, 26.4, 10.6, 8, rg(g, 26.4, 10.6, 1, 8, [[0, 'rgba(255,150,120,0.35)'], [1, 'rgba(255,150,120,0)']])); // helmet sheen
+    g.fillStyle = '#b03f24'; ell(g, 37.4, 19.4, 2.6, 3.6, 0.2, '#b03f24'); // ear flap
+    g.fillStyle = lg(g, 33, 12, 44, 15, [[0, '#b03f24'], [1, '#8f2f18']]); // visor peak
+    g.beginPath(); g.moveTo(33, 13.8); g.quadraticCurveTo(42.4, 12.6, 43.8, 15.8);
+    g.quadraticCurveTo(38, 16.6, 33, 15.8); g.closePath(); g.fill();
+    g.restore();
+  });
+}
+
+// ── Werewolf 54×62 · "the Moonbound" (fast striker: 110 hp / ×1.05 / 305) ─────
+// Shape language: a forward-leaning sprinter's crouch — digitigrade legs, a shaggy
+// spiked mantle and the tail streaming behind read as speed even standing still.
+// The #c084fc accent lives in the moon-lit fur tips and the eye glow (the wolf
+// companion echoes them — pack identity).
+export function werewolfFrame(dy, legL, legR) {
+  return sheet(54, 62, (g) => {
+    g.save();
+    g.translate(0, dy);
+    const s = legL / 4;
+    const legF = legL, legB = -(legR || legL);
+    const fur = lg(g, 10, 8, 44, 54, [[0, '#8a93a6'], [0.55, '#5c6474'], [1, '#39404e']]);
+
+    // ── tail streaming behind (swings with the stride) ──
+    g.strokeStyle = fur; g.lineWidth = 6.4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(17, 38); g.quadraticCurveTo(9 - s * 1.4, 34 - s * 0.8, 5.4 - s * 2, 26.4 - s * 1.2); g.stroke();
+    dot(g, 5 - s * 2.1, 25.4 - s * 1.3, 2.6, '#c084fc'); // moon-tipped tail end
+
+    // ── digitigrade legs: fur haunch + pale shin, clawed foot ──
+    for (const [lx, f] of [[22 + legB, -0.6], [31 + legF, 0.6]]) {
+      g.fillStyle = fur;
+      g.beginPath(); g.ellipse(lx + 4.6, 43.4, 6.4, 7.6, f * 0.2, 0, TAU); g.fill();
+      g.fillStyle = '#4a5262';
+      g.beginPath(); g.moveTo(lx + 2.6, 45); g.lineTo(lx + 7.4, 45); g.lineTo(lx + 6.4 + f, 54.4); g.lineTo(lx + 3.4 - f, 54.4); g.closePath(); g.fill();
+      g.fillStyle = '#2c3340'; // foot + claws
+      g.beginPath(); g.moveTo(lx + 1.6, 55.8); g.lineTo(lx + 11.6, 54.6); g.lineTo(lx + 11.2, 58.2); g.lineTo(lx + 1.2, 58.6); g.closePath(); g.fill();
+      g.strokeStyle = '#e7ecf4'; g.lineWidth = 1.1;
+      for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(lx + 9 + i * 0.9, 54.8); g.lineTo(lx + 12.6 + i * 1.1, 53.4); g.stroke(); }
+    }
+
+    // ── haunches + shaggy mantle: the spike silhouette IS the identity ──
+    g.fillStyle = fur;
+    g.beginPath();
+    g.moveTo(15.4, 40.6); g.quadraticCurveTo(13, 30, 19, 22.6); // back line
+    g.lineTo(40.6, 20.6); // leaning shoulder line
+    g.quadraticCurveTo(44.6, 26, 43.4, 34); // chest
+    g.quadraticCurveTo(38, 42.6, 30, 43.6);
+    g.quadraticCurveTo(21, 44.6, 15.4, 40.6);
+    g.closePath(); g.fill();
+    formShade(g, 13, 20, 31, 24);
+    g.fillStyle = '#454d5e'; // mantle spikes
+    for (let i = 0; i < 5; i++) {
+      const px = 17.6 + i * 5.6;
+      g.beginPath(); g.moveTo(px, 24.6 - i * 0.6); g.lineTo(px + 2.6, 18.4 - i * 0.9); g.lineTo(px + 5.2, 25 - i * 0.5); g.closePath(); g.fill();
+    }
+    g.strokeStyle = 'rgba(192,132,252,0.5)'; g.lineWidth = 1; // moon-glint fur edges
+    for (let i = 0; i < 3; i++) { const px = 20 + i * 7.4; g.beginPath(); g.moveTo(px, 23.4 - i * 0.5); g.lineTo(px + 2.2, 19.6 - i * 0.8); g.stroke(); }
+
+    // ── front arm reaching forward with claws (the pounce preview) ──
+    g.strokeStyle = fur; g.lineWidth = 5.6; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(38, 26.6); g.quadraticCurveTo(44.4 + s * 0.3, 31, 46 + s * 0.5, 37); g.stroke();
+    g.strokeStyle = '#e7ecf4'; g.lineWidth = 1.1;
+    for (let i = 0; i < 3; i++) { g.beginPath(); g.moveTo(45.6 + s * 0.5 + i * 0.4, 37.4); g.lineTo(48.4 + s * 0.6 + i * 0.8, 40.6 + i * 0.6); g.stroke(); }
+
+    // ── head: sunk low and forward — ears, muzzle, fangs, glowing eye ──
+    g.fillStyle = fur;
+    g.beginPath(); g.ellipse(36.4, 15.6, 8.6, 7.4, -0.22, 0, TAU); g.fill();
+    g.fillStyle = '#39404e'; // ears
+    g.beginPath(); g.moveTo(31.4, 9.8); g.lineTo(33.4, 2.6); g.lineTo(37.4, 8.6); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(37, 8.8); g.lineTo(40.8, 2.2); g.lineTo(42.6, 10.4); g.closePath(); g.fill();
+    g.fillStyle = '#4a5262'; // muzzle pushed right
+    g.beginPath(); g.moveTo(39.4, 12.6); g.quadraticCurveTo(48.6, 12.2, 49.6, 17);
+    g.quadraticCurveTo(47, 19.8, 39.8, 19.2); g.closePath(); g.fill();
+    g.fillStyle = '#e7ecf4'; // fangs
+    g.beginPath(); g.moveTo(44.4, 18.4); g.lineTo(45.6, 21.8); g.lineTo(46.6, 18.4); g.closePath(); g.fill();
+    dot(g, 49.2, 15.2, 1.3, '#171c26'); // nose
+    eyeGlint(g, 38.6, 13.4, 1.7, '#c084fc', 'rgba(240,225,255,0.9)');
+    dot(g, 38.6, 13.4, 3.4, rg(g, 38.6, 13.4, 0.6, 3.4, [[0, 'rgba(192,132,252,0.55)'], [1, 'rgba(192,132,252,0)']]));
+    g.restore();
+  });
+}
+
+// ── Stone Golem 62×68 · "the Long Walk" (juggernaut: 190 hp / ×0.90 / 195) ────
+// Shape language: three stacked slabs with NO neck and arms that end in boulder
+// fists — mass widest at the shoulders, and the head is a small floating stone
+// between them (the glowing seams are where its Boulder weapon waits).
+export function golemFrame(dy, legL, legR) {
+  return sheet(62, 68, (g) => {
+    g.save();
+    g.translate(0, dy);
+    const s = legL / 4;
+    const legF = legL, legB = -(legR || legL);
+    const stone = (x0, y0, x1, y1) => lg(g, x0, y0, x1, y1, [[0, '#a9b4c2'], [0.5, '#7c8896'], [1, '#4c5663']]);
+
+    // ── legs: chipped pillars with glowing knee seams ──
+    for (const lx of [22 + legB, 34 + legF]) {
+      g.fillStyle = stone(lx, 44, lx + 12, 60);
+      g.beginPath();
+      g.moveTo(lx, 44); g.lineTo(lx + 12, 44); g.lineTo(lx + 11, 61); g.lineTo(lx + 1.5, 61.6);
+      g.closePath(); g.fill();
+      g.fillStyle = '#39424e'; // chip bite
+      g.beginPath(); g.moveTo(lx + 9.4, 44.4); g.lineTo(lx + 12, 44); g.lineTo(lx + 11.6, 49.6); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(127,231,215,0.7)'; g.lineWidth = 1.4; // knee seam glow
+      g.beginPath(); g.moveTo(lx + 1.8, 51.4); g.lineTo(lx + 10.8, 50.2); g.stroke();
+      g.fillStyle = '#2b333d'; // plinth feet
+      roundRectPath(g, lx - 1.6, 60, 15, 5.6, 2); g.fill();
+    }
+
+    // ── back arm: slab + boulder fist ──
+    g.fillStyle = stone(10, 30, 22, 52);
+    roundRectPath(g, 11.4 - s * 0.3, 30, 8.6, 17, 3); g.fill();
+    dot(g, 15 - s * 0.4, 51, 6.6, rg(g, 13 - s * 0.4, 48.4, 1.5, 8, [[0, '#8c97a6'], [1, '#3c4653']]));
+
+    // ── lower slab (hips) + middle slab (breast) — the stacked-slab body ──
+    g.fillStyle = stone(18, 40, 46, 52);
+    g.beginPath(); g.moveTo(19, 41.4); g.lineTo(44, 41.4); g.lineTo(45, 52); g.lineTo(18.4, 52.6); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(127,231,215,0.55)'; g.lineWidth = 1.3; // hip seam
+    g.beginPath(); g.moveTo(19.6, 42.6); g.lineTo(44.4, 42.2); g.stroke();
+    g.fillStyle = stone(16, 22, 48, 42);
+    g.beginPath();
+    g.moveTo(17.4, 24.6); g.lineTo(45.6, 24); g.lineTo(47, 41); g.lineTo(16.6, 41.8);
+    g.closePath(); g.fill();
+    formShade(g, 16, 22, 31, 20);
+    g.strokeStyle = 'rgba(127,231,215,0.65)'; g.lineWidth = 1.5; // chest crack seams
+    g.beginPath(); g.moveTo(23, 25.6); g.lineTo(27.4, 33); g.lineTo(24.6, 40.2); g.stroke();
+    g.beginPath(); g.moveTo(39.6, 25); g.lineTo(36.6, 31.6); g.lineTo(41, 38.6); g.stroke();
+    dot(g, 32.4, 33.4, 5.4, rg(g, 32.4, 33.4, 0.5, 5.4, [[0, 'rgba(127,231,215,0.75)'], [0.5, 'rgba(127,231,215,0.25)'], [1, 'rgba(127,231,215,0)']]));
+    g.fillStyle = '#63707f'; roundRectPath(g, 26.2, 31.6, 12, 4, 1.6); g.fill(); // core clamp band
+
+    // ── moss on the slab edges (it's been walking a very long time) ──
+    g.fillStyle = 'rgba(126,217,87,0.5)';
+    ell(g, 19.4, 25.4, 4.4, 2, -0.15, 'rgba(126,217,87,0.55)');
+    ell(g, 43.4, 43.6, 3.6, 1.6, 0.2, 'rgba(126,217,87,0.45)');
+
+    // ── shoulder boulders ──
+    dot(g, 17.4, 25, 8.4, rg(g, 15.4, 22.6, 2, 9.4, [[0, '#b3becc'], [1, '#4c5663']]));
+    dot(g, 45, 24.2, 8.8, rg(g, 43, 21.8, 2, 9.8, [[0, '#b3becc'], [1, '#4c5663']]));
+    g.strokeStyle = 'rgba(127,231,215,0.5)'; g.lineWidth = 1.2; // shoulder hairline glow
+    arcStroke(g, 45, 24.2, 6.6, -2.4, -1.2, 'rgba(127,231,215,0.6)', 1.2);
+
+    // ── front arm: slab + boulder fist (key-light side) ──
+    g.fillStyle = stone(42, 28, 54, 50);
+    roundRectPath(g, 44.4 + s * 0.3, 28.6, 9, 17, 3); g.fill();
+    dot(g, 48.6 + s * 0.4, 49.6, 7.4, rg(g, 46.6 + s * 0.4, 47, 1.6, 8.6, [[0, '#96a1b0'], [1, '#39424e']]));
+    g.strokeStyle = 'rgba(127,231,215,0.55)'; g.lineWidth = 1.2;
+    arcStroke(g, 48.6 + s * 0.4, 49.6, 5.4, 2.2, 3.4, 'rgba(127,231,215,0.6)', 1.2);
+
+    // ── floating head: small stone with two glow eyes, gap under the chin ──
+    g.fillStyle = stone(25, 8, 38, 20);
+    g.beginPath();
+    g.moveTo(26.6, 11); g.lineTo(37.4, 10.2); g.lineTo(38.6, 18.6); g.lineTo(26, 19.4);
+    g.closePath(); g.fill();
+    formShade(g, 25, 8, 14, 12);
+    dot(g, 32.6, 14.4, 1.6, '#7fe7d7'); dot(g, 35.8, 14.1, 1.4, '#7fe7d7'); // eye glow
+    dot(g, 32.6, 14.4, 3.2, rg(g, 32.6, 14.4, 0.4, 3.2, [[0, 'rgba(127,231,215,0.55)'], [1, 'rgba(127,231,215,0)']]));
+    g.strokeStyle = 'rgba(127,231,215,0.4)'; g.lineWidth = 1; // levitation gap
+    g.beginPath(); g.moveTo(27.6, 20.6); g.lineTo(36.8, 20.2); g.stroke();
+    g.restore();
+  });
+}
+
+// ── Giant Toad 58×60 · "the Muncher" (sustain tank: 140 hp / ×0.95 / 240) ─────
+// Shape language: a wide squat dome with NO neck — the mouth line is the widest
+// element and the bulging eyes sit ON the silhouette's top edge. Webbed feet and
+// warty #7ed957 spots carry the identity (the tongue weapon previews at rest as
+// a small pink tip in the mouth corner).
+export function toadFrame(dy, legL, legR) {
+  return sheet(58, 60, (g) => {
+    g.save();
+    g.translate(0, dy);
+    const s = legL / 4;
+    const legF = legL, legB = -(legR || legL);
+    const hide = lg(g, 8, 6, 50, 52, [[0, '#8fd06a'], [0.55, '#5d9e46'], [1, '#3a6a2c']]);
+
+    // ── webbed feet (flat, splayed; the toes fan with the stride) ──
+    for (const [lx, f] of [[18 + legB, 1], [33 + legF, -1]]) {
+      g.fillStyle = '#3a6a2c';
+      roundRectPath(g, lx + 1.4, 50.4, 9.6, 5, 2.4); g.fill();
+      g.strokeStyle = '#7ed957'; g.lineWidth = 1.6; g.lineCap = 'round';
+      for (let i = 0; i < 3; i++) {
+        g.beginPath(); g.moveTo(lx + 6, 51.4); g.lineTo(lx + 0.8 + i * 5.2, 54.8 - f * 0.4 - i * 0.4); g.stroke();
+      }
+    }
+
+    // ── the wide squat dome body + pale belly ──
+    g.fillStyle = hide;
+    g.beginPath();
+    g.moveTo(9.4, 44);
+    g.quadraticCurveTo(6, 26, 19, 15.6);
+    g.quadraticCurveTo(29, 9.6, 39.6, 15.4);
+    g.quadraticCurveTo(52.4, 24.6, 49, 44);
+    g.quadraticCurveTo(29, 53.4, 9.4, 44);
+    g.closePath(); g.fill();
+    formShade(g, 6, 10, 46, 36);
+    g.fillStyle = '#cfe8a8'; // belly
+    g.beginPath();
+    g.moveTo(16, 36.6); g.quadraticCurveTo(29, 47.4, 42.6, 36.4);
+    g.quadraticCurveTo(39, 45.8, 29, 47.6); g.quadraticCurveTo(19.6, 46, 16, 36.6);
+    g.closePath(); g.fill();
+    g.fillStyle = 'rgba(45,86,34,0.55)'; // warty spots
+    for (const [wx, wy, wr] of [[15.6, 25, 2.6], [22, 18.6, 2], [40.6, 22.4, 2.4], [46.4, 31.6, 2], [34, 16.4, 1.6]]) dot(g, wx, wy, wr, 'rgba(45,86,34,0.55)');
+
+    // ── arms folded under the belly (short, hands show at the sides) ──
+    g.strokeStyle = '#4d8a3a'; g.lineWidth = 5; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(14.6, 34); g.quadraticCurveTo(11.4 - s * 0.4, 41, 14.4 - s * 0.5, 47); g.stroke();
+    g.beginPath(); g.moveTo(44, 33.4); g.quadraticCurveTo(47.4 + s * 0.4, 40.4, 44.8 + s * 0.5, 46.6); g.stroke();
+    dot(g, 14.2 - s * 0.5, 47.6, 2.6, '#4d8a3a'); dot(g, 45 + s * 0.5, 47.2, 2.6, '#4d8a3a');
+
+    // ── the mouth: the widest line on the sheet, corner tongue-tip ──
+    g.strokeStyle = '#24421b'; g.lineWidth = 2.2; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(8.8, 33.4); g.quadraticCurveTo(29, 41.8, 49.6, 32.8); g.stroke();
+    g.strokeStyle = 'rgba(217,95,118,0.9)'; g.lineWidth = 2; // resting tongue tip
+    g.beginPath(); g.moveTo(44.4, 34.6); g.quadraticCurveTo(48.4, 36.8, 50.4, 35.6); g.stroke();
+
+    // ── bulging eyes ON the top edge ──
+    for (const [ex, ey] of [[21.4, 13.6], [37, 12.8]]) {
+      dot(g, ex, ey, 5.6, rg(g, ex - 1.4, ey - 1.6, 0.8, 5.6, [[0, 'rgba(170,240,130,0.9)'], [1, 'rgba(90,150,60,0.9)']]));
+      dot(g, ex, ey, 4.2, '#f4e9a8');
+      eyeGlint(g, ex + 1.6, ey - 0.4, 1.9, '#20301a', 'rgba(255,252,240,0.85)');
+    }
+    g.restore();
+  });
+}
+
+// ── Gunslinger 54×64 · "the Quick" (glass cannon: 85 hp / ×1.20 / 295) ───────
+// Shape language: lean and vertical — long open duster with tails streaming, wide
+// brim hat hiding the face (two glints only), and BOTH pistols out front: the
+// twin-barrel muzzle line is the signature that reads at 1×. #d9a066 accent = the
+// bandana, gun grips and buckle.
+export function gunslingerFrame(dy, legL, legR) {
+  return sheet(54, 64, (g) => {
+    g.save();
+    g.translate(0, dy);
+    const s = legL / 4;
+    const legF = legL, legB = -(legR || legL);
+
+    // ── duster tails streaming behind the stride ──
+    g.fillStyle = lg(g, 8, 30, 26, 58, [[0, '#4a3f33'], [1, '#2a241c']]);
+    g.beginPath();
+    g.moveTo(15.6, 32); g.quadraticCurveTo(11 - s * 1.2, 44, 8.6 - s * 1.8, 56.4);
+    g.lineTo(15.6 - s * 0.6, 55.6); g.quadraticCurveTo(18.4, 44, 20, 34);
+    g.closePath(); g.fill();
+    g.beginPath();
+    g.moveTo(22, 33); g.quadraticCurveTo(19.4 - s * 0.8, 45, 17.6 - s * 1.2, 55.8);
+    g.lineTo(24.6 - s * 0.3, 55.2); g.quadraticCurveTo(26.8, 44, 27.4, 34.6);
+    g.closePath(); g.fill();
+
+    // ── legs: lean trousers + spurs ──
+    g.fillStyle = lg(g, 0, 42, 0, 58, [[0, '#3c4654'], [1, '#232a34']]);
+    roundRectPath(g, 22 + legB, 42, 7.6, 14, 2.4); g.fill();
+    roundRectPath(g, 30 + legF, 42, 7.6, 14, 2.4); g.fill();
+    g.fillStyle = '#191f27'; // boots
+    roundRectPath(g, 21 + legB, 54.6, 10.4, 6, 2); g.fill();
+    roundRectPath(g, 29 + legF, 54.6, 10.4, 6, 2); g.fill();
+    g.strokeStyle = '#cfc7b2'; g.lineWidth = 1.1; // spur rowels
+    g.beginPath(); g.arc(21.4 + legB, 56.6, 1.8, 0, TAU); g.stroke();
+    g.beginPath(); g.arc(29.4 + legF, 56.6, 1.8, 0, TAU); g.stroke();
+
+    // ── duster body (open) + gun belt ──
+    g.fillStyle = lg(g, 18, 26, 40, 48, [[0, '#57493a'], [0.6, '#453a2d'], [1, '#2e271e']]);
+    g.beginPath();
+    g.moveTo(19.6, 28.8); g.quadraticCurveTo(27, 25.6, 35, 28.8);
+    g.lineTo(36.4, 43.6); g.quadraticCurveTo(27, 47.2, 18.4, 43.4);
+    g.closePath(); g.fill();
+    formShade(g, 18, 25, 18, 19);
+    g.fillStyle = '#d9a066'; // bandana at the throat
+    g.beginPath(); g.moveTo(22.6, 26.8); g.lineTo(31.8, 26.8); g.lineTo(27.4, 31.6); g.closePath(); g.fill();
+    g.fillStyle = '#332b22'; roundRectPath(g, 18.6, 40, 17.6, 3.6, 1.4); g.fill(); // belt
+    g.fillStyle = '#d9a066'; roundRectPath(g, 25.6, 40.2, 4, 3.4, 1); g.fill();     // buckle
+    dot(g, 20.6, 41.8, 1.5, '#b8863f');                                             // holster stud
+
+    // ── both arms out front, pistols level at the hip ──
+    g.strokeStyle = '#4c4133'; g.lineWidth = 4.4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(21.6, 30.6); g.quadraticCurveTo(27.4 + s * 0.2, 36.6, 36.4 + s * 0.3, 38); g.stroke();
+    g.beginPath(); g.moveTo(33.4, 30); g.quadraticCurveTo(38.4 + s * 0.2, 34, 42.4 + s * 0.3, 35.6); g.stroke();
+    // twin pistols: barrel + grip + accent wood
+    for (const [px, py] of [[38.8 + s * 0.3, 37.2], [44.8 + s * 0.3, 34.8]]) {
+      g.fillStyle = '#7e8794'; roundRectPath(g, px, py, 8, 2.6, 1); g.fill();
+      g.fillStyle = '#d9a066'; roundRectPath(g, px - 1.4, py + 1.4, 3.6, 4.6, 1.2); g.fill();
+      g.fillStyle = '#aeb6c2'; roundRectPath(g, px + 1.4, py - 1.4, 4, 1.8, 0.8); g.fill(); // cylinder
+    }
+    dot(g, 48.4 + s * 0.3, 35.8, 2.6, rg(g, 48.4 + s * 0.3, 35.8, 0.4, 2.6, [[0, 'rgba(255,225,140,0.9)'], [1, 'rgba(255,200,90,0)']])); // muzzle flash
+
+    // ── head hidden under the wide brim — two glints in the shadow ──
+    g.fillStyle = '#e0c9a8'; ell(g, 27.4, 20.6, 6.4, 6.8, 0, '#e0c9a8'); // face column
+    g.fillStyle = 'rgba(20,16,12,0.72)'; // brim shadow over the face
+    g.beginPath(); g.moveTo(21.2, 18.6); g.quadraticCurveTo(27.4, 23, 33.6, 18.6); g.lineTo(33.6, 15.6); g.lineTo(21.2, 15.6); g.closePath(); g.fill();
+    dot(g, 25.4, 19.6, 0.9, 'rgba(230,240,255,0.85)'); dot(g, 29.8, 19.4, 0.9, 'rgba(230,240,255,0.85)');
+    g.fillStyle = lg(g, 12, 12, 44, 17, [[0, '#6a5a45'], [1, '#42382a']]); // wide brim
+    g.beginPath();
+    g.moveTo(12.6, 16.8); g.quadraticCurveTo(27, 22, 42, 16.2);
+    g.quadraticCurveTo(38.6, 12.8, 27.4, 12.6); g.quadraticCurveTo(15.6, 12.8, 12.6, 16.8);
+    g.closePath(); g.fill();
+    g.fillStyle = '#57493a'; roundRectPath(g, 21, 4.4, 12.8, 9.6, 3); g.fill(); // crown
+    g.fillStyle = '#d9a066'; roundRectPath(g, 21, 10.6, 12.8, 2.6, 1); g.fill(); // hat band
+    g.restore();
+  });
+}
+
 // ── Ghost 56×64 · ragged sheet (faceless fallback, D62; tinted per seat) ─────
 // Shape language: cloth in motion. No legs — the torn hem is the run cycle, rippling
 // against the stride, and the eye holes sit right of centre so it reads as facing.
@@ -567,6 +943,11 @@ export function buildRoster(ghostColor) {
     warden: mkSheet(wardenFrame, 58, 66, 13),
     ranger: mkSheet(rangerFrame, 52, 60, 11),
     swash: mkSheet(swashFrame, 54, 62, 12),
+    baseball: mkSheet(baseballFrame, 56, 64, 12),
+    werewolf: mkSheet(werewolfFrame, 54, 62, 11),
+    golem: mkSheet(golemFrame, 62, 68, 14),
+    toad: mkSheet(toadFrame, 58, 60, 13),
+    gunslinger: mkSheet(gunslingerFrame, 54, 64, 11),
     ghost: buildGhost(ghostColor),
   };
 }

@@ -2,7 +2,7 @@
 // weapon firing, XP/levels, and the pure level-up card logic.
 // Node-safe: no canvas at top level (flash frames injected at runtime).
 import { CFG } from '../config.js';
-import { approach, clamp } from '../utils/math.js';
+import { approach, clamp, rand } from '../utils/math.js';
 
 // 11.6: playable-character stat lookup (D57). `key` = character key; falls back to the
 // starter (mage) so plain test objects without charKey behave as the solo default.
@@ -36,6 +36,13 @@ export class Player {
     this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0; this._snowCd = 0;
     this._bowCharge = 0; // 23.1: >0 while the string is drawing (charge-up wind-up)
     this._ringCd = 0; this._ringBeams = []; // 12.4: Ring of Chain Lightning tick + live arcs
+    // Phase 21 (D96) per-weapon timers/state (never synced — clients never simulate;
+    // companion state rides the snapshot companions array, not these fields).
+    this._cannonCd = 0; this._laserCd = 0; this._laserT = 0; this._webCd = 0;
+    this._gatCd = 0; this._gatMag = CFG.weapons.gatling.burst; this._gatReload = 0;
+    this._batCd = 0; this._batSwing = 0; this._boulderCd = 0; this._boulder = null;
+    this._tongueCd = 0; this._tongueFx = null; this._ballCd = 0; this._ball = null;
+    this._companion = null; this._shieldBank = null; this._skateCd = new Map();
     this._bulletShots = 0; // 12.6 Storm Volley: rounds fired since the last strike (every 4th)
     this._garlicT = 0; this._orbitT = 0; this._tempestT = 0;
     this._flame = { fuel: 0, reloading: false };
@@ -62,6 +69,8 @@ export class Player {
     this.iframes = 0; this.flash = 0;
     this.dashT = 0; this.dashCd = 0; this.dashAng = 0; this.aimAng = 0;
     this.level = 1; this.xp = 0;
+    this.weapons = {}; // run start = the STARTER ONLY (D34/D66 family): a solo startRun never
+    // passes through _applyChar's clear (that's the co-op path), so an old build must die here.
     if (c.weapon) this.weapons[c.weapon] = 1; // 11.6/D34: per-character starting weapon (ghost: none)
     this.passives = {}; // Phase 20 / D66: runs start with NO passives — level-up picks only
     this.synergies = {};
@@ -74,6 +83,11 @@ export class Player {
     this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0; this._snowCd = 0;
     this._bowCharge = 0;
     this._ringCd = 0; this._ringBeams = [];
+    this._cannonCd = 0; this._laserCd = 0; this._laserT = 0; this._webCd = 0;
+    this._gatCd = 0; this._gatMag = CFG.weapons.gatling.burst; this._gatReload = 0; // runs/mid-picks start with a full mag
+    this._batCd = 0; this._batSwing = 0; this._boulderCd = 0; this._boulder = null;
+    this._tongueCd = 0; this._tongueFx = null; this._ballCd = 0; this._ball = null;
+    this._companion = null; this._shieldBank = null; this._skateCd.clear();
     this._bulletShots = 0; // 12.6 Storm Volley shot counter
     this._garlicT = 0; this._orbitT = 0; this._tempestT = 0;
     this._flame = { fuel: 0, reloading: false };
@@ -138,7 +152,9 @@ export class Player {
     if (am > 1) { ax /= am; ay /= am; }
     if (am > 0.1) this.aimAng = Math.atan2(ay, ax);
 
-    if (this.dashT > 0) {
+    if (this._ball) {
+      this._ballStep(dt, enemies, combat); // Cannonball (D96): player propels itself
+    } else if (this.dashT > 0) {
       this.dashT -= dt;
       this.iframes = Math.max(this.iframes, this.dashT + P.dashIframeExtra);
       this.vx = Math.cos(this.dashAng) * P.dashSpeed;
@@ -148,8 +164,11 @@ export class Player {
       this.vx = approach(this.vx, ax * sp, P.accel, dt);
       this.vy = approach(this.vy, ay * sp, P.accel, dt);
     } else {
-      this.vx = approach(this.vx, 0, P.accel, dt);
-      this.vy = approach(this.vy, 0, P.accel, dt);
+      // Ice Skates (D95): on release the deceleration shrinks to glideK× — the DOOM-style
+      // slide that keeps the character drifting after input stops.
+      const gk = this.passives.skates ? CFG.passives.skates.levels[this.passives.skates - 1].glideK : 1;
+      this.vx = approach(this.vx, 0, P.accel * gk, dt);
+      this.vy = approach(this.vy, 0, P.accel * gk, dt);
     }
 
     if (this.regen > 0 && this.hp > 0) this.hp = Math.min(this.maxHp, this.hp + this.regen * dt);
@@ -174,7 +193,9 @@ export class Player {
     this.x = clamp(this.x, CFG.world.margin, CFG.world.w - CFG.world.margin);
     this.y = clamp(this.y, CFG.world.margin, CFG.world.h - CFG.world.margin);
 
-    this.moving = Math.hypot(this.vx, this.vy) > 30;
+    if (!this._ball) this._skateSlide(dt, enemies, combat, am);
+
+    this.moving = this._ball || Math.hypot(this.vx, this.vy) > 30;
     this.animT += dt * (this.moving ? 1 : 0.25);
     const setN = this.moving ? this.def.run.length : this.def.idle.length;
     this.frameIdx = ((this.animT * P.animFps) | 0) % setN;
@@ -207,6 +228,72 @@ export class Player {
   // a fraction (CFG.combat.spawnOriginFrac) of the character sprite height up.
   _spawnY() {
     return this.y - this.def.h * CFG.combat.spawnOriginFrac;
+  }
+
+  // Cannonball (D96): the character tucks into a ball and rockets at foes. (x, y) ends
+  // at each impact point (spec); invulnerable for the whole dash; bounces to fresh foes
+  // until the level's hit budget. Co-op needs no special handling — this runs in the
+  // host sim and _coopLeash clamps afterward (D96 ruling).
+  _ballStep(dt, enemies, combat) {
+    const C = CFG.combat;
+    const b = this._ball;
+    b.t += dt;
+    this.iframes = Math.max(this.iframes, 0.1);
+    if (!b.target || b.target.dead) b.target = this._nearestUntouched(enemies, b.hit, C.ballSearchR);
+    if (!b.target || b.hits >= b.hitsMax || b.t > 3.2) { this._endBall(); return; }
+    const dx = b.target.x - this.x, dy = b.target.y - this.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const step = C.ballSpeed * dt;
+    if (d <= step + b.target.r) {
+      this.x = b.target.x; this.y = b.target.y; // position = impact point (spec)
+      b.hits++;
+      b.hit.add(b.target);
+      combat.damageEnemy(b.target, b.dmg * Math.pow(C.ballDecay, b.hits - 1) * this.dmgMul, dx / d, dy / d, 0, this);
+      if (combat.onFx) combat.onFx('ball', this.x, this.y);
+      b.target = null; // re-acquire next step
+      if (b.hits >= b.hitsMax) this._endBall();
+    } else {
+      this.x += dx / d * step;
+      this.y += dy / d * step;
+    }
+  }
+
+  _endBall() { this._ball = null; this.vx = 0; this.vy = 0; }
+
+  // Nearest live enemy not in `hit` (Cannonball ricochet target pick).
+  _nearestUntouched(enemies, hit, range) {
+    let best = null, bd = range * range;
+    for (const e of enemies.list) {
+      if (e.dead || hit.has(e)) continue;
+      const dx = e.x - this.x, dy = e.y - this.y;
+      const d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
+  }
+
+  // Ice Skates slide-damage (D95/D96): gliding with no input, brushing a foe hurts
+  // BOTH (spec, ≤ slideDmg per level, max 6 at max level). Per-foe 0.5 s re-hit lock;
+  // the player's own share passes through damagePlayer (i-frames may shield it right
+  // after another hit — intended, slide damage must never stack with contact damage).
+  _skateSlide(dt, enemies, combat, am) {
+    const lvl = this.passives.skates;
+    if (!lvl || am > 0.1 || this.dashT > 0) return;
+    if (Math.hypot(this.vx, this.vy) < CFG.combat.skateSlideMin) return;
+    const row = CFG.passives.skates.levels[lvl - 1];
+    for (const e of enemies.list) {
+      if (e.dead) continue;
+      const dx = e.x - this.x, dy = e.y - this.y;
+      const rr = e.r + this.r + 2;
+      if (dx * dx + dy * dy >= rr * rr) continue;
+      if ((this._skateCd.get(e) || 0) > this.animT) continue;
+      this._skateCd.set(e, this.animT + CFG.combat.skateSlideLock);
+      const d = Math.hypot(dx, dy) || 1;
+      combat.damageEnemy(e, row.slideDmg, dx / d, dy / d, 120, this);
+      combat.damagePlayer(this, row.slideDmg, e.x, e.y);
+      if (combat.onFx) combat.onFx('slide', e.x, e.y);
+    }
+    if (this._skateCd.size > 256) this._skateCd.clear();
   }
 
   _weapons(dt, enemies, combat) {
@@ -341,7 +428,7 @@ export class Player {
     }
     if (this.weapons.bow) {
       const S = W.bow.levels[this.weapons.bow - 1];
-      // 23.1 charge-up: full interval → drawn string holds for CFG.weapons.bow.charge
+      // 23.1 charge-up: full interval → drawn-string holds for CFG.weapons.bow.charge
       // (visible draw/telegraph, see draw()) → arrow looses → back to interval.
       this._bowCd -= dt;
       if (this._bowCharge > 0) {
@@ -362,6 +449,119 @@ export class Player {
       } else if (this._bowCd <= 0) {
         const e = this._nearest(enemies, CFG.combat.wandRange);
         if (e) this._bowCharge = W.bow.charge;
+      }
+    }
+    // ---- Phase 21 (D96) fire-sites — tables in CFG.weapons, mechanics in combat ----
+    if (this.weapons.cannon) {
+      const S = W.cannon.levels[this.weapons.cannon - 1];
+      this._cannonCd -= dt;
+      if (this._cannonCd <= 0) {
+        const e = this._nearest(enemies, CFG.combat.wandRange);
+        if (e) {
+          const sy = this._spawnY();
+          const hs = this.synergies.heShell || 0;
+          combat.fireShell(this.x, sy, Math.atan2(e.y - sy, e.x - this.x), S.dmg * this.dmgMul, S.blastR,
+            hs > 0 ? CFG.synergies.heShell.levels[hs - 1] : null, this);
+          this._cannonCd = S.cd;
+        }
+      }
+    }
+    if (this.weapons.laser) {
+      const S = W.laser.levels[this.weapons.laser - 1];
+      if (this._laserT > 0) {
+        this._laserT -= dt;
+        if (this._laserT <= 0) this._laserCd = S.cd; // long cooldown between shots (spec)
+      } else if ((this._laserCd -= dt) <= 0 && this._nearest(enemies, S.len)) {
+        this._laserT = S.dur;
+        combat.fireBeam(this, S);
+        if (combat.pulse) combat.pulse('laser');
+      }
+    }
+    if (this.weapons.boulder) {
+      const S = W.boulder.levels[this.weapons.boulder - 1];
+      this._boulderCd -= dt;
+      // one boulder on screen, ever — even after cd ends (spec)
+      if (this._boulderCd <= 0 && !this._boulder) {
+        const e = this._nearest(enemies, CFG.combat.wandRange);
+        if (e) {
+          const dx = e.x - this.x, dy = e.y - this.y;
+          // cardinal-only roll (spec): dominant axis of the target at release
+          const sx = Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) || 1 : 0;
+          const sy = sx ? 0 : (Math.sign(dy) || 1);
+          const av = this.synergies.avalanche || 0;
+          combat.fireBoulder(this, this.x + sx * CFG.combat.boulderR, this.y + sy * CFG.combat.boulderR,
+            sx, sy, S.dmg * this.dmgMul, av > 0 ? CFG.synergies.avalanche.levels[av - 1] : null);
+          this._boulderCd = S.cd;
+        }
+      }
+    }
+    if (this.weapons.webs) {
+      const S = W.webs.levels[this.weapons.webs - 1];
+      this._webCd -= dt;
+      if (this._webCd <= 0) {
+        const e = this._nearest(enemies, CFG.combat.wandRange);
+        if (e) {
+          const sy = this._spawnY();
+          combat.fireWeb(this.x, sy, e.x, e.y, S.dmg * this.dmgMul, S.r, S.hold, this);
+          this._webCd = S.cd;
+        }
+      }
+    }
+    if (this.weapons.gatling) {
+      const G = W.gatling;
+      const S = G.levels[this.weapons.gatling - 1];
+      if (this._gatReload > 0) {
+        this._gatReload -= dt; // the 3 s reload (spec) — firing resumes with a fresh mag
+        if (this._gatReload <= 0) this._gatMag = G.burst;
+      } else {
+        if (this._gatMag <= 0) { this._gatReload = G.reload; }
+        else if ((this._gatCd -= dt) <= 0) {
+          const e = this._nearest(enemies, CFG.combat.wandRange);
+          if (e) {
+            const sy = this._spawnY();
+            const a = Math.atan2(e.y - sy, e.x - this.x) + rand(-S.spread, S.spread);
+            combat.fireBullet(this.x, sy, a, S.dmg * this.dmgMul, null, this, null);
+            this._gatMag--;
+            this._gatCd = S.cd;
+            if (combat.pulse && this._gatMag % 8 === 0) combat.pulse('pistol'); // crack, not 40 chirps
+          }
+        }
+      }
+    }
+    if (this.weapons.bat) {
+      const S = W.bat.levels[this.weapons.bat - 1];
+      this._batCd -= dt;
+      if (this._batSwing > 0) this._batSwing -= dt;
+      if (this._batCd <= 0 && this._nearest(enemies, CFG.combat.batRange + 30)) {
+        this._batCd = S.cd;
+        this._batSwing = 0.18; // draw() telegraph arc
+        combat.batSwing(this, S);
+      }
+    }
+    if (this.weapons.tongue) {
+      const S = W.tongue.levels[this.weapons.tongue - 1];
+      this._tongueCd -= dt;
+      if (this._tongueFx) { this._tongueFx.t -= dt; if (this._tongueFx.t <= 0) this._tongueFx = null; }
+      if (this._tongueCd <= 0) {
+        const e = this._nearest(enemies, CFG.combat.tongueRange);
+        if (e) {
+          const gf = this.synergies.gutFeast || 0;
+          combat.fireTongue(this, e, S.dmg * this.dmgMul, S.poison * this.dmgMul, S.poisonDur,
+            gf > 0 ? CFG.synergies.gutFeast.levels[gf - 1].mul : 1);
+          this._tongueCd = S.cd;
+        }
+      }
+    }
+    if (this.weapons.ball && !this._ball && this.dashT <= 0) {
+      const S = W.ball.levels[this.weapons.ball - 1];
+      this._ballCd -= dt;
+      if (this._ballCd <= 0) {
+        const e = this._nearest(enemies, CFG.combat.ballSearchR);
+        if (e) {
+          this._ball = { t: 0, target: e, hits: 0, hitsMax: S.hits, hit: new Set(), dmg: S.dmg };
+          this._ballCd = W.ball.cd; // 10 s at every level (spec)
+          if (combat.pulse) combat.pulse('ball');
+        }
       }
     }
   }
@@ -393,6 +593,36 @@ export class Player {
 
   draw(ctx) {
     const def = this.def;
+    if (this._ball) {
+      // Cannonball (D96): the character reads as a rolling ball in their accent color.
+      const r = def.h * 0.34;
+      const acc = (CFG.characters[this.charKey] || {}).accent || '#cfd6e6';
+      ctx.save();
+      ctx.fillStyle = 'rgba(4,6,12,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(this.x, this.y, r, r * 0.42, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = acc;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y - r, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(10,8,14,0.85)';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      // spin marks (phase from travel time) sell the roll
+      ctx.strokeStyle = 'rgba(10,8,14,0.55)';
+      ctx.lineWidth = 2;
+      const sp = this._ball.t * 14;
+      for (let i = 0; i < 3; i++) {
+        const a = sp + (i * Math.PI * 2) / 3;
+        ctx.beginPath();
+        ctx.moveTo(this.x + Math.cos(a) * r * 0.25, this.y - r + Math.sin(a) * r * 0.25);
+        ctx.lineTo(this.x + Math.cos(a) * r * 0.8, this.y - r + Math.sin(a) * r * 0.8);
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
     const running = this.moving;
     const set = running ? def.run : def.idle;
     const img = this.flash > 0 && this.flashes ? this.flashes[running ? 1 : 0][this.frameIdx] : set[this.frameIdx];
@@ -426,6 +656,38 @@ export class Player {
       ctx.moveTo(bx, by);
       ctx.lineTo(this.x + Math.cos(this.aimAng) * 6, sy + Math.sin(this.aimAng) * 6);
       ctx.stroke();
+      ctx.restore();
+    }
+    // Bat swing arc (Phase 21): a quick wedge in the swing direction, fading with _batSwing.
+    if (this._batSwing > 0) {
+      const S = CFG.weapons.bat.levels[this.weapons.bat - 1];
+      const k = this._batSwing / 0.18;
+      const oy = this._spawnY();
+      const half = (S.arc * Math.PI) / 360;
+      ctx.save();
+      ctx.globalAlpha = 0.5 * k;
+      ctx.strokeStyle = '#f5d9a8';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(this.x, oy, CFG.combat.batRange * (1.05 - 0.25 * k), this.aimAng - half, this.aimAng + half);
+      ctx.stroke();
+      ctx.restore();
+    }
+    // Frog tongue lash (Phase 21): the tongue line snaps toward the latched foe.
+    if (this._tongueFx && this._tongueFx.e && !this._tongueFx.e.dead) {
+      const e = this._tongueFx.e;
+      const sy = this._spawnY();
+      ctx.save();
+      ctx.strokeStyle = '#8fd97a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(this.x, sy);
+      ctx.lineTo(e.x, e.y - e.r * 0.4);
+      ctx.stroke();
+      ctx.fillStyle = '#6fbf5c';
+      ctx.beginPath();
+      ctx.arc(e.x, e.y - e.r * 0.4, 3.5, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
   }
@@ -517,6 +779,59 @@ const WEAPON_FIELDS = {
     ['charge', (v) => `draw ${fmtS(v)} s`, null],
     ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
   ],
+  // Phase 21 (D96) — nine new weapons
+  cannon: [
+    ['cd', (v) => `every ${fmtS(v)} s`, (a, b) => `every ${fmtS(a)}→${fmtS(b)} s`],
+    ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
+    ['blastR', (v) => `blast radius ${v}`, (a, b) => `blast radius ${a}→${b}`],
+  ],
+  laser: [
+    ['cd', (v) => `every ${fmtS(v)} s`, (a, b) => `every ${fmtS(a)}→${fmtS(b)} s`],
+    ['dur', (v) => `${fmtS(v)} s beam`, (a, b) => `beam ${fmtS(a)}→${fmtS(b)} s`],
+    ['dps', (v) => `${v} dmg/s`, (a, b) => `dmg ${a}→${b} dmg/s`],
+    ['len', (v) => `length ${v}`, (a, b) => `length ${a}→${b}`],
+    ['w', (v) => `width ${v}`, (a, b) => `width ${a}→${b}`],
+  ],
+  wolf: [
+    ['dmg', (v) => `pounce ${v} dmg`, (a, b) => `pounce ${a}→${b} dmg`],
+    ['bleed', (v) => `bleed ${v} dmg/s`, (a, b) => `bleed ${a}→${b} dmg/s`],
+    ['bleedDur', (v) => `bleed ${fmtS(v)} s`, (a, b) => `bleed ${fmtS(a)}→${fmtS(b)} s`],
+  ],
+  boulder: [
+    ['cd', (v) => `every ${fmtS(v)} s`, (a, b) => `every ${fmtS(a)}→${fmtS(b)} s`],
+    ['dmg', (v) => `${v} dmg first hit`, (a, b) => `dmg ${a}→${b} first hit`],
+  ],
+  webs: [
+    ['cd', (v) => `every ${fmtS(v)} s`, (a, b) => `every ${fmtS(a)}→${fmtS(b)} s`],
+    ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
+    ['r', (v) => `burst radius ${v}`, (a, b) => `burst radius ${a}→${b}`],
+    ['hold', (v) => `hold ${fmtS(v)} s`, (a, b) => `hold ${fmtS(a)}→${fmtS(b)} s`],
+  ],
+  gatling: [
+    ['cd', (v) => `one shot every ${fmtS(v)} s`, (a, b) => `shot rate ${fmtS(a)}→${fmtS(b)} s`],
+    ['dmg', (v) => `${v} dmg per round`, (a, b) => `dmg ${a}→${b} per round`],
+    ['spread', (v) => `spread ${v}`, (a, b) => `spread ${a}→${b}`],
+    ['burst', (v) => `${v}-round magazine`, null],
+    ['reload', (v) => `reload ${fmtS(v)} s`, null],
+  ],
+  bat: [
+    ['cd', (v) => `every ${fmtS(v)} s`, (a, b) => `every ${fmtS(a)}→${fmtS(b)} s`],
+    ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
+    ['kb', (v) => `knockback ×${v}`, (a, b) => `knockback ×${a}→×${b}`],
+    ['arc', (v) => `arc ${v}°`, (a, b) => `arc ${a}°→${b}°`],
+    ['homerun', (v) => `1-in-${v} HOMERUN`, null],
+  ],
+  tongue: [
+    ['cd', (v) => `every ${fmtS(v)} s`, (a, b) => `every ${fmtS(a)}→${fmtS(b)} s`],
+    ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
+    ['poison', (v) => `poison ${v} dmg/s`, (a, b) => `poison ${a}→${b} dmg/s`],
+    ['poisonDur', (v) => `poison ${fmtS(v)} s`, (a, b) => `poison ${fmtS(a)}→${fmtS(b)} s`],
+  ],
+  ball: [
+    ['cd', (v) => `every ${fmtS(v)} s`, null],
+    ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
+    ['hits', (v) => `${v} bounces`, (a, b) => `bounces ${a}→${b}`],
+  ],
 };
 
 function _weaponEffect(key, level) {
@@ -545,10 +860,23 @@ const PASSIVE_EFFECT = {
   regen: (v, L) => `+${round3(v)} HP/s → total ${round3(v * L)} HP/s`,
 };
 
+// Phase 21 run-items (D95): `levels`-table passives — the card states the granted
+// level's behavior numbers (there is no scalar increment to total up).
+const PASSIVE_ROW_EFFECT = {
+  shield: (s) => `Reflects 3 enemy projectiles every ${fmtS(s.window)} s within radius ${s.r}`,
+  skates: (s) => `+${pct(s.spd)} movement — slide hits deal ${s.slideDmg} to both`,
+};
+
 function _passiveEffect(key, level) {
   const def = CFG.passives[key];
+  if (!def) return '';
+  if (def.levels) {
+    const fn = PASSIVE_ROW_EFFECT[key];
+    if (!fn) return '';
+    return fn(def.levels[Math.min(Math.max(level, 1), def.levels.length) - 1]);
+  }
   const fn = PASSIVE_EFFECT[key];
-  if (!def || !fn) return '';
+  if (!fn) return '';
   return fn(def.val, level);
 }
 
@@ -565,6 +893,12 @@ const SYNERGY_EFFECT = {
   blueFlame: (s) => `Snowball bursts freeze foes for ${fmtS(s.freeze)} s and burn them for ${s.dps} dmg/s over ${fmtS(s.dur)} s`,
   stormVolley: (s) => `Every 4th round strikes for ${s.dmg} lightning damage, arcing to ${s.jumps} nearby foe${s.jumps > 1 ? 's' : ''}`,
   heartMagnet: (s) => `Hearts are pulled toward you from ${pct(s.pull)} of your pickup range`,
+  // Phase 21 (D96) — five new synergies
+  heShell: (s) => `Cannon blasts ignite foes — ${s.dps} dmg/s burn for ${fmtS(s.dur)} s`,
+  staticPelt: (s) => `Wolf pounces add a shock stack + chain burst to ${s.jumps} foe${s.jumps > 1 ? 's' : ''}`,
+  homerKing: (s) => `HOMERUN odds improve to 1-in-${s.odds}`,
+  gutFeast: (s) => `Eaten foes restore ×${s.mul} more HP`,
+  avalanche: (s) => `Boulder hits add ${s.stacks} slow stack${s.stacks > 1 ? 's' : ''}${s.bonus > 0 ? ` and +${s.bonus} dmg` : ''}`,
 };
 
 // 12.6: multi-level synergies — `level` selects the row whose numbers the card states
@@ -597,6 +931,8 @@ export function recomputeStats(p) {
   const c = charDef(p.charKey); // 11.6: per-character base stats (D57)
   p.dmgMul = (1 + CFG.passives.dmg.val * (p.passives.dmg || 0)) * (1 + (p.metaDmg || 0)) * c.dmg;
   p.speedMul = (1 + CFG.passives.speed.val * (p.passives.speed || 0)) * (1 + (p.metaSpeed || 0));
+  // Ice Skates (D95): level-scaled speed bonus rides the same multiplier.
+  if (p.passives.skates) p.speedMul *= 1 + CFG.passives.skates.levels[p.passives.skates - 1].spd;
   p.magnet = 1 + CFG.passives.magnet.val * (p.passives.magnet || 0);
   p.regen = CFG.passives.regen.val * (p.passives.regen || 0);
   p.maxHp = c.hp + CFG.passives.hp.val * (p.passives.hp || 0) + (p.metaHp || 0);

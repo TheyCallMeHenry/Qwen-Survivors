@@ -7,7 +7,7 @@
 // blast+foe-r bbox is still a candidate (the exact radius test follows).
 // Node-safe: no canvas at top level.
 import { CFG } from '../config.js';
-import { TAU, approach, rand } from '../utils/math.js';
+import { TAU, approach, clamp, rand } from '../utils/math.js';
 
 export class Combat {
   constructor() {
@@ -18,6 +18,13 @@ export class Combat {
     this.flames = [];
     this.arrows = [];
     this.snowballs = []; // 12.3: lobbed snowballs (bomb-style flight, burst ON impact)
+    // Phase 21 (D96): Tank Cannon shells, laser beams, Rolling Boulders, web strands.
+    // Wolf companion / Mirror Shield state lives ON the owning player (p._companion,
+    // p._boulder, p._shieldBank) so the snapshot tail + ownership follow the player.
+    this.shells = [];
+    this.beams = [];
+    this.boulders = [];
+    this.webs = [];
 
     this.explosions = [];
     this.t = 0;
@@ -32,6 +39,9 @@ export class Combat {
     this.snowballImg = null; // 12.3
     this.frostImg = null;    // 12.3: small frost burst for the snowball impact
     this.sparkImg = null;    // 12.4: lightning spark at a bolt's strike point
+    this.shellImg = null;    // P21: cannon shell
+    this.boulderImg = null;  // P21: rolling boulder
+    this.webImg = null;      // P21: web strand
     this.explosionImg = null;
     // 24.2: per-type synergy variant sprite maps ({ variantKey: img }); empty/absent →
     // draw falls back to the base *Img above (base path byte-identical, solo invariance).
@@ -44,6 +54,8 @@ export class Combat {
     this.onHurt = null;   // () — set by game: shake/flash
     this.onDeath = null;  // () — set by game: state machine
     this.onBomb = null;   // (x, y) — set by game: bomb shake
+    this.onFx = null;     // (kind, x, y) — set by game: particles for P21 events
+                          // ('homerun' | 'crag' | 'reflect' | 'ball' | 'slide')
     this.pulse = null;    // ('pistol'|'boom'|'fire') — set by game: bus → sfx
     this._orbCd = new Map(); // enemy -> last orbiter hit time
     this._axeCd = new Map(); // enemy -> last axe hit time
@@ -59,6 +71,10 @@ export class Combat {
     this.flames.length = 0;
     this.arrows.length = 0;
     this.snowballs.length = 0;
+    this.shells.length = 0;
+    this.beams.length = 0;
+    this.boulders.length = 0;
+    this.webs.length = 0;
     this.explosions.length = 0;
     this.t = 0;
     this._orbCd.clear();
@@ -179,6 +195,105 @@ export class Combat {
     });
   }
 
+  // ---- Phase 21 weapon primitives (tables in CFG.weapons, mechanics here) ----
+
+  // Tank Cannon shell: pierces the FIRST foe at full damage, terminates in the
+  // SECOND with an AoE blast (dmg × CFG.combat.shellBlastK in blastR). `ignite`
+  // (Shells of Perdition synergy row {dps,dur}) makes the blast set the blast radius
+  // burning; lifetime = the weapon's aim range at shell speed (range knob reuse).
+  fireShell(x, y, ang, dmg, blastR, ignite = null, owner = null) {
+    const C = CFG.combat;
+    this.shells.push({
+      x, y,
+      vx: Math.cos(ang) * C.shellSpeed,
+      vy: Math.sin(ang) * C.shellSpeed,
+      rot: ang, dmg, blastR, ignite, owner,
+      hit: new Set(),
+      life: C.wandRange / C.shellSpeed + 0.1,
+    });
+  }
+
+  // Continuous Laser: one sustained beam along the owner's aim (fixed at fire time);
+  // the ORIGIN follows the owner while the beam lasts. Damage flows through D21
+  // dpsTick every frame for `dur` (no flash/knockback — a sear, not a hit).
+  fireBeam(owner, S) {
+    this.beams.push({
+      owner, ang: owner.aimAng, t: 0, dur: S.dur,
+      len: S.len, w: S.w, dps: S.dps * owner.dmgMul,
+    });
+  }
+
+  // Rolling Boulder: cardinal roll at fixed speed, ONE per owner (`owner._boulder`,
+  // spec). Damage decays boulderDecay^hits per hit; `av` (Avalanche row
+  // {stacks,bonus}) adds slow stacks + flat damage; foe-size squish kill and
+  // crumble are handled in _boulders.
+  fireBoulder(owner, x, y, sx, sy, dmg, av = null) {
+    const C = CFG.combat;
+    const b = {
+      x, y, vx: sx * C.boulderSpeed, vy: sy * C.boulderSpeed,
+      dmg, av, owner, hits: 0, rot: rand(0, TAU), hit: new Set(),
+    };
+    this.boulders.push(b);
+    owner._boulder = b;
+  }
+
+  // Web-slingers: straight strand to the target POINT; bursts in AoE r on arrival,
+  // damaging + HOLDING (freeze-like e.holdT) everything caught.
+  fireWeb(x, y, tx, ty, dmg, r, hold, owner = null) {
+    const C = CFG.combat;
+    const dist = Math.hypot(tx - x, ty - y);
+    this.webs.push({
+      x, y, x0: x, y0: y, tx, ty, dmg, r, hold, owner,
+      t: 0, fly: dist / C.webSpeed,
+    });
+  }
+
+  // Baseball Bat melee arc: everything within batRange inside ±arc/2 of the owner's
+  // aim gets hit once per swing, with very high knockback (batKbImpulse × level kb,
+  // spec identity). HOMERUN = one-hit KO of a NON-BOSS at 1-in-homerun odds
+  // (weapon def; homerKing synergy level row overrides) + fireworks over the player
+  // (cosmetic — onFx). S = the level row {cd, dmg, kb, arc(deg)}.
+  batSwing(owner, S) {
+    const C = CFG.combat;
+    if (!this.enemies) return;
+    const hk = owner.synergies && owner.synergies.homerKing;
+    const odds = hk ? CFG.synergies.homerKing.levels[hk - 1].odds : CFG.weapons.bat.homerun;
+    const oy = owner._spawnY();
+    const half = (S.arc * Math.PI) / 360;
+    for (const e of this.enemies.grid.range(owner.x, oy, C.batRange + CFG.ai.gridCell)) {
+      if (e.dead) continue;
+      const dx = e.x - owner.x, dy = e.y - oy;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d > C.batRange + e.r) continue;
+      let a = Math.atan2(dy, dx) - owner.aimAng;
+      while (a > Math.PI) a -= TAU;
+      while (a < -Math.PI) a += TAU;
+      if (Math.abs(a) > half) continue;
+      const homer = !e.boss && rand(0, odds) < 1;
+      const dmg = homer ? e.hp + 1 : S.dmg * owner.dmgMul;
+      this.damageEnemy(e, dmg, Math.cos(owner.aimAng), Math.sin(owner.aimAng), C.batKbImpulse * S.kb, owner);
+      if (homer && this.onFx) this.onFx('homerun', owner.x, oy - owner.def.h - 6);
+    }
+  }
+
+  // Frog Tongue: instant lash — initial damage, poison DoT (D21 channel), then a
+  // tonguePULL that drags the foe to the owner over tonguePullDur. If the initial
+  // damage killed a NON-BOSS the owner eats it: heal min(cap, 2 + K×maxHp) × eatMul
+  // (Gut Feast synergy) — size/HP-determined per spec.
+  fireTongue(owner, e, dmg, poison, poisonDur, eatMul = 1) {
+    const C = CFG.combat;
+    owner._tongueFx = { t: 0.18, e };
+    this.damageEnemy(e, dmg, 0, 0, 0, owner);
+    if (e.dead) {
+      if (!e.boss) owner.heal(Math.min(C.tongueHealCap, 2 + C.tongueHealK * e.maxHp) * eatMul);
+      return;
+    }
+    e.poisonT = Math.max(e.poisonT || 0, poisonDur);
+    e.poisonDps = Math.max(e.poisonDps || 0, poison);
+    e.drag = { owner, t: C.tonguePullDur };
+    e.holdT = Math.max(e.holdT || 0, C.tonguePullDur);
+  }
+
   // players: live player array (solo = [player]) — garlic/blades run per
   // player with per-player timers (co-op, 11.2).
   update(dt, players, enemies) {
@@ -191,10 +306,17 @@ export class Combat {
     this._bombs(dt, enemies);
     this._snowballs(dt, enemies);
     this._flames(dt, enemies);
+    this._shells(dt, enemies);
+    this._beams(dt, enemies);
+    this._boulders(dt, enemies);
+    this._webs(dt, enemies);
+    this._tonguePull(dt);
+    this._shieldStep(dt, players, enemies);
     this._dot(dt);
     for (const p of players) {
       if (p.weapons.garlic) this._garlic(dt, p, enemies);
       if (p.weapons.blades) this._orbiters(dt, p, enemies);
+      if (p.weapons.wolf && !p.dead) this._companion(dt, p, enemies);
     }
     for (let i = this.explosions.length - 1; i >= 0; i--) {
       const x = this.explosions[i];
@@ -436,6 +558,294 @@ export class Combat {
     if (this.pulse) this.pulse('boom');
   }
 
+  // P21 Tank Cannon: straight flight; full damage through the first foe, and the
+  // SECOND terminates it in the blast (explode-style: radial kb + optional ignite).
+  _shells(dt, enemies) {
+    const C = CFG.combat;
+    for (let i = this.shells.length - 1; i >= 0; i--) {
+      const b = this.shells[i];
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.life -= dt;
+      let gone = b.life <= 0 || b.x < 0 || b.x > CFG.world.w || b.y < 0 || b.y > CFG.world.h;
+      if (!gone) {
+        for (const e of enemies.grid.near(b.x, b.y)) {
+          if (e.dead || b.hit.has(e)) continue;
+          const rr = e.r + C.shellR;
+          const dx = e.x - b.x, dy = e.y - b.y;
+          if (dx * dx + dy * dy >= rr * rr) continue;
+          b.hit.add(e);
+          this.damageEnemy(e, b.dmg, b.vx / C.shellSpeed, b.vy / C.shellSpeed, 0, b.owner);
+          if (b.hit.size >= 2) {
+            this._shellBlast(b, enemies); // spec: the SECOND foe takes direct dmg + terminates in the blast
+            gone = true;
+            break;
+          }
+        }
+      }
+      if (gone) this.shells.splice(i, 1);
+    }
+  }
+
+  // Blast at the shell's terminal impact: shellBlastK × direct dmg in blastR, plus
+  // the Shells of Perdition burn when the shooter had it.
+  _shellBlast(b, enemies) {
+    const C = CFG.combat;
+    this.explosions.push({ x: b.x, y: b.y, t: 0, dur: C.bombFlash, r: b.blastR });
+    for (const e of enemies.grid.range(b.x, b.y, b.blastR + CFG.ai.gridCell)) {
+      if (e.dead) continue;
+      const dx = e.x - b.x, dy = e.y - b.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d > b.blastR + e.r) continue;
+      this.damageEnemy(e, b.dmg * C.shellBlastK, dx / d, dy / d, C.bombKb, b.owner);
+      if (b.ignite) {
+        e.burnT = Math.max(e.burnT || 0, b.ignite.dur);
+        e.burnDps = Math.max(e.burnDps || 0, b.ignite.dps);
+      }
+    }
+    if (this.pulse) this.pulse('boom');
+  }
+
+  // P21 laser beam: every live enemy within `w` px of the segment gets its dps
+  // every frame (dpsTick = no flash/knockback, D21 kill-credit via _killer).
+  _beams(dt, enemies) {
+    for (let i = this.beams.length - 1; i >= 0; i--) {
+      const b = this.beams[i];
+      b.t += dt;
+      if (b.t >= b.dur || b.owner.dead) { this.beams.splice(i, 1); continue; }
+      const ox = b.owner.x, oy = b.owner._spawnY();
+      const ex = ox + Math.cos(b.ang) * b.len, ey = oy + Math.sin(b.ang) * b.len;
+      const segx = ex - ox, segy = ey - oy;
+      const l2 = segx * segx + segy * segy || 1;
+      for (const e of enemies.grid.range(ox, oy, b.len + CFG.ai.gridCell)) {
+        if (e.dead) continue;
+        const dx = e.x - ox, dy = e.y - oy;
+        const u = Math.max(0, Math.min(1, (dx * segx + dy * segy) / l2));
+        const cx = ox + segx * u, cy = oy + segy * u;
+        const rr = e.r + b.w;
+        const ex2 = e.x - cx, ey2 = e.y - cy;
+        if (ex2 * ex2 + ey2 * ey2 >= rr * rr) continue;
+        e._killer = b.owner;
+        this.dpsTick(e, b.dps * dt);
+      }
+    }
+  }
+
+  // P21 Rolling Boulder: one straight line, one hit per foe, decay^hits damage,
+  // squish-kills the small size class (r ≤ squishR, non-boss — rat + bat, D96),
+  // Avalanche adds slow stacks + flat bonus, and it crumbles at maxHits or when
+  // it rolls off the map. Sets/clears owner._boulder (the one-at-a-time rule the
+  // fire-site in player.js checks).
+  _boulders(dt, enemies) {
+    const C = CFG.combat;
+    for (let i = this.boulders.length - 1; i >= 0; i--) {
+      const b = this.boulders[i];
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.rot += (C.boulderSpeed / C.boulderR) * dt;
+      let gone = b.x < -C.boulderR || b.x > CFG.world.w + C.boulderR ||
+        b.y < -C.boulderR || b.y > CFG.world.h + C.boulderR;
+      if (!gone) {
+        for (const e of enemies.grid.near(b.x, b.y)) {
+          if (e.dead || b.hit.has(e)) continue;
+          const rr = e.r + C.boulderR;
+          const dx = e.x - b.x, dy = e.y - b.y;
+          if (dx * dx + dy * dy >= rr * rr) continue;
+          b.hit.add(e);
+          b.hits++;
+          const bonus = b.av ? b.av.bonus : 0;
+          const dmg = (b.dmg + bonus) * Math.pow(C.boulderDecay, b.hits - 1);
+          const squish = !e.boss && e.r <= C.boulderSquishR;
+          this.damageEnemy(e, squish ? e.hp + 1 : dmg, b.vx / C.boulderSpeed, b.vy / C.boulderSpeed, 0, b.owner);
+          if (!e.dead && b.av) for (let k = 0; k < b.av.stacks; k++) this.applySlow(e);
+          if (b.hits >= C.boulderMaxHits) { gone = true; break; }
+        }
+      }
+      if (gone) {
+        this.boulders.splice(i, 1);
+        if (b.owner._boulder === b) b.owner._boulder = null;
+        if (this.onFx) this.onFx('crag', b.x, b.y);
+      }
+    }
+  }
+
+  // P21 web strand: straight flight to the stored point, burst ON arrival.
+  _webs(dt, enemies) {
+    const C = CFG.combat;
+    for (let i = this.webs.length - 1; i >= 0; i--) {
+      const w = this.webs[i];
+      w.t += dt;
+      if (w.t < w.fly) {
+        const k = w.t / w.fly;
+        w.x = w.x0 + (w.tx - w.x0) * k;
+        w.y = w.y0 + (w.ty - w.y0) * k;
+      } else {
+        w.x = w.tx; w.y = w.ty;
+        this.explosions.push({ x: w.tx, y: w.ty, t: 0, dur: C.bombFlash, r: w.r, frost: true });
+        for (const e of enemies.grid.range(w.tx, w.ty, w.r + CFG.ai.gridCell)) {
+          if (e.dead) continue;
+          const dx = e.x - w.tx, dy = e.y - w.ty;
+          const d = Math.hypot(dx, dy) || 1;
+          if (d > w.r + e.r) continue;
+          this.damageEnemy(e, w.dmg, dx / d, dy / d, 0, w.owner);
+          if (!e.dead) e.holdT = Math.max(e.holdT || 0, w.hold);
+        }
+        if (this.pulse) this.pulse('boom');
+        this.webs.splice(i, 1);
+      }
+    }
+  }
+
+  // P21 tongue drag: pull the latched foe to the owner's CURRENT position on a
+  // linear schedule (move = distance ÷ remaining time, so it lands exactly when
+  // the pull ends). AI movement is pinned meanwhile via e.holdT (set at lash).
+  _tonguePull(dt) {
+    for (const e of this.enemies.list) {
+      if (e.dead || !e.drag) continue;
+      const o = e.drag.owner;
+      if (!o || o.dead) { e.drag = null; continue; }
+      e.drag.t -= dt;
+      if (e.drag.t <= 0) {
+        e.x = o.x; e.y = o.y;
+        e.drag = null;
+        continue;
+      }
+      e.x += (o.x - e.x) * (dt / e.drag.t);
+      e.y += (o.y - 6 - e.y) * (dt / e.drag.t);
+    }
+  }
+
+  // P21 Mirror Shield: enemy orbs entering the shield radius reverse outward and
+  // become ally-side (marked `reflected`; enemies.js skips them for player hits,
+  // _reflectedOrbs below spends them against foes). Charge bank: 3 per window
+  // (window shrinks with level, charges spec-fixed).
+  _shieldStep(dt, players, enemies) {
+    const C = CFG.combat;
+    for (const p of players) {
+      const lvl = p.passives.shield;
+      if (!lvl || p.dead) continue;
+      const row = CFG.passives.shield.levels[lvl - 1];
+      let bank = p._shieldBank;
+      if (!bank) bank = p._shieldBank = { n: C.shieldCharges, t: row.window };
+      bank.t -= dt;
+      if (bank.t <= 0) { bank.n = C.shieldCharges; bank.t = row.window; }
+      if (bank.n <= 0) continue;
+      const oy = p.y - p.def.h * 0.5;
+      for (const o of enemies.orbs || []) {
+        if (o.reflected) continue;
+        const dx = p.x - o.x, dy = oy - o.y;
+        const rr = row.r + o.r;
+        if (dx * dx + dy * dy >= rr * rr) continue;
+        o.vx = -o.vx; o.vy = -o.vy;
+        o.reflected = true;
+        o.by = p;
+        bank.n--;
+        if (this.onFx) this.onFx('reflect', o.x, o.y);
+        if (bank.n <= 0) break;
+      }
+    }
+    // Reflected orbs hurt the first foe they touch (shooter's damage value rides
+    // the orb) and are consumed. Checked here (host-sim side) so orb motion that
+    // already happened in enemies.update lands a frame later at worst.
+    const orbs = enemies.orbs;
+    if (!orbs || !orbs.length) return;
+    for (let i = orbs.length - 1; i >= 0; i--) {
+      const o = orbs[i];
+      if (!o.reflected) continue;
+      let spent = false;
+      for (const e of enemies.grid.near(o.x, o.y)) {
+        if (e.dead) continue;
+        const rr = e.r + o.r;
+        const dx = e.x - o.x, dy = e.y - o.y;
+        if (dx * dx + dy * dy >= rr * rr) continue;
+        const d = Math.hypot(o.vx, o.vy) || 1;
+        this.damageEnemy(e, o.dmg, o.vx / d, o.vy / d, 0, o.by || null);
+        spent = true;
+        break;
+      }
+      if (spent) orbs.splice(i, 1);
+    }
+  }
+
+  // P21 Wolf companion (host-sim only; clients render the snapshot tail). Never
+  // dies; hovers beside the owner inside companionLeash and autonomously pounces
+  // the nearest foe (pounce cd 2.0 s spec-fixed, growth lives in dmg/bleed only).
+  // staticPelt synergy row {jumps}: the bite adds one shock stack + a chain burst.
+  _companion(dt, p, enemies) {
+    const C = CFG.combat;
+    const S = CFG.weapons.wolf.levels[p.weapons.wolf - 1];
+    let c = p._companion;
+    if (!c) c = p._companion = { x: p.x, y: p.y - 12, state: 'follow', target: null, cd: 0, flip: false, animT: rand(0, 3) };
+    c.animT += dt;
+    if (c.state === 'pounce') {
+      const e = c.target;
+      // abandon: foe died OR left the leash circle (e.g. knocked away by a bat swing)
+      if (!e || e.dead || Math.hypot(e.x - p.x, e.y - p.y) > C.companionLeash + e.r) {
+        c.state = 'follow'; c.cd = C.companionPounceCd; c.target = null;
+      }
+      else {
+        const oy = e.y - e.r * 0.4;
+        const dx = e.x - c.x, dy = oy - c.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const step = C.companionSpeed * dt;
+        c.x += (dx / d) * step;
+        c.y += (dy / d) * step;
+        c.flip = dx < 0;
+        if (d <= step + e.r * 0.7) {
+          this.damageEnemy(e, S.dmg * p.dmgMul, dx / d, dy / d, 0, p);
+          if (!e.dead) {
+            e.bleedT = Math.max(e.bleedT || 0, S.bleedDur);
+            e.bleedDps = Math.max(e.bleedDps || 0, S.bleed * p.dmgMul);
+            const st = p.synergies && p.synergies.staticPelt;
+            if (st) {
+              this.applyShock(e);
+              this._chainArc(e, CFG.synergies.staticPelt.levels[st - 1].jumps, p);
+            }
+          }
+          c.state = 'follow';
+          c.cd = C.companionPounceCd;
+          c.target = null;
+        }
+      }
+    } else {
+      c.cd -= dt;
+      if (c.cd <= 0) {
+        const e = this._nearestTo(p, enemies, C.companionLeash);
+        if (e) { c.state = 'pounce'; c.target = e; }
+      }
+      // hover near the owner: only walk when drifting too far
+      const ax = p.x, ay = p.y - 12;
+      const dx = ax - c.x, dy = ay - c.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 26) {
+        const step = Math.min(d, C.companionSpeed * dt);
+        c.x += (dx / d) * step;
+        c.y += (dy / d) * step;
+        c.flip = dx < 0;
+      }
+    }
+    // leash clamp applies in BOTH states ("stays ≤192 px of owner" — spec)
+    const od = Math.hypot(c.x - p.x, c.y - p.y);
+    if (od > C.companionLeash) {
+      c.x = p.x + ((c.x - p.x) / od) * C.companionLeash;
+      c.y = p.y + ((c.y - p.y) / od) * C.companionLeash;
+    }
+    c.x = clamp(c.x, CFG.world.margin, CFG.world.w - CFG.world.margin);
+    c.y = clamp(c.y, CFG.world.margin, CFG.world.h - CFG.world.margin);
+  }
+
+  // Nearest live enemy to (owner) within `range` (wolf pounce pick).
+  _nearestTo(p, enemies, range) {
+    let best = null, bd = range * range;
+    for (const e of enemies.list) {
+      if (e.dead) continue;
+      const dx = e.x - p.x, dy = e.y - p.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bd) { bd = d2; best = e; }
+    }
+    return best;
+  }
+
   // 12.5: add one slow stack (refreshed to full TTL) at the enemy; reaching
   // slowMaxStacks triggers a brief freeze and consumes the stacks.
   // blue (12.6 Blue Flame, optional): flash-freeze NOW + apply the fire DoT at the
@@ -564,7 +974,8 @@ export class Combat {
     if (this._flameCd.size > 512) this._flameCd.clear();
   }
 
-  // burn / blight DoT — ticked from status fields set by weapons + synergies.
+  // burn / blight / bleed / poison DoTs — ticked from status fields set by weapons
+  // + synergies (Phase 21 added the wolf's bleed and the tongue's poison channels).
   _dot(dt) {
     for (const e of this.enemies.list) {
       if (e.dead) continue;
@@ -575,6 +986,14 @@ export class Combat {
       if (e.blightT > 0) {
         e.blightT -= dt;
         this.dpsTick(e, e.blightDps * dt);
+      }
+      if (e.bleedT > 0) {
+        e.bleedT -= dt;
+        this.dpsTick(e, e.bleedDps * dt);
+      }
+      if (e.poisonT > 0) {
+        e.poisonT -= dt;
+        this.dpsTick(e, e.poisonDps * dt);
       }
     }
   }
@@ -626,7 +1045,9 @@ export class Combat {
   // garlic clocks are advanced cosmetically in _clientUpdate). Remote players have
   // no _orbitT/_garlicT in the snapshot (projectiles never cross the wire, 16.2
   // snapshot-neutral) → their blades/ring are not drawn on the client.
-  draw(ctx, t, players) {
+  // enemies (P21) supplies the shared wolf-sheet frames for companion draws — the
+  // client has a real Enemies instance, so companions render on both sides.
+  draw(ctx, t, players, enemies) {
     const C = CFG.combat;
     if (this.boltImg) for (const b of this.bolts) {
       const img = (this.boltVar && this.boltVar[b.v]) || this.boltImg; // 24.2 variant
@@ -636,12 +1057,39 @@ export class Combat {
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
       ctx.restore();
     }
+    // P21 Tank Cannon shells (same rotated-sprite pattern as bolts)
+    if (this.shellImg) for (const b of this.shells) {
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.rot);
+      ctx.drawImage(this.shellImg, -this.shellImg.width / 2, -this.shellImg.height / 2);
+      ctx.restore();
+    }
+    // P21 web strands: light silk thread + knot at the traveling end
+    if (this.webImg) for (const w of this.webs) {
+      ctx.drawImage(this.webImg, w.x - this.webImg.width / 2, w.y - this.webImg.height / 2);
+    }
     if (this.axeImg) for (const a of this.axes) {
       ctx.save();
       ctx.translate(a.x, a.y);
       ctx.rotate(a.spin);
       const s = this.axeImg.width * a.size;
       ctx.drawImage(this.axeImg, -s / 2, -s / 2, s, s);
+      ctx.restore();
+    }
+    // P21 Wolf companion: same bottom-anchored sheet contract as enemies — the
+    // wolf enemy frames ARE the companion art (host: live sim state; client:
+    // snapshot tail written onto p._companion by applyPlayerSnap).
+    if (enemies && enemies.defs && enemies.defs.wolf) for (const pl of players || []) {
+      const c = pl._companion;
+      if (!c || !pl.weapons.wolf) continue;
+      const def = enemies.defs.wolf;
+      const n = def.frames.length;
+      const fr = n > 1 ? ((c.animT * CFG.enemies.wolf.fps) | 0) % n : 0;
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      if (c.flip) ctx.scale(-1, 1);
+      ctx.drawImage(def.frames[fr], -def.w / 2, -def.h);
       ctx.restore();
     }
     // 16.2 latent-fix: this.player was never assigned (constructor/ctor sites), so the
@@ -722,6 +1170,39 @@ export class Combat {
       const img = (this.snowballVar && this.snowballVar[b.v]) || this.snowballImg; // 24.2 variant
       const s = img.width;
       ctx.drawImage(img, b.x - s / 2, b.y - b.h - s / 2, s, s);
+    }
+    // P21 Rolling Boulder: rotating stone sprite (rot advances with travel).
+    if (this.boulderImg) for (const b of this.boulders) {
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.rot);
+      ctx.drawImage(this.boulderImg, -this.boulderImg.width / 2, -this.boulderImg.height / 2);
+      ctx.restore();
+    }
+    // P21 Continuous Laser: additive beam from the owner's mid-torso along the
+    // locked aim angle (origin follows the owner; the angle is fixed at fire).
+    for (const b of this.beams) {
+      if (b.owner.dead) continue;
+      const ox = b.owner.x, oy = b.owner._spawnY();
+      const ex = ox + Math.cos(b.ang) * b.len, ey = oy + Math.sin(b.ang) * b.len;
+      const k = Math.min(1, b.t / 0.08); // quick ramp-in, hold, no fade-out (laser feel)
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.85 * k;
+      ctx.strokeStyle = 'rgba(255,120,150,0.55)';
+      ctx.lineWidth = b.w * 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+      ctx.strokeStyle = '#ffdde4';
+      ctx.lineWidth = b.w * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+      ctx.restore();
     }
     // 12.4: Ring of Chain Lightning arcs (jagged bolt from spawn/last-link to target +
     // a strike spark), drawn additively and fading over ringBeamDur

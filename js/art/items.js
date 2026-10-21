@@ -321,6 +321,63 @@ function explosionSprite() {
   return c;
 }
 
+// Phase 21 (D96) projectile sprites — shell (rotates, faces +x), boulder
+// (rotates, centered), web knot (no rotation).
+function shellSprite() {
+  const c = makeCanvas(20, 12);
+  const g = c.getContext('2d');
+  const st = g.createLinearGradient(0, 0, 20, 0);
+  st.addColorStop(0, '#232a33'); st.addColorStop(0.6, '#59646f'); st.addColorStop(1, '#39424b');
+  g.fillStyle = st;
+  g.beginPath();
+  g.moveTo(2, 4);
+  g.lineTo(10, 3);
+  g.quadraticCurveTo(19, 6, 10, 9);
+  g.lineTo(2, 8);
+  g.closePath();
+  g.fill();
+  g.fillStyle = '#c8863f'; g.fillRect(5, 3, 3, 6); // copper driving band
+  g.fillStyle = '#39424b';
+  g.fillRect(0, 3, 3, 2); g.fillRect(0, 7, 3, 2); // tail fins
+  g.fillStyle = 'rgba(220,235,250,0.5)'; g.fillRect(10, 4, 5, 1.2); // specular
+  return c;
+}
+function boulderSprite() {
+  const c = makeCanvas(68, 68);
+  const g = c.getContext('2d');
+  g.drawImage(glowSprite(22, '90,100,115', 0.18), 12, 12);
+  const rg = g.createRadialGradient(28, 24, 6, 34, 34, 30);
+  rg.addColorStop(0, '#c2cad4'); rg.addColorStop(0.55, '#7e8a99'); rg.addColorStop(1, '#3f4956');
+  g.fillStyle = rg;
+  poly(g, [[34, 6], [52, 12], [62, 30], [56, 52], [36, 62], [16, 50], [12, 26], [22, 12]]);
+  g.fill();
+  g.strokeStyle = 'rgba(16,20,26,0.8)'; g.lineWidth = 2.4; g.stroke();
+  g.strokeStyle = 'rgba(28,34,42,0.75)'; g.lineWidth = 2; // facet cracks
+  g.beginPath(); g.moveTo(26, 18); g.lineTo(36, 32); g.lineTo(28, 46); g.stroke();
+  g.beginPath(); g.moveTo(36, 32); g.lineTo(52, 38); g.stroke();
+  g.fillStyle = 'rgba(235,242,250,0.35)'; // top-left highlight facet
+  poly(g, [[34, 6], [52, 12], [44, 22], [28, 16]]);
+  g.fill();
+  return c;
+}
+function webSprite() {
+  const c = makeCanvas(18, 18);
+  const g = c.getContext('2d');
+  g.strokeStyle = 'rgba(235,242,250,0.9)'; g.lineWidth = 1.3; g.lineCap = 'round';
+  const cx = 9, cy = 9;
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * TAU + 0.4;
+    g.beginPath();
+    g.moveTo(cx, cy);
+    g.lineTo(cx + Math.cos(a) * 7, cy + Math.sin(a) * 7);
+    g.stroke();
+  }
+  g.lineWidth = 1;
+  g.beginPath(); g.arc(cx, cy, 4, 0, TAU); g.stroke();
+  g.fillStyle = 'rgba(255,255,255,0.95)';
+  g.beginPath(); g.arc(cx, cy, 1.8, 0, TAU); g.fill();
+  return c;
+}
 function burnSprite() {
   // Small enemy-status flame (flicker is done at draw time)
   const c = makeCanvas(16, 16);
@@ -1568,6 +1625,331 @@ export function buildIcons() {
     glint(g, 63, 26, 2, 'rgba(205,228,255,0.85)');
   });
 
+  // ================= PHASE 21 — WEAPONS (9) ==============================
+  icons.cannon = make('weapon', (g) => {
+    // Heavy cannon barrel, muzzle up-right + a copper-banded shell at the breech
+    const st = g.createLinearGradient(16, 56, 50, 22);
+    st.addColorStop(0, '#252b33'); st.addColorStop(0.55, '#4a5560'); st.addColorStop(1, '#6d7a86');
+    g.strokeStyle = st; g.lineWidth = 13; g.lineCap = 'round';
+    seg(g, [[20, 54], [46, 26]]);
+    g.strokeStyle = 'rgba(10,14,20,0.85)'; g.lineWidth = 2; // barrel seam
+    seg(g, [[22, 52], [44, 28]]);
+    g.strokeStyle = '#8b98a5'; g.lineWidth = 4; // muzzle ring
+    seg(g, [[47.5, 24], [52, 28]]);
+    seg(g, [[43, 28.5], [47.5, 33]]);
+    // copper-banded shell beside the breech
+    g.fillStyle = '#c8863f'; g.beginPath(); g.arc(52, 50, 7, 0, TAU); g.fill();
+    g.fillStyle = '#8f5c26'; g.fillRect(45, 48.4, 14, 3.2);
+    g.fillStyle = 'rgba(255,225,170,0.85)'; g.beginPath(); g.arc(49.5, 47.5, 2.2, 0, TAU); g.fill();
+    glint(g, 55, 20, 3.2, 'rgba(180,220,255,0.7)');
+  });
+
+  icons.laser = make('weapon', (g) => {
+    // Emitter block bottom-left, searing beam across the plate + hot core
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.strokeStyle = 'rgba(255,90,120,0.5)'; g.lineWidth = 9; g.lineCap = 'round';
+    seg(g, [[22, 52], [58, 14]]);
+    g.strokeStyle = 'rgba(255,150,170,0.9)'; g.lineWidth = 3.4;
+    seg(g, [[22, 52], [58, 14]]);
+    g.strokeStyle = '#fff0f3'; g.lineWidth = 1.4;
+    seg(g, [[22, 52], [58, 14]]);
+    g.restore();
+    // emitter: dark housing + lens glow
+    g.fillStyle = '#2b323d'; poly(g, [[12, 46], [30, 46], [30, 62], [12, 62]]); g.fill();
+    g.strokeStyle = '#59647a'; g.lineWidth = 1.4; g.stroke();
+    dot(g, 26, 50, 4.4, 'rgba(255,110,130,0.95)');
+    dot(g, 26, 50, 2, '#fff');
+    // scorched mote at the far end
+    glint(g, 58, 14, 4.5, 'rgba(255,140,150,0.8)', 1.6);
+  });
+
+  icons.wolf = make('weapon', (g) => {
+    // Wolf head profile, facing left: ears, snout, moonlit fur, amber eye
+    g.fillStyle = '#7c8798';
+    poly(g, [[24, 18], [30, 30], [44, 26], [56, 34], [52, 44], [58, 50], [46, 52], [40, 60], [26, 56], [16, 40], [18, 26]]);
+    g.fill();
+    g.fillStyle = '#5a6472'; // ear shading + jaw plane
+    poly(g, [[18, 26], [24, 18], [30, 30], [22, 34]]); g.fill();
+    poly(g, [[40, 60], [46, 52], [52, 44], [58, 50], [48, 56]]); g.fill();
+    g.strokeStyle = 'rgba(20,26,36,0.6)'; g.lineWidth = 1.4; // fur notch line
+    seg(g, [[30, 30], [38, 40]]); seg(g, [[44, 26], [46, 36]]);
+    dot(g, 36, 36, 2.6, '#ffb648'); // eye
+    dot(g, 56, 47, 1.8, '#20262f'); // nose
+    // moon glint behind the ear
+    glint(g, 21, 22, 3, 'rgba(200,220,255,0.75)');
+  });
+
+  icons.boulder = make('weapon', (g) => {
+    // Rolling stone: faceted rock + crack + speed streaks behind
+    g.strokeStyle = 'rgba(160,175,195,0.5)'; g.lineWidth = 2.4; g.lineCap = 'round';
+    seg(g, [[8, 30], [18, 30]]); seg(g, [[6, 42], [16, 42]]); seg(g, [[10, 54], [20, 54]]);
+    const rg = g.createRadialGradient(40, 34, 4, 44, 40, 22);
+    rg.addColorStop(0, '#c8d0da'); rg.addColorStop(0.6, '#8b97a6'); rg.addColorStop(1, '#525d6b');
+    g.fillStyle = rg;
+    poly(g, [[40, 16], [56, 22], [64, 38], [56, 56], [38, 60], [26, 48], [28, 26]]);
+    g.fill();
+    g.strokeStyle = 'rgba(24,30,38,0.7)'; g.lineWidth = 1.6; g.stroke();
+    g.strokeStyle = 'rgba(40,48,58,0.8)'; g.lineWidth = 1.8; // crack
+    seg(g, [[36, 24], [44, 36], [38, 46], [48, 54]]);
+    g.strokeStyle = 'rgba(235,242,250,0.5)'; g.lineWidth = 1.2; // top highlight edge
+    seg(g, [[40, 16], [56, 22]]);
+  });
+
+  icons.webs = make('weapon', (g) => {
+    // Spider silk: radial spokes + two ring arcs, dew drop glints
+    g.strokeStyle = 'rgba(225,235,245,0.85)'; g.lineWidth = 1.6; g.lineCap = 'round';
+    const cx = 38, cy = 36;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * TAU;
+      seg(g, [[cx, cy], [cx + Math.cos(a) * 22, cy + Math.sin(a) * 22]]);
+    }
+    g.lineWidth = 1.2;
+    for (const r of [9, 16]) {
+      g.beginPath();
+      for (let k = 0; k <= 8; k++) {
+        const a = (k / 8) * TAU;
+        const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+        k ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+    dot(g, cx, cy, 2.4, 'rgba(210,225,240,0.9)');
+    glint(g, 20, 20, 2.6, 'rgba(240,248,255,0.8)');
+    dot(g, 52, 50, 1.8, 'rgba(240,248,255,0.8)');
+  });
+
+  icons.gatling = make('weapon', (g) => {
+    // Rotary fan of three barrels + muzzle sparks + ammo belt hint
+    const st = g.createLinearGradient(14, 50, 54, 26);
+    st.addColorStop(0, '#333b45'); st.addColorStop(1, '#79848f');
+    g.strokeStyle = st; g.lineWidth = 5; g.lineCap = 'round';
+    seg(g, [[16, 52], [52, 20]]);
+    seg(g, [[14, 56], [52, 30]]);
+    seg(g, [[20, 58], [54, 40]]);
+    g.strokeStyle = '#c9a35c'; g.lineWidth = 3; // hub
+    dot(g, 17, 54.5, 4, '#4a5560');
+    dot(g, 17, 54.5, 2, '#c9a35c');
+    // muzzle sparks
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    glint(g, 54, 20, 4, 'rgba(255,220,130,0.9)', 1.6);
+    glint(g, 54, 40, 3, 'rgba(255,190,110,0.8)', 1.4);
+    g.restore();
+    // ammo belt: linked rounds along the base
+    g.fillStyle = '#b8863f';
+    for (let k = 0; k < 4; k++) dot(g, 22 + k * 8, 64, 2.4, '#b8863f');
+    g.strokeStyle = 'rgba(90,66,30,0.8)'; g.lineWidth = 1;
+    seg(g, [[22, 64], [46, 64]]);
+  });
+
+  icons.bat = make('weapon', (g) => {
+    // Ash baseball bat diagonal + stitched ball + swing arc
+    const wd = g.createLinearGradient(20, 56, 52, 18);
+    wd.addColorStop(0, '#7a5230'); wd.addColorStop(0.5, '#c08a52'); wd.addColorStop(1, '#e0b285');
+    g.strokeStyle = wd; g.lineWidth = 8; g.lineCap = 'round';
+    seg(g, [[22, 54], [44, 28]]);
+    g.lineWidth = 11;
+    seg(g, [[44, 28], [52, 18]]); // barrel swell
+    g.strokeStyle = '#3d2a18'; g.lineWidth = 5; // grip + knob
+    seg(g, [[18, 58], [24, 52]]);
+    dot(g, 17, 59, 3, '#3d2a18');
+    // swing arc
+    g.strokeStyle = 'rgba(245,217,168,0.55)'; g.lineWidth = 2.4;
+    g.beginPath(); g.arc(20, 52, 40, -1.45, -0.5); g.stroke();
+    // ball with stitches
+    dot(g, 15, 20, 6, '#f4f6f8');
+    g.strokeStyle = '#d43c3c'; g.lineWidth = 1.2;
+    g.beginPath(); g.arc(15, 20, 4.4, -2.2, -0.7); g.stroke();
+    g.beginPath(); g.arc(15, 20, 4.4, 0.9, 2.4); g.stroke();
+  });
+
+  icons.tongue = make('weapon', (g) => {
+    // Frog head low-left, long snaking tongue to a lashed sticky tip
+    g.fillStyle = '#5f9e4e';
+    poly(g, [[12, 44], [20, 34], [34, 34], [40, 44], [36, 56], [16, 56]]); g.fill();
+    dot(g, 22, 38, 4.4, '#7ed957'); dot(g, 32, 38, 4.4, '#7ed957'); // eyes
+    dot(g, 22, 38, 1.8, '#1c2a16'); dot(g, 32, 38, 1.8, '#1c2a16');
+    g.strokeStyle = '#d95f76'; g.lineWidth = 3.2; g.lineCap = 'round'; // tongue curve
+    g.beginPath();
+    g.moveTo(34, 46);
+    g.bezierCurveTo(44, 52, 46, 30, 56, 18);
+    g.stroke();
+    dot(g, 56, 18, 4.4, '#ff8095'); // sticky tip
+    dot(g, 56, 18, 2, 'rgba(255,225,230,0.9)');
+    // impact flecks
+    dot(g, 62, 12, 1.4, 'rgba(255,190,200,0.8)');
+    dot(g, 50, 10, 1.4, 'rgba(255,190,200,0.8)');
+  });
+
+  icons.ball = make('weapon', (g) => {
+    // Iron cannonball with ricochet trail over the plate
+    const tg = g.createLinearGradient(30, 24, 50, 48);
+    tg.addColorStop(0, '#5a6472'); tg.addColorStop(0.55, '#2c333d'); tg.addColorStop(1, '#161b22');
+    g.fillStyle = tg;
+    g.beginPath(); g.arc(44, 36, 16, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(10,13,18,0.9)'; g.lineWidth = 1.6;
+    g.beginPath(); g.arc(44, 36, 16, 0, TAU); g.stroke();
+    g.fillStyle = 'rgba(220,232,245,0.85)'; // specular crescent
+    g.beginPath(); g.arc(38, 28, 5, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(170,185,205,0.55)';
+    for (let k = 0; k < 3; k++) dot(g, 10 + k * 8, 58 - k * 7, 3 - k * 0.7, 'rgba(170,185,205,0.45)');
+    g.strokeStyle = 'rgba(200,215,235,0.6)'; g.lineWidth = 2; g.lineCap = 'round'; // bounce line
+    seg(g, [[8, 62], [26, 50]]);
+  });
+
+  // ================= PHASE 21 — RUN ITEMS (passive plate) ================
+  icons.shield = make('passive', (g) => {
+    // Kite shield with a mirror split + deflecting glint
+    const sg = g.createLinearGradient(20, 14, 52, 60);
+    sg.addColorStop(0, '#dfe8f5'); sg.addColorStop(0.5, '#9fb4cf'); sg.addColorStop(1, '#5a708d');
+    g.fillStyle = sg;
+    g.beginPath();
+    g.moveTo(36, 12); g.lineTo(58, 20); g.lineTo(54, 44);
+    g.bezierCurveTo(50, 54, 42, 60, 36, 62);
+    g.bezierCurveTo(30, 60, 22, 54, 18, 44);
+    g.lineTo(14, 20); g.closePath();
+    g.fill();
+    g.strokeStyle = 'rgba(20,30,45,0.7)'; g.lineWidth = 1.8; g.stroke();
+    // mirror half: bright diagonal facet
+    g.save();
+    g.beginPath();
+    g.moveTo(36, 12); g.lineTo(58, 20); g.lineTo(54, 44); g.lineTo(36, 62);
+    g.closePath(); g.clip();
+    g.fillStyle = 'rgba(240,248,255,0.5)';
+    g.beginPath();
+    g.moveTo(10, 60); g.lineTo(64, 6); g.lineTo(64, 26); g.lineTo(24, 66);
+    g.closePath(); g.fill();
+    g.restore();
+    // rim boss + deflected bolt glint
+    dot(g, 36, 34, 4.5, '#c9a35c'); dot(g, 36, 34, 2, '#f6e3b8');
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    glint(g, 58, 52, 4, 'rgba(150,200,255,0.9)', 1.6); // orb ricocheting off
+    g.restore();
+  });
+
+  icons.skates = make('passive', (g) => {
+    // Boot + steel blade with ice sparkle trail
+    const bg = g.createLinearGradient(24, 16, 44, 46);
+    bg.addColorStop(0, '#f2e9d8'); bg.addColorStop(1, '#b9a98e');
+    g.fillStyle = bg; // boot
+    poly(g, [[26, 18], [42, 18], [42, 38], [54, 42], [54, 50], [26, 50]]);
+    g.fill();
+    g.strokeStyle = 'rgba(60,50,34,0.6)'; g.lineWidth = 1.4; g.stroke();
+    g.strokeStyle = '#8a7a5e'; g.lineWidth = 1.2; // lace lines
+    for (const y of [24, 30, 36]) seg(g, [[28, y], [40, y]]);
+    g.fillStyle = '#d8dee6'; // blade holder + blade
+    g.fillRect(24, 52, 34, 3);
+    g.fillStyle = '#93a2b3';
+    g.beginPath();
+    g.moveTo(22, 58); g.lineTo(58, 58); g.lineTo(58, 55); g.lineTo(24, 55);
+    g.closePath(); g.fill();
+    // ice sparkles behind the glide
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    glint(g, 14, 40, 3, 'rgba(160,220,255,0.85)');
+    dot(g, 10, 50, 1.8, 'rgba(200,235,255,0.8)');
+    dot(g, 16, 58, 1.6, 'rgba(200,235,255,0.7)');
+    g.restore();
+  });
+
+  // ================= PHASE 21 — SYNERGIES (5) ============================
+  icons.heShell = make('synergy', (g) => {
+    // Cannon shell wreathed in holy flame
+    flameShape(g, 38, 8, 26, 0.05);
+    g.fillStyle = 'rgba(255,150,70,0.55)'; g.fill();
+    flameShape(g, 38, 16, 16, -0.05);
+    g.fillStyle = 'rgba(255,220,140,0.75)'; g.fill();
+    const st = g.createLinearGradient(24, 58, 52, 34);
+    st.addColorStop(0, '#252b33'); st.addColorStop(1, '#6d7a86');
+    g.save();
+    g.translate(40, 44); g.rotate(-0.7);
+    g.fillStyle = st; g.beginPath(); g.ellipse(0, 0, 15, 8, 0, 0, TAU); g.fill();
+    g.fillStyle = '#c8863f'; g.fillRect(-4, -8, 4, 16);
+    g.restore();
+    dot(g, 50, 30, 2.6, 'rgba(255,235,170,0.9)'); // ember flecks
+    dot(g, 28, 32, 1.8, 'rgba(255,200,120,0.8)');
+  });
+
+  icons.staticPelt = make('synergy', (g) => {
+    // Wolf-head silhouette (mirrored) with a static bolt crackling across it
+    g.fillStyle = '#7c8798';
+    poly(g, [[48, 18], [42, 30], [28, 26], [16, 34], [20, 44], [14, 50], [26, 52], [32, 60], [46, 56], [56, 40], [54, 26]]);
+    g.fill();
+    g.fillStyle = '#5a6472';
+    poly(g, [[54, 26], [48, 18], [42, 30], [50, 34]]); g.fill();
+    dot(g, 36, 36, 2.6, '#ffb648');
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    boltShape(g, 30, 14, 44, 14);
+    g.fillStyle = 'rgba(255,236,140,0.95)'; g.fill();
+    glint(g, 52, 16, 3, 'rgba(255,240,160,0.85)');
+    glint(g, 18, 58, 2.4, 'rgba(255,240,160,0.8)');
+    g.restore();
+  });
+
+  icons.homerKing = make('synergy', (g) => {
+    // Home plate + crossed bat + a shooting star arc
+    g.fillStyle = 'rgba(240,244,250,0.92)';
+    poly(g, [[28, 42], [48, 42], [48, 52], [38, 60], [28, 52]]);
+    g.fill();
+    g.strokeStyle = 'rgba(30,20,40,0.55)'; g.lineWidth = 1.4; g.stroke();
+    const wd = g.createLinearGradient(16, 52, 46, 14);
+    wd.addColorStop(0, '#7a5230'); wd.addColorStop(1, '#e0b285');
+    g.strokeStyle = wd; g.lineWidth = 6.5; g.lineCap = 'round';
+    seg(g, [[18, 50], [40, 18]]);
+    g.lineWidth = 9;
+    seg(g, [[40, 18], [46, 10]]);
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.strokeStyle = 'rgba(255,220,140,0.85)'; g.lineWidth = 2;
+    g.beginPath(); g.arc(38, 40, 26, -2.3, -0.9); g.stroke(); // ball arc
+    glint(g, 58, 24, 4.5, 'rgba(255,235,170,0.95)', 1.8);
+    dot(g, 52, 12, 1.8, 'rgba(255,235,170,0.8)');
+    g.restore();
+  });
+
+  icons.gutFeast = make('synergy', (g) => {
+    // Tongue-tip snaking into a beating heart
+    g.strokeStyle = '#d95f76'; g.lineWidth = 4; g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(12, 20);
+    g.bezierCurveTo(28, 22, 26, 44, 38, 44);
+    g.stroke();
+    dot(g, 12, 20, 3.4, '#ff8095');
+    heartPath(g, 34, 34, 24, 22);
+    const hg = g.createLinearGradient(0, 34, 0, 56);
+    hg.addColorStop(0, '#ff7d90'); hg.addColorStop(1, '#c22a4c');
+    g.fillStyle = hg; g.fill();
+    g.strokeStyle = 'rgba(80,10,25,0.6)'; g.lineWidth = 1.4; g.stroke();
+    g.fillStyle = 'rgba(255,225,230,0.75)'; // heartbeat highlight
+    g.beginPath(); g.arc(42, 40, 2.6, 0, TAU); g.fill();
+    // nourish sparkles
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    glint(g, 60, 28, 3, 'rgba(255,190,200,0.85)');
+    dot(g, 30, 54, 1.6, 'rgba(255,190,200,0.8)');
+    g.restore();
+  });
+
+  icons.avalanche = make('synergy', (g) => {
+    // Snow-capped boulder with tumbling snowflakes ahead of the roll
+    const rg = g.createRadialGradient(36, 34, 4, 40, 40, 22);
+    rg.addColorStop(0, '#c8d0da'); rg.addColorStop(0.6, '#8b97a6'); rg.addColorStop(1, '#525d6b');
+    g.fillStyle = rg;
+    poly(g, [[34, 18], [50, 24], [56, 40], [48, 56], [30, 58], [22, 42], [24, 26]]);
+    g.fill();
+    g.strokeStyle = 'rgba(24,30,38,0.7)'; g.lineWidth = 1.6; g.stroke();
+    g.strokeStyle = 'rgba(240,248,255,0.9)'; g.lineWidth = 2.6; // snow cap ridge
+    seg(g, [[24, 26], [34, 18], [50, 24]]);
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    // snowflake ticks tumbling ahead of the roll
+    for (const [x, y] of [[58, 30], [60, 44], [50, 58]]) glint(g, x, y, 3, 'rgba(220,240,255,0.9)', 1.4);
+    g.restore();
+  });
+
   return icons;
 }
 
@@ -1586,6 +1968,10 @@ export function buildItems() {
     bomb: bombSprite(),
     flame: flameSprite(),
     explosion: explosionSprite(),
+    // Phase 21 (D96) projectile sprites
+    shell: shellSprite(),
+    boulder: boulderSprite(),
+    web: webSprite(),
     burn: burnSprite(),
     blight: blightSprite(),
     shadowPickup: shadowSprite(7, 3, 0.30),

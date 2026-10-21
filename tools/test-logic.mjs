@@ -247,8 +247,8 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 // --- Passives / character starting weapons / boss / spawner weights ---
 {
   let pasOk = true;
-  for (const p of Object.values(CFG.passives)) if (!(p.max > 0 && p.val > 0)) pasOk = false;
-  ok(pasOk, 'passives: max/val positive');
+  for (const p of Object.values(CFG.passives)) if (!(p.max > 0 && (p.val > 0 || (p.levels && p.levels.length > 0)))) pasOk = false;
+  ok(pasOk, 'passives: max positive + scalar val OR a levels table (P21 D95 items are table-based)');
   ok(CFG.characters.order.every((k) => CFG.weapons[CFG.characters[k].weapon]) && CFG.characters.ghost.weapon === null,
     'characters: starting weapons exist in weapons (ghost: none)');
   const bosses = Object.keys(CFG.enemies).filter((k) => CFG.enemies[k].boss);
@@ -273,14 +273,14 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   // No weapon cards at all (ownedW=5=cap) yet blight/tempest are offered → synergies do NOT
   // count against maxWeapons.
   const maxed = cardOffers({ wand: 5, garlic: 5, axe: 5, blades: 5, pistols: 5 }, { speed: 3, magnet: 3 }, {}, mulberry32(2));
-  const legalKeys = new Set(['hp', 'dmg', 'regen', 'blight', 'tempest']);
+  const legalKeys = new Set(['hp', 'dmg', 'regen', 'shield', 'skates', 'blight', 'tempest']);
   ok(maxed.length === 3 && maxed.every((c) => c.kind === 'passive' || c.kind === 'synergy')
     && maxed.every((c) => legalKeys.has(c.key)), 'cardOffers: exhausted pool → remaining passives + gated synergies only');
   // Phase 9 (11.5: cap 4→5; 12.6 rebaseline): 5 maxed weapons push ownedW to the cap with
   // no garlic (blight stays gated); all passives maxed → the pool is exactly the synergies whose
   // own sources are in hand {inferno, tempest, phoenix, heartMagnet}. cardOffers caps the draw
   // at 3 cards (unchanged), so assert 3 DISTINCT members of that exact set.
-  const trio = cardOffers({ pistols: 5, flame: 5, wand: 5, axe: 5, blades: 5 }, { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3 }, {}, mulberry32(4));
+  const trio = cardOffers({ pistols: 5, flame: 5, wand: 5, axe: 5, blades: 5 }, { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3, shield: 5, skates: 5 }, {}, mulberry32(4));
   const trioSet = new Set(['inferno', 'tempest', 'phoenix', 'heartMagnet']);
   ok(trio.length === 3 && trio.every((c) => c.kind === 'synergy' && trioSet.has(c.key))
     && new Set(trio.map((c) => c.key)).size === 3, 'cardOffers: gated pool {inferno, tempest, phoenix, heartMagnet} → 3 distinct drawn (12.6)');
@@ -314,7 +314,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   // {garlic, blades, flame, bow, snowball, ringLightning} new-weapon L1 + {phoenix, heartMagnet}.
   // Cap 4 (2P): new-weapon slots closed → pool = {phoenix, heartMagnet} only.
   const w4 = { wand: 5, axe: 5, pistols: 5, bombs: 5 };
-  const NEW_W = ['garlic', 'blades', 'flame', 'bow', 'snowball', 'ringLightning'];
+  const NEW_W = Object.keys(CFG.weapons).filter((k) => !(k in w4)); // P21: every unowned weapon is a legal L1 offer
   const GATED_S = ['phoenix', 'heartMagnet'];
   for (let seed = 1; seed <= 3; seed++) {
     const draw = cardOffers(w4, allPassMax, {}, mulberry32(seed), 5);
@@ -401,8 +401,10 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   const rates = WEAPONS.map((k) => seen[k] / M);
   const mean = rates.reduce((a, b) => a + b, 0) / rates.length;
   const maxDev = Math.max(...rates.map((r) => Math.abs(r - mean)));
-  ok(mean > 0.15 && maxDev < 0.05,
-    `15.4: uniform draw — weapon offer rates equal (mean ${mean.toFixed(3)}, max dev ${maxDev.toFixed(3)})`);
+  // P21 rebaseline: expected equal-odds rate = 3 cards ÷ (all weapons + all passives) pool.
+  const expMean = 3 / (WEAPONS.length + Object.keys(CFG.passives).length);
+  ok(Math.abs(mean - expMean) < 0.02 && maxDev < 0.05,
+    `15.4: uniform draw — weapon offer rates equal (mean ${mean.toFixed(3)} vs expected ${expMean.toFixed(3)}, max dev ${maxDev.toFixed(3)})`);
   // Determinism: same seed → identical draw.
   const one = cardOffers({}, {}, {}, mulberry32(7), 5);
   const two = cardOffers({}, {}, {}, mulberry32(7), 5);
@@ -1133,8 +1135,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
 
 // --- 11.2 host-authoritative sync: snapshot codec + per-player ownership ---
 {
-  ok(WEAPON_KEYS.length === 10 && PASSIVE_KEYS.length === 5 && SYNERGY_KEYS.length === 10 && ENEMY_KEYS.length === 9,
-    '11.2: key tables follow CFG order/counts (12.6 rebaseline: 10 synergies)');
+  ok(WEAPON_KEYS.length === 19 && PASSIVE_KEYS.length === 7 && SYNERGY_KEYS.length === 15 && ENEMY_KEYS.length === 9,
+    '11.2: key tables follow CFG order/counts (P21 rebaseline: 19 weapons · 7 passives · 15 synergies)');
 
   const p = new Player({});
   p.reset(10, 20);
@@ -1144,7 +1146,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   p.actLeft = { skip: 2, reroll: 1, banish: 5 };
   p.xp = 12.345; p.hp = 55.55; p.dashT = 0.333; p.dashCd = 1.666; p.flip = true;
   const ps = playerSnap(p);
-  ok(ps.length === 37, '11.2: playerSnap is 37 slots (SNAP_V=6, 18.3 rebaseline: actLeft tail)');
+  ok(ps.length === 57, '11.2: playerSnap is 57 slots (SNAP_V=7, P21 rebaseline: 19+7+15 re-layout + 4-slot companion tail)');
   const p2 = new Player({});
   p2.reset(0, 0);
   applyPlayerSnap(p2, ps);
@@ -1302,9 +1304,11 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
 // --- 11.6.1 character roster: CFG table + per-char stats (D28/D56–D62; stat values O pending user approval) ---
 {
   const C = CFG.characters;
-  ok(C.order.length === 4 && C.order.every((k) => C[k] && C[k].name && C[k].desc), '11.6.1: order defines 4 named chars with select desc');
+  ok(C.order.length === 9 && C.order.every((k) => C[k] && C[k].name && C[k].desc), '11.6.1: order defines 9 named chars with select desc (P21)');
   ok(C.mage.cost === 0 && C.ranger.cost === 1500 && C.warden.cost === 3500 && C.swash.cost === 7500,
     '11.6.1: D58 costs — mage 0, ranger 1500, warden 3500, swash 7500');
+  ok(C.baseball.cost === 5000 && C.werewolf.cost === 7500 && C.golem.cost === 10000 && C.toad.cost === 12500 && C.gunslinger.cost === 15000,
+    '11.6.1: D96 unlock ladder — 5000/7500/10000/12500/15000 after swash');
   ok(C.order.every((k) => CFG.weapons[C[k].weapon]) && C.ghost.weapon === null, '11.6.1: starting weapons in weapons (ghost: none)');
   ok(new Set(C.order.map((k) => C[k].weapon)).size === C.order.length, 'D91: every character has a DISTINCT starting weapon (co-op zero-duplicate law — new roster entries must keep this)');
   ok(C.ghost.hp === 100 && C.ghost.dmg === 1 && C.ghost.speed === 265, '11.6.1: ghost = baseline (100 / 1.0 / 265)');
@@ -1327,6 +1331,12 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     ok(pl.maxHp === C[k].hp && pl.hp === C[k].hp
       && Object.keys(pl.weapons).length === (w ? 1 : 0)
       && (!w || pl.weapons[w] === 1), `11.6.1: ${k} reset → hp ${C[k].hp} + starting weapon ${w || 'none'}`);
+    // 21.2 fix: a stale build from the previous run must die on reset — a solo startRun never
+    // passes through _applyChar's weapons-clear (co-op path only); the fresh-player pin above missed this.
+    pl.weapons[w || 'axe'] = 5; pl.weapons.bat = 2;
+    pl.reset(0, 0);
+    ok(Object.keys(pl.weapons).length === (w ? 1 : 0) && (!w || pl.weapons[w] === 1),
+      `21.2: ${k} reset kills the old run's weapons (starter only survives)`);
   }
   for (const k of [...C.order, 'ghost']) {
     const t = { charKey: k, passives: {} };
@@ -1887,8 +1897,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   pSnap.synergies.heartPiercer = 3;
   const snapSlots = playerSnap(pSnap);
   const S_OFF = 9 + WEAPON_KEYS.length + PASSIVE_KEYS.length; // mirrors sync.js header offsets
-  ok(snapSlots.length === 37 && snapSlots[S_OFF + SYNERGY_KEYS.indexOf('heartPiercer')] === 3,
-    '12.6 sync: heartPiercer level 3 survives the wire (37-slot snap, 18.3 rebaseline)');
+  ok(snapSlots.length === 57 && snapSlots[S_OFF + SYNERGY_KEYS.indexOf('heartPiercer')] === 3,
+    '12.6 sync: heartPiercer level 3 survives the wire (57-slot snap, P21 rebaseline)');
 }
 
 // --- 19.1 equipment row (HTML + CSS content asserts; browser render verified on Pages) ---
@@ -2334,9 +2344,9 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
 
   // sync.js unpackState: value-level sanitization (serve.mjs relays inner arrays
   // unvalidated — it only caps counts; the client gate must catch garbage itself).
-  const st0 = stateMsg(1, 1, 1, 1, [new Array(37).fill(1)], [[1, 0, 1, 1, 1, 1, 0, 0]], [[0, 0, 1, 1]]);
+  const st0 = stateMsg(1, 1, 1, 1, [new Array(57).fill(1)], [[1, 0, 1, 1, 1, 1, 0, 0]], [[0, 0, 1, 1]]);
   ok(unpackState(st0) === st0, 'unpack audit: valid numeric body accepted');
-  const badP = (i, v) => { const p = new Array(37).fill(1); p[i] = v; return unpackState({ ...st0, players: [p] }); };
+  const badP = (i, v) => { const p = new Array(57).fill(1); p[i] = v; return unpackState({ ...st0, players: [p] }); };
   ok(badP(0, '10') === null && badP(2, NaN) === null,
     'unpack audit: non-numeric player slot → null (no NaN/string poisoning)');
   ok(unpackState({ ...st0, enemies: [[1, 99, 1, 1, 1, 1, 0, 0]] }) === null,
@@ -2457,17 +2467,252 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(g.near(-50, -50).length === 0 && g._outRange.length === 0, 'HashGrid.clear: map + scratch released');
 }
 
+// --- Phase 21 (D96): nine new weapons + Mirror Shield + Ice Skates — mechanics ---
+{
+  const C = CFG.combat;
+  const mk = (x, y, o = {}) => ({ x, y, vx: 0, vy: 0, r: 13, hp: 300, maxHp: 300, flash: 0, dead: false, boss: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0, ...o });
+  const stub = (list, extra = {}) => ({ list, grid: { near: () => list, range: () => list }, ...extra });
+  const near2 = (a, b, t = 0.6) => Math.abs(a - b) < t;
+
+  // Tank Cannon: pierce + terminal blast (shellBlastK) + heShell ignite on the blast.
+  {
+    const c = new Combat();
+    const owner = { x: 0, y: 0, dmgMul: 1, dead: false };
+    const e1 = mk(100, 100), e2 = mk(120, 100), e3 = mk(300, 100);
+    c.fireShell(0, 100, 0, 100, 70, { dps: 12, dur: 2.5 }, owner);
+    for (let i = 0; i < 120 && c.shells.length; i++) c.update(1 / 60, [], stub([e1, e2, e3]));
+    ok(c.shells.length === 0, 'P21 cannon: shell consumed by the terminal blast');
+    ok(near2(e1.hp, 150, 0.5) && near2(e2.hp, 150, 0.5),
+      `P21 cannon: direct 100 through the first foe; the second takes 100 + blast (×${C.shellBlastK}=50) — both also caught in the blast (${e1.hp}/${e2.hp})`);
+    ok(e3.hp === 300, 'P21 cannon: blast radius 70 spares the far foe');
+    ok(e1.burnT > 0 && e1.burnDps === 12, 'P21 cannon: heShell ignite rides the blast');
+  }
+
+  // Continuous Laser: every frame of `dur`, only foes within `w` of the segment.
+  {
+    const c = new Combat();
+    const pl = new Player({ h: 64 }); pl.reset(0, 0); pl.aimAng = 0;
+    const sy = pl._spawnY();
+    const e1 = mk(150, sy + 4), e2 = mk(150, sy + 40);
+    c.fireBeam(pl, { dur: 0.2, dps: 60, len: 240, w: 12 });
+    for (let i = 0; i < 12; i++) c.update(1 / 60, [pl], stub([e1, e2]));
+    ok(near2(e1.hp, 300 - 60 * 0.2), `P21 laser: dps×dur over the beam window (${e1.hp})`);
+    ok(e2.hp === 300, 'P21 laser: 40 px off the segment stays clean (w 12 + r 13 < 40)');
+    c.update(1 / 60, [pl], stub([e1, e2]));
+    ok(c.beams.length === 0, 'P21 laser: beam ends after dur');
+  }
+
+  // Rolling Boulder: one-per-owner, decay^hits, squish class, avalanche stacks, crumble.
+  {
+    const c = new Combat();
+    const pl = new Player({ h: 64 }); pl.reset(0, 0);
+    const e1 = mk(112, 100), e2 = mk(160, 100, { r: 11 }), e3 = mk(208, 100);
+    c.fireBoulder(pl, 100, 100, 1, 0, 100, { stacks: 2, bonus: 10 });
+    ok(pl._boulder === c.boulders[0] && c.boulders.length === 1, 'P21 boulder: one on screen + owner slot set');
+    for (let i = 0; i < 90; i++) c.update(1 / 60, [pl], stub([e1, e2, e3]));
+    ok(e1.hp === 300 - 110 && e3.hp === 300 - 110 * Math.pow(C.boulderDecay, 2),
+      `P21 boulder: (dmg+bonus)×decay^hits (${e1.hp}/${e3.hp})`);
+    ok(e2.dead, 'P21 boulder: squish-kills the r≤12 size class regardless of HP');
+    ok(e1.slowStacks.length === 2, 'P21 boulder: avalanche adds its slow stacks per hit');
+    // max-hits crumble: six foes on the line → the sixth hit kills the boulder mid-path
+    const c2 = new Combat(); const pl2 = new Player({ h: 64 }); pl2.reset(0, 0);
+    const six = [150, 200, 250, 300, 350, 400, 450].map((x) => mk(x, 60));
+    c2.fireBoulder(pl2, 100, 60, 1, 0, 100, null);
+    for (let i = 0; i < 240; i++) c2.update(1 / 60, [pl2], stub(six));
+    ok(c2.boulders.length === 0 && pl2._boulder === null, 'P21 boulder: crumbles at maxHits + owner slot cleared');
+    ok(six[6].hp === 300, `P21 boulder: the 7th foe never gets hit (budget ${C.boulderMaxHits})`);
+    // off-map exit clears the slot too
+    const c3 = new Combat(); const pl3 = new Player({ h: 64 }); pl3.reset(60, 60);
+    c3.fireBoulder(pl3, 40, 60, -1, 0, 100, null);
+    for (let i = 0; i < 30; i++) c3.update(1 / 60, [pl3], stub([]));
+    ok(c3.boulders.length === 0 && pl3._boulder === null, 'P21 boulder: rolling off the map clears the one-at-a-time rule');
+  }
+
+  // Web-slingers: burst on arrival + HOLD (freeze-like status on the enemy fields).
+  {
+    const c = new Combat();
+    const owner = { x: 0, y: 0, dmgMul: 1, dead: false };
+    const e1 = mk(90, 105), e2 = mk(300, 100);
+    c.fireWeb(0, 100, 100, 100, 20, 90, 0.8, owner);
+    for (let i = 0; i < 30 && c.webs.length; i++) c.update(1 / 60, [], stub([e1, e2]));
+    ok(c.webs.length === 0 && e1.hp === 280 && e1.holdT === 0.8, 'P21 web: burst damages + holds the caught foe');
+    ok(e2.holdT === undefined && e2.hp === 300, 'P21 web: far foe untouched');
+  }
+
+  // Baseball Bat: arc gate + huge knockback + deterministic HOMERUN (Math.random=0 → always).
+  {
+    const c = new Combat();
+    const pl = new Player({ h: 64 }); pl.reset(0, 100); pl.aimAng = 0;
+    const oy = pl._spawnY();
+    const e1 = mk(50, oy), e2 = mk(0, oy + 50); // e2: 90° off a 100° arc → outside
+    c.enemies = stub([e1, e2]); // combat reads this.enemies (host always has it after the first step)
+    const S = CFG.weapons.bat.levels[0];
+    c.batSwing(pl, S);
+    ok(e1.hp === 300 - S.dmg && e1.vx === C.batKbImpulse * S.kb && e2.hp === 300,
+      `P21 bat: in-arc hit with ×${S.kb} knockback impulse (${e1.vx}); 90° foe outside the ${S.arc}° arc`);
+    const e3 = mk(50, oy, { hp: 100000 });
+    const R0 = Math.random;
+    Math.random = () => 0; // the documented spread-MINIMUM pin → HOMERUN fires for sure
+    c.enemies = stub([e3]);
+    c.batSwing(pl, S);
+    ok(e3.dead, 'P21 bat: HOMERUN one-hit-KOs a non-boss at rand 0');
+    const e4 = mk(50, oy, { hp: 100000, boss: true });
+    c.enemies = stub([e4]);
+    c.batSwing(pl, S);
+    ok(!e4.dead, 'P21 bat: HOMERUN never fires on a boss (rand 0 does not cheat the boss gate)');
+    Math.random = R0;
+    // homerKing synergy swaps the odds row (1-in-50 → rand 0.005 still under 1)
+    const e5 = mk(50, oy, { hp: 100000 });
+    pl.synergies.homerKing = 5; Math.random = () => 0.0005; // ×50 = 0.025 < 50 ✓, ×500 = 25 > 1 ✗
+    c.enemies = stub([e5]);
+    c.batSwing(pl, S);
+    ok(e5.dead, 'P21 bat: homerKing L5 odds (1-in-50) make the same roll a HOMERUN');
+    Math.random = R0;
+  }
+
+  // Frog Tongue: latch + poison DoT + drag to the player + eat-on-kill heal (non-boss).
+  {
+    const c = new Combat();
+    const pl = new Player({ h: 64 }); pl.reset(0, 0); pl.maxHp = 200; pl.hp = 50; // tall pool so the heal math, not the player cap, is under test
+    const e1 = mk(100, 0, { hp: 300 });
+    c.fireTongue(pl, e1, 34, 6, 3.2, 1);
+    ok(e1.poisonT === 3.2 && e1.poisonDps === 6 && e1.drag !== null, 'P21 tongue: poison channel + drag armed');
+    for (let i = 0; i < 30; i++) c.update(1 / 60, [], stub([e1]));
+    ok(e1.drag === null && near2(e1.x, 0, 0.01) && near2(e1.y, 0, 0.01), `P21 tongue: foe dragged onto the player (${e1.x.toFixed(1)},${e1.y.toFixed(1)})`);
+    ok(e1.hp < 300 - 34, 'P21 tongue: poison keeps ticking after the drag');
+    const e2 = mk(100, 0, { hp: 10, maxHp: 100 });
+    c.fireTongue(pl, e2, 34, 6, 3.2, 1);
+    ok(e2.dead && near2(pl.hp, 50 + 8), `P21 tongue: lash-killed non-boss is eaten → min(15, 2+0.06×100)=8 heal (${pl.hp})`);
+    pl.hp = 50;
+    const e3 = mk(100, 0, { hp: 10, maxHp: 100 });
+    c.fireTongue(pl, e3, 34, 6, 3.2, 2.5); // gutFeast multiplies the heal granted (base cap applies to the base heal)
+    ok(near2(pl.hp, 70), `P21 tongue: gutFeast ×2.5 on the 8-heal → 20 (${pl.hp})`);
+    pl.hp = 50;
+    const e4 = mk(100, 0, { hp: 10, maxHp: 100, boss: true });
+    c.fireTongue(pl, e4, 34, 6, 3.2, 1);
+    ok(pl.hp === 50, 'P21 tongue: bosses are never eaten (no heal)');
+  }
+
+  // Cannonball: player-ball ricochet — impact-point positioning + 0.9^ decay + budget.
+  {
+    const c = new Combat();
+    const pl = new Player({ h: 64 }); pl.reset(0, 0);
+    const e1 = mk(40, 0, { hp: 100000 }), e2 = mk(90, 0, { hp: 100000 });
+    pl._ball = { t: 0, target: e1, hits: 0, hitsMax: 2, hit: new Set(), dmg: 60 };
+    for (let i = 0; i < 300 && pl._ball; i++) pl._ballStep(1 / 60, stub([e1, e2]), c);
+    ok(e1.hp === 100000 - 60 && e2.hp === 100000 - 60 * 0.9, `P21 ball: ×0.9^ ricochet decay (${e1.hp}/${e2.hp})`);
+    ok(!pl._ball && near2(pl.x, 90, 0.5) && pl.vx === 0, `P21 ball: ends at the impact point with the budget spent (x=${pl.x.toFixed(1)})`);
+  }
+
+  // Wolf companion: spawn + pounce + bleed + fixed 2.0 s cd + leash clamp + staticPelt.
+  {
+    const c = new Combat();
+    const pl = new Player({ h: 64 }); pl.reset(200, 200); pl.weapons.wolf = 1;
+    const e1 = mk(300, 200, { hp: 100000 });
+    let leashed = true;
+    for (let i = 0; i < 600; i++) {
+      c.update(1 / 60, [pl], stub([e1]));
+      if (pl._companion && Math.hypot(pl._companion.x - pl.x, pl._companion.y - pl.y) > C.companionLeash + C.companionSpeed / 60 + 1) leashed = false;
+    }
+    ok(pl._companion !== null, 'P21 wolf: companion spawns for a wolf owner');
+    ok(leashed, 'P21 wolf: companion never drifts past companionLeash');
+    ok(e1.hp < 100000 - 30, 'P21 wolf: pounce deals L1 dmg + bleed DoT accumulates');
+    ok(e1.bleedT > 0 && e1.bleedDps === 8, 'P21 wolf: bleed channel armed on the bite');
+    // bites are ≥ 2.0 s apart (spec-fixed cd): count bleeds re-arming across time
+    const t0 = c.t; const bites = [];
+    for (let i = 0; i < 60 * 10; i++) {
+      const armed = e1.bleedT; e1.bleedT = 0;
+      c.update(1 / 60, [pl], stub([e1]));
+      if (e1.bleedT > 0 && !armed) bites.push(c.t);
+    }
+    ok(bites.length >= 2 && bites.every((t, i) => i === 0 || t - bites[i - 1] >= 1.9),
+      `P21 wolf: pounce cd never below the fixed 2.0 s (${bites.map((b) => (b - t0).toFixed(1)).join(', ')})`);
+    // staticPelt: the bite adds a shock stack
+    const pl2 = new Player({ h: 64 }); pl2.reset(300, 300); pl2.weapons.wolf = 1; pl2.synergies.staticPelt = 1;
+    const c2 = new Combat();
+    const e2 = mk(400, 300, { hp: 100000 });
+    for (let i = 0; i < 600; i++) c2.update(1 / 60, [pl2], stub([e2]));
+    ok(e2.shockStacks.length >= 1, 'P21 wolf: staticPelt puts a shock stack on the pounce');
+  }
+
+  // Gatling Gun (player-side): 40-round mag at the shot cadence → 3.0 s reload → fresh mag.
+  {
+    const c = new Combat();
+    const pl = new Player({ h: 64, run: [0], idle: [0] }); pl.reset(300, 300); pl.weapons = { gatling: 1 };
+    const e = mk(340, 300);
+    const world = { collidersNear: () => [] };
+    const G = CFG.weapons.gatling;
+    pl.update(1 / 60, { x: 0, y: 0 }, c, stub([e]), world); // _gatMag starts 0 → arms the first mag
+    for (let i = 0; i < 30; i++) pl.update(1 / 60, { x: 0, y: 0 }, c, stub([e]), world);
+    ok(pl._gatMag > 0 && pl._gatMag < G.burst && pl._gatReload <= 0,
+      `P21 gatling: mag drains at the shot cadence without reloading early (${pl._gatMag})`);
+    let reloadSeen = false;
+    let magAfterReload = 0;
+    for (let i = 0; i < 60 * 7; i++) {
+      pl.update(1 / 60, { x: 0, y: 0 }, c, stub([e]), world);
+      if (pl._gatReload > 0) reloadSeen = true;
+      else if (reloadSeen && pl._gatMag > magAfterReload) magAfterReload = pl._gatMag;
+    }
+    ok(reloadSeen && magAfterReload >= G.burst - 1,
+      `P21 gatling: empty mag → the fixed ${G.reload} s reload → fresh ${G.burst}-round mag (${magAfterReload})`);
+  }
+
+  // Mirror Shield: reflect orbs (3/window), reflected orbs hit foes, never players.
+  {
+    const c = new Combat();
+    const pl = new Player({ h: 64 }); pl.reset(300, 300); pl.passives.shield = 1;
+    const foe = mk(331, 268, { hp: 100 });
+    const o0 = { x: 330, y: 270, vx: -60, vy: 0, r: 6, dmg: 12, life: 4 };
+    c.update(1 / 60, [pl], stub([foe], { orbs: [o0] }));
+    ok(o0.reflected === true && o0.vx === 60, 'P21 shield: in-radius orb reverses outward + marks ally-side');
+    ok(pl._shieldBank.n === 2, 'P21 shield: charge bank spends per reflect (3 → 2)');
+    ok(foe.hp === 88, 'P21 shield: the reflected orb spends itself on the nearest foe');
+    // bank cap: five orbs in radius, only the two remaining charges reflect
+    const orbs5 = [1, 2, 3, 4, 5].map((i) => ({ x: 330 + i, y: 268, vx: -1, vy: 0, r: 6, dmg: 1, life: 4 }));
+    c.update(1 / 60, [pl], stub([], { orbs: orbs5 }));
+    ok(orbs5.filter((o) => o.reflected).length === 2, `P21 shield: only the 2 banked charges fire this window (${orbs5.filter((o) => o.reflected).length})`);
+    for (let i = 0; i < 60 * 5.1; i++) c.update(1 / 60, [pl], stub([], { orbs: [] }));
+    ok(pl._shieldBank.n === 3, 'P21 shield: window expiry re-arms all 3 charges');
+  }
+
+  // Ice Skates: speedMul in recomputeStats + glide deceleration + slide-damage BOTH.
+  {
+    const t = { charKey: 'mage', passives: { skates: 2 }, metaSpeed: 0 };
+    recomputeStats(t);
+    ok(Math.abs(t.speedMul - 1.075) < 1e-9, `P21 skates: L2 spd rides speedMul (${t.speedMul})`);
+    const mkP = (sk) => {
+      const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(400, 400); p.passives = sk ? { skates: 1 } : {}; p.vx = 400; p.vy = 0;
+      return p;
+    };
+    const world = { collidersNear: () => [] };
+    const c = new Combat(); const empty = stub([]);
+    const pS = mkP(true), pN = mkP(false);
+    pS.update(1 / 60, { x: 0, y: 0 }, c, empty, world);
+    pN.update(1 / 60, { x: 0, y: 0 }, c, empty, world);
+    const dS = 400 - pS.vx, dN = 400 - pN.vx;
+    ok(dN > 0 && dS > 0 && dS < dN * 0.6, `P21 skates: glide deceleration shrinks on release (${dS.toFixed(1)} vs ${dN.toFixed(1)})`);
+    // slide: brushing a foe while gliding hurts BOTH (once per 0.5 s lock)
+    const p2 = mkP(true); p2.x = 400; p2.y = 400; p2.vx = 300; p2.hp = p2.maxHp;
+    const foe = mk(415, 400, { hp: 300 });
+    p2.update(1 / 60, { x: 0, y: 0 }, c, stub([foe]), world);
+    ok(foe.hp === 300 - 2 && p2.hp === p2.maxHp - 2, `P21 skates: slide hits both for L1 slideDmg (foe ${foe.hp}, self ${p2.hp})`);
+    p2.update(1 / 60, { x: 0, y: 0 }, c, stub([foe]), world);
+    ok(foe.hp === 298, 'P21 skates: per-foe 0.5 s re-hit lock holds');
+  }
+}
+
 // D91 (user law 2026-10-20): ZERO shared/duplicate items in co-op — weapons, synergies AND passives.
 {
   const excl = new Set(['dmg', 'speed', 'blades']);
   let hitsExcl = 0;
   let hitsCtrl = 0;
-  for (let s = 0; s < 24; s++) {
+  for (let s = 0; s < 48; s++) {
     const o1 = cardOffers({}, {}, {}, mulberry32(s), 99, excl);
     if (o1.some((c) => (c.kind === 'passive' && (c.key === 'dmg' || c.key === 'speed')) || (c.kind === 'weapon' && c.key === 'blades'))) hitsExcl++;
     if (cardOffers({}, {}, {}, mulberry32(s), 99).some((c) => c.kind === 'passive' && c.key === 'dmg')) hitsCtrl++;
   }
-  ok(hitsExcl === 0, 'D91: other-owned passive/weapon keys never appear in offers (24 seeds)');
+  ok(hitsExcl === 0, 'D91: other-owned passive/weapon keys never appear in offers (48 seeds)');
   ok(hitsCtrl > 0, 'D91: control — the unowned passive DOES appear when not excluded (assert can fire)');
 }
 
