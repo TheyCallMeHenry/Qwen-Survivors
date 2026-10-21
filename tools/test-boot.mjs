@@ -528,8 +528,8 @@ function steer() {
       assert(bossCount(1) === 1, '11.11: 1P boss count != 1');
       const soloBosses = game.enemies.list.filter((e) => e.boss);
       assert(soloBosses.length === 1 && soloBosses[0].type === 'wraith', '11.11: solo m01 boss is not exactly one Wraith');
-      for (const [k, owner] of Object.entries(game.weaponOwner)) {
-        assert(owner === game.player, `11.11: solo weaponOwner "${k}" is not owned by the local player`);
+      for (const [k, owner] of Object.entries(game.itemOwner)) {
+        assert(owner === game.player, `11.11: solo itemOwner "${k}" is not owned by the local player`);
       }
       assert(game._ownerExclusion(game.player).size === 0, '11.11: solo owner exclusion is not empty');
     }
@@ -2147,14 +2147,14 @@ m03RunDone = true;
   // Deterministic baseline: the pump's rng picks (and the forced picks below, which
   // bypass the offer-level cap) must not leak into this section — every player back
   // to the starting wand, ownership map cleared.
-  hostG.weaponOwner = {};
+  hostG.itemOwner = {};
   for (const p of hostG.players) p.weapons = { wand: 1 };
   // Host (local) player picks a NEW weapon through the real pick path.
   hostG.levelupQueue = 1;
   hostG.state = 'LEVELUP';
   hostG.cards = [{ kind: 'weapon', key: 'garlic', level: 1 }, { kind: 'passive', key: 'speed', level: 1 }];
   hostG.pickCard(0);
-  assert(hostG.player.weapons.garlic === 1 && hostG.weaponOwner.garlic === hostG.player,
+  assert(hostG.player.weapons.garlic === 1 && hostG.itemOwner.garlic === hostG.player,
     '11.5: first picker owns the weapon (host pick registered)');
   assert(!hostG._ownerExclusion(hostG.player).has('garlic'), '11.5: owner keeps their own upgrades (no self-exclusion)');
   const pl1 = hostG.players[1];
@@ -2168,6 +2168,8 @@ m03RunDone = true;
   hostG.pickCard(0);
   assert(hostG.player.passives.dmg >= 1 && JSON.stringify(pl1.passives) === pl1Before,
     '11.5: picks affect only the picker (remote passives untouched)');
+  assert(hostG.itemOwner.dmg === hostG.player, 'D91: passive pick registers first-picker ownership (all item kinds)');
+  assert(hostG._ownerExclusion({ weapons: {}, synergies: {}, passives: {} }).has('dmg'), 'D91: other-owned passive excluded from every other player\'s offers');
   // Remote auto-pick through the real path: passives maxed → no passive candidates; the
   // host-owned garlic can never be offered; any new-weapon pick registers pl1 as owner.
   pl1.passives = { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3 };
@@ -2178,7 +2180,7 @@ m03RunDone = true;
   // Ownership is asserted for true first-picks only: the starting wand
   // (CFG.characters.mage.weapon) is granted at reset by nobody, so upgrades to
   // pre-owned weapons never register an owner.
-  for (const k of gained) if (!(pl1Owned0[k] || 0) > 0) assert(hostG.weaponOwner[k] === pl1, `11.5: remote first-pick owns ${k}`);
+  for (const k of gained) if (!(k in pl1Owned0)) assert(hostG.itemOwner[k] === pl1, `11.5: remote first-pick owns ${k}`);
   pl1.passives = pl1Passives0; recomputeStats(pl1); // restore the live sim
   for (const p of hostG.players) assert(Object.keys(p.weapons).length <= 3, '11.5: cap respected (≤3 standard weapons, 3P)');
 
@@ -2323,7 +2325,7 @@ m03RunDone = true;
   // each be registered to their picker; live pump auto-picks may add legitimate
   // extra entries (11.5) — assert the true first-picks, not a strict count.
   const expectOwner = { [hostPair[0]]: hostG.player, [w1[0]]: pl1, [w2[0]]: pl2, [w3[0]]: pl3 };
-  assert(Object.keys(expectOwner).every((k) => hostG.weaponOwner[k] === expectOwner[k])
+  assert(Object.keys(expectOwner).every((k) => hostG.itemOwner[k] === expectOwner[k])
     && new Set(Object.values(expectOwner)).size === 4,
     '11.6.3: every ghost pick registered its distinct first-picker owner (11.5)');
   for (let i = 0; i < 30; i++) {
@@ -2451,8 +2453,8 @@ m03RunDone = true;
     '11.6.4: per-seat chars unique across the lobby (D56)');
   // 11.6b (D29 respec): starting-weapon pre-ownership — each seat's starting weapon is
   // registered owned at run start, so it is excluded from the OTHER seats' offers.
-  assert(hostG.weaponOwner.wand === hostG.player && hostG.weaponOwner.garlic === pl1
-    && hostG.weaponOwner.blades === pl2,
+  assert(hostG.itemOwner.wand === hostG.player && hostG.itemOwner.garlic === pl1
+    && hostG.itemOwner.blades === pl2,
     '11.6b: starting weapons pre-owned at run start (wand/garlic/blades → their seats)');
   assert(hostG._ownerExclusion(pl1).has('wand') && hostG._ownerExclusion(pl1).has('blades')
     && !hostG._ownerExclusion(pl1).has('garlic')
@@ -2466,7 +2468,7 @@ m03RunDone = true;
   hostG.cards = [{ kind: 'synergy', key: 'blight', level: 1 }];
   hostG.pickCard(0);
   assert(hostG.state === 'PLAYING', '11.6b: forced pick drains the queue (back to PLAYING)');
-  assert(hostG.player.synergies.blight === 1 && hostG.weaponOwner.blight === hostG.player,
+  assert(hostG.player.synergies.blight === 1 && hostG.itemOwner.blight === hostG.player,
     '11.6b: first picker owns the synergy (host pick registered)');
   assert(!hostG._ownerExclusion(hostG.player).has('blight'),
     '11.6b: owner keeps their own synergy (no self-exclusion)');

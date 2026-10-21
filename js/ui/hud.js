@@ -38,13 +38,16 @@ export function initHud(game, { icons } = {}) {
   const input = game.input;
 
   const setTxt = (el, s) => { if (el.textContent !== s) el.textContent = s; };
+  // Change-detected bar scale: PAUSED/LEVELUP hold every frame — skip identical DOM writes.
+  const setScale = (el, v) => { if (el._sx !== v) { el._sx = v; el.style.transform = `scaleX(${v})`; } };
 
   // --- 19.1: equipment row — every equipped weapon / synergy / passive shown as an icon
   // chip with its current level, live all run. Rebuilt only when the loadout signature
   // changes (a pick), never per frame. Order: weapons → synergies → passives.
+  // Same touch signal as main.js/game.js set (body.touch) — Input has no isTouch field.
   const equipDpr = Math.min(
     (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1),
-    (game.input && game.input.isTouch ? CFG.perf.dprCapMobile : CFG.perf.dprCapDesktop),
+    (document.body.classList.contains('touch') ? CFG.perf.dprCapMobile : CFG.perf.dprCapDesktop),
   );
   const equipSig = new WeakMap(); // player → last signature string
   const buildChip = (icon, level) => {
@@ -123,7 +126,7 @@ export function initHud(game, { icons } = {}) {
     const dash = el('div', 'seat-dash');
     root.append(face, name, pHpBar, row, equip, dash);
     hud.appendChild(root);
-    return { root, face, name, hpBar: pHpBar, hpFill: pHpFill, ohFill: pOhFill, hpLabel: pHpLabel, lvl, xpFill: pXpFill, equip, dash, _vis: false, _key: '', _sig: '' };
+    return { root, face, name, hpBar: pHpBar, hpFill: pHpFill, ohFill: pOhFill, hpLabel: pHpLabel, lvl, xpFill: pXpFill, equip, dash, _vis: false, _key: '', _sig: '', _cd: '' };
   };
   const panels = [mkPanel(1), mkPanel(2), mkPanel(3)];
   const ghostSheet = [null, null, null, null]; // seat → tinted ghost sheet cache (D62 per-seat tint)
@@ -151,12 +154,12 @@ export function initHud(game, { icons } = {}) {
     // 23.3: same over-health treatment as the seat-0 panel (bonus segment + ceiling label)
     const cap = pl.maxHp + (pl.overHeal || 0);
     const frac = pl.hp / pl.maxHp;
-    pan.hpFill.style.transform = `scaleX(${clamp(frac, 0, 1)})`;
-    pan.ohFill.style.transform = `scaleX(${clamp(pl.hp / cap, 0, 1)})`;
+    setScale(pan.hpFill, clamp(frac, 0, 1));
+    setScale(pan.ohFill, clamp(pl.hp / cap, 0, 1));
     pan.hpBar.classList.toggle('over', (pl.overHeal || 0) > 0);
     pan.hpBar.classList.toggle('low', frac < CFG.gems.lowHpFrac && (pl.overHeal || 0) <= 0);
     setTxt(pan.hpLabel, `${Math.max(0, Math.ceil(pl.hp))} / ${Math.ceil(cap)}`);
-    pan.xpFill.style.transform = `scaleX(${clamp(pl.xp / CFG.xpNeed(pl.level), 0, 1)})`;
+    setScale(pan.xpFill, clamp(pl.xp / CFG.xpNeed(pl.level), 0, 1));
     setTxt(pan.lvl, `LV ${pl.level}`);
     // 19.3: per-seat equipment chips (rebuilt only when this seat's loadout changes).
     const entries = loadoutEntries(pl);
@@ -170,11 +173,14 @@ export function initHud(game, { icons } = {}) {
         pan.equip.appendChild(chip);
       }
     }
-    pan.dash.style.setProperty('--cd', String(clamp(pl.dashCd / CFG.player.dashCd, 0, 1)));
+    const cd = String(clamp(pl.dashCd / CFG.player.dashCd, 0, 1));
+    if (pan._cd !== cd) { pan._cd = cd; pan.dash.style.setProperty('--cd', cd); }
   };
 
   // --- buttons (key M and the mute row funnel into one 'mute' toggle point) ---
-  btnPause.addEventListener('click', () => game.pause());
+  // Blur after click: #btn-pause stays visible through PAUSED→PLAYING, and a focused
+  // button would swallow Space-dash (input.js defers Space to focused UI).
+  btnPause.addEventListener('click', (e) => { e?.currentTarget?.blur?.(); game.pause(); });
   btnDash.addEventListener('pointerdown', (e) => { e.preventDefault(); input.queueDash(); });
   btnDashHud.addEventListener('pointerdown', (e) => { e.preventDefault(); input.queueDash(); });
 
@@ -208,13 +214,17 @@ export function initHud(game, { icons } = {}) {
   // --- per-frame (called from the render hook) ---
   let cdStr = '';
   let themeKey = null;
+  let shown = null;
   const update = () => {
     const st = game.state;
     const show = st === 'PLAYING' || st === 'LEVELUP' || st === 'PAUSED'; // 22.6: no DYING transient — death flips straight to GAMEOVER
-    hud.classList.toggle('hidden', !show);
-    hud.setAttribute('aria-hidden', show ? 'false' : 'true');
-    // 22.10: the touch dash ring lived on every screen (body.touch alone) — gate it to run states.
-    touchUi.hidden = !show;
+    if (show !== shown) {
+      shown = show;
+      hud.classList.toggle('hidden', !show);
+      hud.setAttribute('aria-hidden', show ? 'false' : 'true');
+      // 22.10: the touch dash ring lived on every screen (body.touch alone) — gate it to run states.
+      touchUi.hidden = !show;
+    }
     if (!show) return;
     const coop = !!(game.net && game.netRole !== 'solo');
     const chars = coop ? resolveChars(game.netRoster) : null;
@@ -231,17 +241,17 @@ export function initHud(game, { icons } = {}) {
     // over-health pool exists.
     const cap = p.maxHp + (p.overHeal || 0);
     const frac = p.hp / p.maxHp;
-    hpFill.style.transform = `scaleX(${clamp(frac, 0, 1)})`;
-    ohFill.style.transform = `scaleX(${clamp(p.hp / cap, 0, 1)})`;
+    setScale(hpFill, clamp(frac, 0, 1));
+    setScale(ohFill, clamp(p.hp / cap, 0, 1));
     hpBar.classList.toggle('over', (p.overHeal || 0) > 0);
     hpBar.classList.toggle('low', frac < CFG.gems.lowHpFrac && (p.overHeal || 0) <= 0);
     setTxt(hpLabel, `${Math.max(0, Math.ceil(p.hp))} / ${Math.ceil(cap)}`);
-    xpFill.style.transform = `scaleX(${clamp(p.xp / CFG.xpNeed(p.level), 0, 1)})`;
+    setScale(xpFill, clamp(p.xp / CFG.xpNeed(p.level), 0, 1));
     setTxt(lvlBadge, `LV ${p.level}`);
     syncEquip(p); // 19.1: seat-0 (solo = local) equipment row, rebuilt only on loadout change
-    // 17.3: count down the selected duration; ENDLESS (null) counts up.
-    const rd = game.runDuration === null ? null : (game.runDuration == null ? CFG.run.time : game.runDuration);
-    setTxt(timer, fmtTime(rd === null ? game.t : rd - game.t));
+    // 17.3: count down the selected duration; ENDLESS (null) counts up. runDuration is
+    // always number|null by the time a run state renders (set in game.js at run start).
+    setTxt(timer, fmtTime(game.runDuration === null ? game.t : game.runDuration - game.t));
     setTxt(score, String(game.liveScore()));
     // 14.1 (D54): live projected Soulshard award — same formula the run-end uses
     // (victory bonus can only land at the end; the game-over screen shows the total).

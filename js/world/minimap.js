@@ -1,4 +1,5 @@
-// Minimap: pre-rendered base (264×202 ≈ world/16) + live dots/camera rect.
+// Minimap: pre-rendered base (fixed 264×202 canvas; the world→map scale is
+// derived per world — ≈/16 on the 4200×3200 maps, smaller on m03) + live dots/camera rect.
 
 import { makeCanvas } from '../art/base.js';
 import { TAU } from '../utils/math.js';

@@ -1,8 +1,11 @@
 // Combat: player projectiles (Moonbolt bolts, Spectral Axe boomerangs),
 // Aegis Blades orbiters, Wraith Garlic aura, and the damage/knockback/kill
 // pipeline shared by all damage sources. Enemy queries come from Enemies.grid
-// (HashGrid, cell 96 — near() covers all hit radii except the garlic aura,
-// which uses range()). Node-safe: no canvas at top level.
+// (HashGrid, cell 96): near() covers every point-hit radius (max foe r 30 +
+// projectile r < cell); the garlic aura and the bomb/snowball AoEs use range()
+// with CFG.ai.gridCell headroom, so a foe whose centre sits past the exact
+// blast+foe-r bbox is still a candidate (the exact radius test follows).
+// Node-safe: no canvas at top level.
 import { CFG } from '../config.js';
 import { TAU, approach, rand } from '../utils/math.js';
 
@@ -297,6 +300,9 @@ export class Combat {
         this.damageEnemy(e, a.dmg, a.vx / sp, a.vy / sp, C.axeKb, a.owner);
       }
     }
+    // The bound lives here (not in _orbiters): an axe-only runner never enters
+    // _orbiters, and every spawn is a fresh object → the Map would grow all run.
+    if (this._axeCd.size > 512) this._axeCd.clear();
   }
 
   _garlic(dt, player, enemies) {
@@ -305,7 +311,7 @@ export class Combat {
     if (player._garlicT < C.garlicTick) return;
     player._garlicT = 0;
     const S = CFG.weapons.garlic.levels[player.weapons.garlic - 1];
-    const R = S.r + player.r + 8; // query radius (cell superset)
+    const R = S.r + player.r + CFG.ai.gridCell; // superset must reach the largest foe r (≤ cell)
     for (const e of enemies.grid.range(player.x, player.y, R)) {
       if (e.dead) continue;
       const rr = S.r + e.r;
@@ -341,10 +347,9 @@ export class Combat {
         const kd = Math.hypot(kx, ky) || 1;
         this.damageEnemy(e, S.dmg * player.dmgMul, kx / kd, ky / kd, C.orbitKb, player);
       }
-      if (fireT) this.fireBolt(bx, by, a + TAU / 4, tempestS.dmg * player.dmgMul, 0);
+      if (fireT) this.fireBolt(bx, by, a + TAU / 4, tempestS.dmg * player.dmgMul, 0, null, player);
     }
     if (this._orbCd.size > 512) this._orbCd.clear();
-    if (this._axeCd.size > 512) this._axeCd.clear();
   }
 
   _bullets(dt, enemies) {
@@ -420,7 +425,7 @@ export class Combat {
   _snowBurst(b, enemies) {
     const C = CFG.combat;
     this.explosions.push({ x: b.tx, y: b.ty, t: 0, dur: C.bombFlash, r: b.radius, frost: true });
-    for (const e of enemies.grid.range(b.tx, b.ty, b.radius)) {
+    for (const e of enemies.grid.range(b.tx, b.ty, b.radius + CFG.ai.gridCell)) {
       if (e.dead) continue;
       const dx = e.x - b.tx, dy = e.y - b.ty;
       const d = Math.hypot(dx, dy) || 1;
@@ -453,7 +458,7 @@ export class Combat {
   // one shock stack. The chain count (`jumps`) only matters when the shock proc fires.
   fireShockBolt(x, y, target, dmg, jumps, owner = null) {
     if (!target || target.dead) return;
-    if (owner._ringBeams) {
+    if (owner && owner._ringBeams) {
       owner._ringBeams.push({ x, y, tx: target.x, ty: target.y, t: 0, dur: CFG.combat.ringBeamDur, seed: Math.random() });
       if (owner._ringBeams.length > 48) owner._ringBeams.splice(0, owner._ringBeams.length - 48);
     }
@@ -516,7 +521,7 @@ export class Combat {
   _explode(b, enemies) {
     const C = CFG.combat;
     this.explosions.push({ x: b.x, y: b.y, t: 0, dur: C.bombFlash, r: b.radius });
-    for (const e of enemies.grid.range(b.x, b.y, b.radius)) {
+    for (const e of enemies.grid.range(b.x, b.y, b.radius + CFG.ai.gridCell)) {
       if (e.dead) continue;
       const dx = e.x - b.x, dy = e.y - b.y;
       const d = Math.hypot(dx, dy) || 1;

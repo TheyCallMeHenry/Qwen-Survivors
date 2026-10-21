@@ -14,12 +14,12 @@ Rules for every future edit — this file is loaded at every session start; its 
 7. Target: **this file ≤150 lines.** If it grows past that, compress on sight (never by deleting a durable fact without moving it first).
 9. **Overflow home (2026-09-06 compression pass):** narrative compressed OUT of this file moves verbatim to `docs/ARCHIVE.md` — never delete a durable fact outright. Snapshot semantics: steps still open remain authoritative in this file only.
 
-## Status — 2026-09-07
+## Status — 2026-10-20
 
 
-- **Active: none shipping — Phase 14 PUBLISHED (2026-09-07, session 34) at `533f730`** (in-run `#hud-shards` counter + unified co-op earnings, D54; Pages verified live). Next in feature queue: **21 → 2.9** (21.1 needs user O-resolutions first; leftovers: 11.13 NAS-side, 22.8 device repro; art backlog 23.5–23.8 user-pick).
-- **Gates (green on published tree `533f730`, session 34):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **760/760** · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0.
-- **Git:** `overnight-2026-08-22` = `main` = origin (docs publish 2026-10-20: AGENTS lawset D86–D90 + research doc; last feature code still Phase 14 `533f730`, Pages serving that).
+- **Active: none shipping — full-codebase review sweep DONE + COMMITTED (session 37, 2026-10-20):** 8 serial slice agents + integration; ~45 fixes incl. D91 zero-duplicate-items law (passives now locked in co-op, `itemOwner`) + D92 landmark solidity; findings doc `docs/accessibility-viewport-research-2026-10-20.md`. Feature queue unchanged: **21 → 2.9** (21.1 needs user O-resolutions; keep D91 in roster design) + leftovers 11.13 NAS / 22.8 phone / art backlog 23.5–23.8. Open user calls: a11y A/B/C (see research doc + Resume Notes) + push.
+- **Gates (green on committed sweep tree, session 37):** `node tools/check.mjs` **34/34** · `node tools/test-logic.mjs` **860/860** (+100 sweep regression tests) · `node tools/test-boot.mjs` **PASS boot-sim runs=4** — `[10.4-bench]` radial=0.0. Diagnostics clean. Same gate trio green at every stage of the sweep.
+- **Git:** sweep tree COMMITTED on `overnight-2026-08-22` (session 37; NOT pushed — push awaits user word); `main` = origin still at docs head `13cb344` (last shipped code Phase 14 `533f730`, Pages serving that). `unsloth-tmp/` gitignored.
 - **Server:** DOWN (port 47893 not listening, re-checked session 27); recipe in `docs/ENV.md`.
 
 ## Master Checklist
@@ -116,13 +116,13 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 ### Phase 24 — Visual overhaul, 2.5D isometric (COMPLETE + PUBLISHED `7c4f01c`; PLAN §3.16)
 - [x] 24.1–24.9 `formShade()` single top-left key light on every opaque body (chars / enemies / bosses / blade + axe; additive energy sprites deliberately unshaded) · projectile-variant seam (`v` tag at fire sites, `(Var&&Var[v])||Img` lookup, base byte-identical) + 7 distinct synergy projectile skins · `decorShadow` contact shadows under standing decor · death-wisp hue variety · **deferred (user-approved): HUD/menu/CSS chrome restyle**
 
-## Resume Notes — session 34, 2026-09-07 (live state only; rewritten each session per Format contract)
+## Resume Notes — session 37, 2026-10-20 (live state only; rewritten each session per Format contract)
 
-**Where we are (session 34 DONE):** **Phase 14 PUBLISHED at `533f730`** (ff-merge → `main`, both branches pushed, Pages verified via live `index.html` HUD `◆` counter) — `#hud-shards` live projection (`setTxt(shardsFor({score: liveScore()})) ◆`, `hud.js`) + unified co-op earnings: host gain on `sendClosed('run-end', gain)` → serve relays sanitized `shards` (host-seat close only) → client `_netClosed` accrues `sanitizeShards()` in full into local meta (meta stays player-specific, D53 otherwise holds; old-host/old-client wire additive). Docs/README/PLAN §3.20/ENV synced.
+**Where we are (session 37 DONE):** full-codebase review sweep complete — 8 strictly-serial slice agents (core, combat, spawns, net, world, render/art, UI/mobile, audio/utils) + integration pass; ~40 fixes, ~95 new regression tests. Fixes span every area; HIGH: `loop.js` rAF chain no longer severs on a frame exception; `conn.js` queues sends while CONNECTING (real-browser co-op joins never worked — boot's raw-socket mirror hid it); `lighting.js` base darkness no longer alpha-stacks to full black (`CFG.lighting.baseAlpha` now visible — intentional visual restoration); `player.js` over-heal re-heal exploit; `combat.js` AoE bbox headroom (30px missed ring, worst on bosses); `sfx.js` first-run chime always dropped (play() now ensures ctx). Co-op client: re-join runstart guard + seat-assigned remote chars (was always the local sheet) + dead-remote corpse no longer eats drops + host clamps remote input to axes range. `CFG.run.time` kept — pinned by two test-logic invariants (17.1), not dead. Perf: grid int-keys + reusable buffers, particle/pickup/world-gradient allocations baked or pooled; boot bench radial=0.0, update 0.28 ms/step.
 
-**NEXT (exact):** feature queue **21 → 2.9** — Phase 21 (extended roster, PLAN §3.13 verbatim) starts at **21.1 O-resolutions: needs user confirm** (per-weapon stats, item slot rules, character archetypes/stats/unlock costs, Cannonball×leash, boulder auto-kill size class). 11.13 needs the NAS; 22.8 needs a phone — not this environment.
+**NEXT (exact):** (1) a11y user calls per `docs/accessibility-viewport-research-2026-10-20.md` — (A) remove `maximum-scale=1, user-scalable=no` from index.html viewport (strong rec: zero text inputs + `#game` already `touch-action:none` kill the hack's only benefits; it fails WCAG 1.4.4 + axe meta-viewport); (B) arrow-key capture — keep (rec; not a keyboard trap, alternate pointing exists); (C) radiogroup roving tabindex (rec: adopt, ~10–15 lines). (2) push word for the sweep commit. (3) feature queue **21 → 2.9** — 21.1 O-resolutions MUST honor D91 (distinct starter weapons, zero starting passives). Lighting restoration (baseAlpha visible): KEPT per user. Old sweep open items (a) cooldowns/(b) landmarks/(e) orb-dmg RESOLVED by D91/D92 + changelog note below.
 
-**Gates (green on Phase 14 tree, session 34):** check.mjs **34/34** · test-logic **760/760** (+10) · boot `PASS boot-sim runs=4` · radial=0.0. Known boot flake 11.5 pump-rng: re-run once before bisecting.
+**Gates (green on sweep-merged tree, session 37):** check.mjs **34/34** · test-logic **855/855** (+95) · boot `PASS boot-sim runs=4` · diagnostics clean. Known boot flakes (re-run ONCE before bisecting): 11.5 pump-rng, long co-op-pump sections (11.12 hit once mid-sweep).
 
 **Git state:** `overnight-2026-08-22` = `main` = origin at `533f730` (tree clean). `unsloth-tmp/` gitignored.
 
@@ -134,9 +134,11 @@ Tank Cannon · laser beam · Wolf summon · Rolling Boulder · Web-slingers · G
 
 ## Decisions (binding)
 
-Full texts + one-line row index for **D1–D84** live in `docs/DECISIONS.md` (append-only numbering, revisions carry new numbers; Format contract §5). Open phases cite: D64 (11.13) · D54 (14) · D69 (21) · Phase 18 shipped under **D84** (supersedes D67 caps/opens).
+Full texts + one-line row index for **D1–D92** live in `docs/DECISIONS.md` (append-only numbering, revisions carry new numbers; Format contract §5). Open phases cite: D64 (11.13) · D54 (14) · D69 (21) · Phase 18 shipped under **D84** (supersedes D67 caps/opens). Binding design laws from session 37: **D91** zero shared/duplicate items in co-op — weapons, synergies AND passives (first picker owns; zero starting passives — restates D66) · **D92** landmark colliders always solid.
 
 ## Session Log (append-only, newest first; entries before session 24 archived verbatim to `docs/ARCHIVE.md`)
+
+- **2026-10-20 (session 37) — full-codebase review sweep (COMMITTED on `overnight-2026-08-22`, not pushed):** 8 strictly-serial sub-agent audits (AGENTS rule 19) over disjoint slices + parent integration of cross-slice REPORTEDs; every stage gate-verified by parent (rule 10). ~45 fixes / +100 tests; D91 zero-duplicate-items law (passives locked; `weaponOwner`→`itemOwner`) + D92 landmark solidity (goldens +1/+1/+2) + lighting baseAlpha restoration KEPT; a11y findings doc dated 2026-10-20; final gates 34/34 · 860/860 · boot runs=4 · diagnostics clean. Open: a11y A/B/C calls + push word.
 
 - **2026-10-20 (session 36d) — PUBLISHED to main (docs only):** ff-merge `overnight-2026-08-22` → `main` (`ed19ed4..9cbd54e`: lawset D86–D90 + dated research doc + USER-INPUT-LOG entry), both branches pushed; Pages unaffected (zero code change; last shipped code remains Phase 14 `533f730`). Backup branch `backup-agents-local` kept per user for later improve/revert assessment of the new rules. NEXT = feature queue 21 → 2.9.
 

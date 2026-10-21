@@ -90,10 +90,12 @@ export function applyPickupSnaps(pickups, arr) {
     const x = s[2], y = s[3];
     if (s[0] === 0) {
       const g = pickups.gems[s[1]];
+      if (!g) continue; // pool size is game-owned; an out-of-range slot is ignored
       g.on = true; g.x = x; g.y = y; g.vx = 0; g.vy = 0; g.val = 1; g.mag = false;
       g.ph = (x * 0.13 + y * 0.07) % (Math.PI * 2);
     } else {
       const h = pickups.hearts[s[1]];
+      if (!h) continue;
       h.on = true; h.x = x; h.y = y; h.ph = (x * 0.11 + y * 0.09) % (Math.PI * 2);
     }
   }
@@ -110,14 +112,19 @@ export function stateMsg(step, time, score, kills, players, enemies, pickups) {
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const arr = (v) => Array.isArray(v);
 
+// Every slot must hold a finite number: the relay passes inner arrays through
+// unvalidated, and a string/NaN would poison client render state otherwise.
+const allNum = (a) => { for (const v of a) if (!num(v)) return false; return true; };
+
 // Client-side validation: returns the message or null (malformed = ignored).
 export function unpackState(m) {
   if (!m || m.v !== SNAP_V) return null;
   if (!Number.isInteger(m.step) || !num(m.time) || !num(m.score) || !num(m.kills)) return null;
   if (!arr(m.players) || !arr(m.enemies) || !arr(m.pickups)) return null;
   const plen = 9 + WEAPON_KEYS.length + PASSIVE_KEYS.length + SYNERGY_KEYS.length + CFG.meta.actions.order.length;
-  for (const s of m.players) if (!arr(s) || s.length !== plen) return null;
-  for (const s of m.enemies) if (!arr(s) || s.length !== 8) return null;
-  for (const s of m.pickups) if (!arr(s) || s.length !== 4) return null;
+  for (const s of m.players) if (!arr(s) || s.length !== plen || !allNum(s)) return null;
+  // s[1] is fed straight into ENEMY_KEYS[...] on the client — keep it indexable.
+  for (const s of m.enemies) if (!arr(s) || s.length !== 8 || !allNum(s) || s[1] < 0 || s[1] >= ENEMY_KEYS.length) return null;
+  for (const s of m.pickups) if (!arr(s) || s.length !== 4 || !allNum(s) || (s[0] !== 0 && s[0] !== 1) || s[1] < 0) return null;
   return m;
 }

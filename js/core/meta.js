@@ -28,22 +28,22 @@ export function actionCost(key, level) {
 }
 
 export function loadMeta(key) {
-  const def = defaultMeta();
   try {
     const raw = JSON.parse(localStorage.getItem(key) || 'null');
-    if (!raw || typeof raw !== 'object') return def;
+    if (!raw || typeof raw !== 'object') return defaultMeta();
     const upgrades = {};
     for (const k of Object.keys(CFG.meta.upgrades)) {
       const v = raw.upgrades && typeof raw.upgrades[k] === 'number' ? raw.upgrades[k] : 0;
       upgrades[k] = Math.min(CFG.meta.upgrades[k].max, Math.max(0, Math.floor(v)));
     }
     // 18.2: actions ride the same profile; old saves (no key) default to locked — no data loss.
+    const actions = {};
     for (const k of CFG.meta.actions.order) {
       const v = raw.actions && typeof raw.actions[k] === 'number' ? raw.actions[k] : 0;
-      def.actions[k] = Math.min(CFG.meta.actions[k].max, Math.max(0, Math.floor(v)));
+      actions[k] = Math.min(CFG.meta.actions[k].max, Math.max(0, Math.floor(v)));
     }
-    return { shards: Math.floor(num(raw.shards)), upgrades, actions: def.actions };
-  } catch { return def; }
+    return { shards: Math.floor(num(raw.shards)), upgrades, actions };
+  } catch { return defaultMeta(); }
 }
 
 export function saveMeta(key, meta) {

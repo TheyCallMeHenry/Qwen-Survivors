@@ -12,22 +12,30 @@ export class Particles {
       this.pool.push({
         on: false, kind: DOT, x: 0, y: 0, vx: 0, vy: 0,
         life: 0, max: 1, size: 2, grav: 0,
-        r: 255, g: 255, b: 255, img: null, flip: false, str: '', fs: 15,
+        // col/fnt pre-rendered at spawn so draw() never builds strings (perf guardrail).
+        col: 'rgb(255,255,255)', img: null, flip: false, str: '', fs: 15, fnt: '700 15px system-ui, sans-serif',
       });
     }
     this.next = 0;
+    this.live = 0; // count of on-slots; lets _slot skip the scan when saturated
   }
 
   reset() {
     for (const p of this.pool) p.on = false;
+    this.live = 0;
   }
 
   // Ring-steal slot: first dead slot from `next`, else the ring head (oldest-ish).
+  // When saturated (live === cap) no dead slot exists, so the full scan can only
+  // miss — skip it (a burst of dots into an exhausted pool would otherwise cost
+  // O(cap) per spawn).
   _slot() {
     const n = this.pool.length;
-    for (let i = 0; i < n; i++) {
-      const p = this.pool[(this.next + i) % n];
-      if (!p.on) { this.next = (this.next + i + 1) % n; return p; }
+    if (this.live < n) {
+      for (let i = 0; i < n; i++) {
+        const p = this.pool[(this.next + i) % n];
+        if (!p.on) { this.live++; this.next = (this.next + i + 1) % n; return p; }
+      }
     }
     const p = this.pool[this.next];
     this.next = (this.next + 1) % n;
@@ -39,7 +47,7 @@ export class Particles {
     p.on = true; p.kind = DOT;
     p.x = x; p.y = y; p.vx = vx; p.vy = vy;
     p.life = p.max = life; p.size = size;
-    p.r = r; p.g = g; p.b = b; p.grav = grav;
+    p.col = `rgb(${r},${g},${b})`; p.grav = grav;
   }
 
   // Radial burst.
@@ -90,14 +98,15 @@ export class Particles {
     p.on = true; p.kind = TEXT;
     p.x = x; p.y = y; p.vy = -34;
     p.life = p.max = 0.7; p.fs = 15; p.str = str;
-    p.r = color[0]; p.g = color[1]; p.b = color[2];
+    p.col = `rgb(${color[0]},${color[1]},${color[2]})`;
+    p.fnt = `700 ${p.fs}px system-ui, sans-serif`;
   }
 
   update(dt) {
     for (const p of this.pool) {
       if (!p.on) continue;
       p.life -= dt;
-      if (p.life <= 0) { p.on = false; continue; }
+      if (p.life <= 0) { p.on = false; this.live--; continue; }
       p.vy += p.grav * dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
@@ -118,13 +127,13 @@ export class Particles {
         ctx.restore();
       } else if (p.kind === TEXT) {
         ctx.globalAlpha = Math.min(1, k * 1.6);
-        ctx.font = `700 ${p.fs}px system-ui, sans-serif`;
+        ctx.font = p.fnt;
         ctx.textAlign = 'center';
-        ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
+        ctx.fillStyle = p.col;
         ctx.fillText(p.str, p.x, p.y);
       } else {
         ctx.globalAlpha = k;
-        ctx.fillStyle = `rgb(${p.r},${p.g},${p.b})`;
+        ctx.fillStyle = p.col;
         ctx.beginPath();
         ctx.arc(p.x, p.y, Math.max(0.5, p.size * (0.5 + 0.5 * k)), 0, TAU);
         ctx.fill();

@@ -13,13 +13,16 @@ export function makeCanvas(w, h) {
 export function shadowSprite(rx, ry, alpha = 0.38) {
   const s = makeCanvas(rx * 2, rx * 2);
   const g = s.getContext('2d');
-  const grad = g.createRadialGradient(rx, ry, 0, rx, ry, rx);
+  // Centre the circle in the SQUARE source canvas: for ry < rx the vertical squash
+  // below then scales a whole soft ellipse — centring at (rx, ry) instead clipped
+  // the circle's top into a hard alpha band and offset the ellipse (decor shadows).
+  const grad = g.createRadialGradient(rx, rx, 0, rx, rx, rx);
   grad.addColorStop(0, `rgba(4,6,12,${alpha})`);
   grad.addColorStop(0.65, `rgba(4,6,12,${alpha * 0.5})`);
   grad.addColorStop(1, 'rgba(4,6,12,0)');
   g.fillStyle = grad;
   g.beginPath();
-  g.arc(rx, ry, rx, 0, TAU);
+  g.arc(rx, rx, rx, 0, TAU);
   g.fill();
   const out = makeCanvas(rx * 2, Math.max(2, ry * 2));
   const og = out.getContext('2d');
@@ -98,7 +101,8 @@ export function rimLight(ctx, color = 'rgba(170,196,255,0.30)') {
 // light across every character/enemy body. Call with the body path already current +
 // filled; it lays a right/bottom occlusion shade then a top-left rim-light in one step,
 // so all sprites read as lit from the same direction (2.5D volume). Bakes at build time
-// only — never called per frame. `x/y/w/h` bound the shape's box for the shade gradient.
+// only — never called per frame. The bottom shade spans the box (y..y+h); the right-side
+// shade ramps from the canvas left edge out to the box's right edge (x + w).
 export function formShade(ctx, x, y, w, h, opts = {}) {
   const { shade = 0.32, rim = 'rgba(180,205,255,0.34)' } = opts;
   // occlusion on the away-from-light side (right)

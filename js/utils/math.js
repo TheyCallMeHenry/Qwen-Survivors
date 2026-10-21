@@ -15,10 +15,12 @@ export const dist2 = (ax, ay, bx, by) => {
 
 export const angleTo = (ax, ay, bx, by) => Math.atan2(by - ay, bx - ax);
 
+// Wraps to (-PI, PI] — seam inclusive at +PI. Non-finite-safe: the obvious while-loop
+// spins forever on ±Infinity (and crawls on huge angles), so wrap by modulo.
 export const normAngle = (a) => {
-  while (a > Math.PI) a -= TAU;
-  while (a < -Math.PI) a += TAU;
-  return a;
+  if (!Number.isFinite(a)) return NaN;
+  a = ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
+  return a === -Math.PI ? Math.PI : a;
 };
 
 // Seeded PRNG (mulberry32). Deterministic per seed.

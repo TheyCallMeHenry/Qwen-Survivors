@@ -138,7 +138,9 @@ export class Enemies {
         tvy = ux * s;
         if (e.cd <= 0) {
           e.cd = rand(A.cultistShotCd[0], A.cultistShotCd[1]);
-          this.orbs.push({ x: e.x, y: e.y, vx: ux * A.orbSpeed, vy: uy * A.orbSpeed, life: CFG.combat.orbLife, r: CFG.combat.orbR });
+          // The orb rides its shooter's spawn-scaled dmg (diff × coopS) — contact damage
+          // uses e.dmg too; a raw CFG base here would under-scale on hard/co-op levels.
+          this.orbs.push({ x: e.x, y: e.y, vx: ux * A.orbSpeed, vy: uy * A.orbSpeed, life: CFG.combat.orbLife, r: CFG.combat.orbR, dmg: e.dmg });
         }
       }
     }
@@ -235,7 +237,7 @@ export class Enemies {
           const dx = p.x - o.x, dy = p.y - o.y;
           const rr = p.r + o.r;
           if (dx * dx + dy * dy < rr * rr) {
-            combat.damagePlayer(p, CFG.enemies.cultist.dmg, o.x, o.y);
+            combat.damagePlayer(p, o.dmg, o.x, o.y);
             gone = true;
             break;
           }

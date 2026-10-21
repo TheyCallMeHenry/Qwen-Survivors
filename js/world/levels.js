@@ -191,10 +191,12 @@ function layoutM01(seed) {
   }
   monoliths.push({ x: ringC.x, y: ringC.y }); // center stone
 
-  // --- scattered campfires near forest paths ---
+  // --- scattered campfires near forest paths (clamped: clusters sit only 200 px
+  // from the edge, so a raw ±260 offset could park fire+collider+light off-map) ---
   for (let i = 0; i < 4 + (rng() * 3 | 0); i++) {
     const c = pick(clusters);
-    campfires.push({ x: c.x + rand(-260, 260), y: c.y + rand(-260, 260) });
+    const p = clampPos(c.x + rand(-260, 260), c.y + rand(-260, 260));
+    campfires.push({ x: p.x, y: p.y });
   }
 
   // --- ~1000 ground decals ---
@@ -216,7 +218,7 @@ function layoutM01(seed) {
   // --- colliders ---
   const colliders = [];
   for (const t of trees) {
-    const r = t.kind === 'pineBig' ? 15 : t.kind === 'dead' ? 7 : 9 + t.s * 4; // ≈10–14
+    const r = t.kind === 'pineBig' ? 15 : 9 + t.s * 4; // ≈10–14
     colliders.push({ x: t.x, y: t.y, r });
   }
   for (const t of deadTrees) colliders.push({ x: t.x, y: t.y, r: 7 });
@@ -228,10 +230,11 @@ function layoutM01(seed) {
   for (const l of lakes) colliders.push({ x: l.x, y: l.y, rx: l.rx, ry: l.ry, ellipse: true });
   for (const m of mountains) colliders.push({ x: m.x, y: m.y - 30, r: m.w * 0.3 });
   for (const m of monoliths) colliders.push({ x: m.x, y: m.y, r: 12 });
-  colliders.push({ x: well.x, y: well.y, r: 16 });
+  colliders.push({ x: well.x, y: well.y, r: 16, landmark: true });
   for (const cf of campfires) colliders.push({ x: cf.x, y: cf.y, r: 10 });
   // keep spawn clear (player margin 70)
   const clear = (c) => {
+    if (c.landmark) return true; // named landmarks are ALWAYS solid — a spawn landing in their footprint is resolved by the player's collider push-out, not by deleting the landmark
     const rr = c.r || Math.max(c.rx, c.ry) || 0;
     return Math.hypot(c.x - playerStart.x, c.y - playerStart.y) > 70 + rr;
   };
@@ -364,15 +367,18 @@ function layoutM02(seed) {
     }
   }
 
-  // --- lanterns: 5 village-ring + 3 pond-ring ---
+  // --- lanterns: 5 village-ring + 3 pond-ring (clamped: pond can sit 300 px from
+  // the edge, so a ring radius of rx+60 could put decor+collider+light off-map) ---
   const lanterns = [];
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * TAU + rand(-0.3, 0.3);
-    lanterns.push({ x: village.x + Math.cos(a) * rand(240, 300), y: village.y + Math.sin(a) * rand(180, 230) });
+    const q = clampPos(village.x + Math.cos(a) * rand(240, 300), village.y + Math.sin(a) * rand(180, 230));
+    lanterns.push({ x: q.x, y: q.y });
   }
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * TAU + rand(-0.3, 0.3);
-    lanterns.push({ x: pond.x + Math.cos(a) * (pond.rx + 60), y: pond.y + Math.sin(a) * (pond.ry + 50) });
+    const q = clampPos(pond.x + Math.cos(a) * (pond.rx + 60), pond.y + Math.sin(a) * (pond.ry + 50));
+    lanterns.push({ x: q.x, y: q.y });
   }
 
   // --- torii ring (landmark; monoliths field) + center shrine ---
@@ -429,19 +435,20 @@ function layoutM02(seed) {
     colliders.push({ x: h.x - 18, y: h.y, r: 34 });
     colliders.push({ x: h.x + 18, y: h.y, r: 34 });
   }
-  colliders.push({ x: pagoda.x - 18, y: pagoda.y, r: 30 });
-  colliders.push({ x: pagoda.x + 18, y: pagoda.y, r: 30 });
+  colliders.push({ x: pagoda.x - 18, y: pagoda.y, r: 30, landmark: true });
+  colliders.push({ x: pagoda.x + 18, y: pagoda.y, r: 30, landmark: true });
   for (const l of lanterns) colliders.push({ x: l.x, y: l.y, r: 8 });
   for (const m of monoliths) {
     colliders.push({ x: m.x - 22, y: m.y, r: 10 });
     colliders.push({ x: m.x + 22, y: m.y, r: 10 });
   }
-  colliders.push({ x: ringShrine.x - 18, y: ringShrine.y, r: 34 });
-  colliders.push({ x: ringShrine.x + 18, y: ringShrine.y, r: 34 });
-  colliders.push({ x: well.x, y: well.y, r: 16 });
+  colliders.push({ x: ringShrine.x - 18, y: ringShrine.y, r: 34, landmark: true });
+  colliders.push({ x: ringShrine.x + 18, y: ringShrine.y, r: 34, landmark: true });
+  colliders.push({ x: well.x, y: well.y, r: 16, landmark: true });
   for (const l of lakes) colliders.push({ x: l.x, y: l.y, rx: l.rx, ry: l.ry, ellipse: true });
   // keep spawn clear (player margin 70)
   const clear = (c) => {
+    if (c.landmark) return true; // landmarks always solid; push-out handles a spawn inside their footprint (see m01)
     const rr = c.r || Math.max(c.rx, c.ry) || 0;
     return Math.hypot(c.x - playerStart.x, c.y - playerStart.y) > 70 + rr;
   };
@@ -653,15 +660,16 @@ function layoutM03(seed) {
   for (const t of trees) colliders.push({ x: t.x, y: t.y, r: t.kind === 'kelpBig' ? 12 : 7 + t.s * 3 });
   for (const b of bamboo) colliders.push({ x: b.x, y: b.y, r: 7 });
   for (const m of monoliths) colliders.push({ x: m.x, y: m.y, r: 12 });
-  colliders.push({ x: ringShrine.x - 18, y: ringShrine.y, r: 32 });
-  colliders.push({ x: ringShrine.x + 18, y: ringShrine.y, r: 32 });
-  colliders.push({ x: trident.x, y: trident.y, r: 12 });
-  colliders.push({ x: wreck.x - 55, y: wreck.y, r: 36 });
-  colliders.push({ x: wreck.x + 55, y: wreck.y, r: 36 });
+  colliders.push({ x: ringShrine.x - 18, y: ringShrine.y, r: 32, landmark: true });
+  colliders.push({ x: ringShrine.x + 18, y: ringShrine.y, r: 32, landmark: true });
+  colliders.push({ x: trident.x, y: trident.y, r: 12, landmark: true });
+  colliders.push({ x: wreck.x - 55, y: wreck.y, r: 36, landmark: true });
+  colliders.push({ x: wreck.x + 55, y: wreck.y, r: 36, landmark: true });
   for (const l of lanterns) colliders.push({ x: l.x, y: l.y, r: 8 });
   for (const v of vents) colliders.push({ x: v.x, y: v.y, r: 10 });
   // keep spawn clear (player margin 70)
   const clear = (c) => {
+    if (c.landmark) return true; // landmarks always solid; push-out handles a spawn inside their footprint (see m01)
     const rr = c.r || Math.max(c.rx, c.ry) || 0;
     return Math.hypot(c.x - playerStart.x, c.y - playerStart.y) > 70 + rr;
   };

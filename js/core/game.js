@@ -27,6 +27,10 @@ import { playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, ap
 import { MSG, profileFromMeta, joinProfile, ghostColor, allocateGhostOffers, coopScale, leashClamp, weaponCap, bossCount, resolveChars, selChar, sanitizeShards } from '../net/coop.js';
 import { CoopConn } from '../net/conn.js';
 
+// Reused Y-sort comparator for the render gather — a per-frame closure allocation
+// is exactly the hot-path waste the draw-path rules forbid.
+const byY = (a, b) => a.y - b.y;
+
 export class Game {
   constructor({ input, loop, ctx, mctx, characters, items }) {
     this.input = input;
@@ -61,7 +65,7 @@ export class Game {
     this.playerShadow = shadowSprite(sheet.shadowR, sheet.shadowR, 0.35);
     // 24.6 shared contact-shadow sprite for standing decor (one ellipse, scaled per decor
     // width at draw). Grounds trees/ruins/etc. on the ground plane under the top-left key.
-    if (!this.decorShadow) this.decorShadow = shadowSprite(48, 15, 0.32);
+    this.decorShadow = shadowSprite(48, 15, 0.32);
     this.players = [this.player]; // live player array (co-op: host sim + remote inputs, 11.2)
     this.remote = [];             // remote Player instances (host sim / client render)
     this.net = null;              // CoopConn (solo: never set → all co-op paths skip)
@@ -73,7 +77,7 @@ export class Game {
     this._step = 0;               // host snapshot step counter
     this._coopSeed = null;        // seed of the run the host is simulating
     this._ghost = false;          // 11.6.3: this run ghosted the local seat (D59 fallback)
-    this.weaponOwner = {};        // 11.5: weaponKey → first picker (player object) — excludes the weapon from others' offers
+    this.itemOwner = {};        // 11.5/D91: itemKey (weapon/synergy/passive) → first picker (player object) — excludes the item from others' offers (zero duplicates in co-op)
 
     this.combat.onKill = (e, killer) => this._onKill(e, killer);
     this.combat.onHurt = (dmg, pl) => this._onHurt(dmg, pl);
@@ -95,7 +99,7 @@ export class Game {
     this.enemies.burnImg = items.burn;
     this.enemies.blightImg = items.blight;
     this.combat.pulse = (n) => this.bus.emit(n);
-    this.combat.onBomb = () => this.camera.addShake(0.6);
+    this.combat.onBomb = () => this.camera.addShake(CFG.camera.shake.bomb);
 
     this.meta = loadMeta(CFG.meta.storageKey);
     this.wins = loadWins(CFG.meta.winsKey); // per-level cumulative victories (13.6)
@@ -117,6 +121,14 @@ export class Game {
 
     this.minimapBase = null;
     this.vignette = null;
+    // Render scratch (PERF): reused buffers so the draw path allocates no arrays.
+    // _items = per-frame Y-sort gather; _lightBuf/_lightPool = lighting-pass records
+    // (pool grows to the worst-case simultaneous lights, records are read-only for Lighting).
+    this._items = [];
+    this._lightBuf = [];
+    this._lightPool = [];
+    this._lightN = 0;
+    this._vigDirty = false;
     this.rng = mulberry32(1); // placeholder; startRun re-seeds
     this.state = null;
     this.menuT = 0;
@@ -149,7 +161,7 @@ export class Game {
     const vw = this.cw / this.zoom, vh = this.ch / this.zoom;
     this.camera.setView(vw, vh);
     this.lighting.resize(vw, vh); // half-res darkness tracks the view, not the canvas
-    this.vignette = buildVignette(this.cw, this.ch);
+    this._vigDirty = true; // vignette bake deferred to the next render (a resize drag fires this many times per second)
   }
 
   setZoom(z) {
@@ -275,7 +287,7 @@ export class Game {
     if (this.state !== 'LEVELUP' || !this.cards || !this.cards[i]) return;
     const card = this.cards[i];
     applyCard(this.player, card);
-    if (card.level === 1 && (card.kind === 'weapon' || card.kind === 'synergy')) this.weaponOwner[card.key] = this.player; // 11.5/11.6b: first picker owns
+    if (card.level === 1) this.itemOwner[card.key] = this.player; // 11.5/11.6b/D91: first picker owns weapon, synergy AND passive
     this.levelupQueue--;
     this.bus.emit('card', card, i);
     if (this.levelupQueue > 0) {
@@ -361,7 +373,7 @@ export class Game {
   stats() {
     return {
       victory: this.victory,
-      score: this.score + Math.floor(this.t) * CFG.run.timeScorePerSec + (this.victory ? CFG.run.victoryBonus : 0),
+      score: this.liveScore() + (this.victory ? CFG.run.victoryBonus : 0),
       time: this.t,
       kills: this.kills,
       level: this.player.level,
@@ -436,7 +448,9 @@ export class Game {
     this.enemies.update(dt, this.players, this.world, this.combat);
     if (this.state !== 'PLAYING') return; // died to contact
     this.combat.update(dt, this.players, this.enemies);
+    if (this.state !== 'PLAYING') return; // died to projectiles/orbs — same gate as the contact-death return above
     for (const pl of this.players) {
+      if (pl.dead) continue; // a dead co-op remote's corpse must not magnetize or consume drops (mirrors the _remoteStep gate at :444)
       const got = this.pickups.update(dt, pl, this._pickupSpots);
       // 23.3: at full HP with Phoenix Heart, the heal converts to over-health instead
       // of vanishing against maxHp.
@@ -478,7 +492,8 @@ export class Game {
     const S = this.enemies.coopS; // 11.3 co-op difficulty factor (1.0 solo)
     // 17.3 (PLAN §3.10): boss events at B.at, B.at+every, … strictly BEFORE the run
     // ends (20-min run → 19:00 fires; 15-min → 3 events); ENDLESS streams forever.
-    // Matches spawner.bossTimes. Default 300 s run: exactly one event at 240 —
+    // Equivalent to spawner.bossTimes for FINITE runs (ENDLESS streams here; bossTimes returns none).
+    // Default 300 s run: exactly one event at 240 —
     // bit-identical to the old single-boss path (same rng order, same banner).
     const nextT = B.at + this._bossIdx * R.bossEvery;
     if (this.t >= nextT && (this.runDuration == null || nextT < this.runDuration)) {
@@ -495,14 +510,15 @@ export class Game {
       this.bus.emit('banner', { text: n > 1 ? `${B.name} AWAKENS ×${n}` : `${B.name} AWAKENS` });
     }
     if (this.t < CFG.spawner.firstSpawn) return;
+    const iv = spawnInterval(this.t, L, S); // this.t is frozen for the whole step — one sample is exact
     if (this.enemies.list.length >= aliveCap(this.t, L, S)) {
-      this.spawnT = Math.min(this.spawnT, spawnInterval(this.t, L, S));
+      this.spawnT = Math.min(this.spawnT, iv);
       return;
     }
     this.spawnT += dt;
     let n = 0;
-    while (this.spawnT >= spawnInterval(this.t, L, S) && n < 4) {
-      this.spawnT -= spawnInterval(this.t, L, S);
+    while (this.spawnT >= iv && n < 4) {
+      this.spawnT -= iv;
       const type = pickType(this.t, this.rng, L);
       if (type) {
         const n2 = batchSize(this.t, L, S);
@@ -513,7 +529,7 @@ export class Game {
       }
       n++;
     }
-    if (n >= 4) this.spawnT = Math.min(this.spawnT, spawnInterval(this.t, L, S));
+    if (n >= 4) this.spawnT = Math.min(this.spawnT, iv);
   }
 
   _spawnPt() {
@@ -529,13 +545,14 @@ export class Game {
     this.bus.emit('cards', offers);
   }
 
-  // 11.5/11.6b: weapon + synergy keys owned by ANOTHER player (first picker owns
-  // the card + its upgrades for the run; starting weapons are pre-owned). Solo:
-  // always empty — the only owner is the local player.
+  // 11.5/11.6b/D91: weapon, synergy AND passive keys owned by ANOTHER player (first
+  // picker owns the item + its upgrades for the run; starting weapons are pre-owned;
+  // zero shared/duplicate items across co-op players is an immutable design law — D91).
+  // Solo: always empty — the only owner is the local player.
   _ownerExclusion(pl) {
     const s = new Set();
-    for (const [k, owner] of Object.entries(this.weaponOwner)) {
-      if (owner !== pl && !pl.weapons[k] && !(pl.synergies || {})[k]) s.add(k);
+    for (const [k, owner] of Object.entries(this.itemOwner)) {
+      if (owner !== pl && !pl.weapons[k] && !(pl.synergies || {})[k] && !(pl.passives || {})[k]) s.add(k);
     }
     return s;
   }
@@ -606,7 +623,7 @@ export class Game {
     this.particles.soul(e.x, e.y, e.boss ? 14 : 5);
     this.loop.hitStop(e.boss ? CFG.combat.hitStopBoss : CFG.combat.hitStopKill);
     if (e.boss) {
-      this.camera.addShake(0.8);
+      this.camera.addShake(CFG.camera.shake.bossKill);
       this.bus.emit('banner', { text: `${(this.level && this.level.boss && this.level.boss.name) || 'THE WRAITH'} FALLS` });
     }
     this.bus.emit('kill');
@@ -614,7 +631,7 @@ export class Game {
 
   _onHurt(dmg, pl) {
     if (pl && pl !== this.player) return; // co-op: the local client only shakes for itself
-    this.camera.addShake(0.45);
+    this.camera.addShake(CFG.camera.shake.hurt);
     this.loop.hitStop(CFG.combat.hitStopHurt);
     this.bus.emit('hurt');
   }
@@ -628,7 +645,7 @@ export class Game {
     // 22.6: no slow-mo death beat — immediate Game Over. The 0.3x slow-mo was
     // useless without a dying animation, so death now ends the run at once
     // (death shake + 'death' bus retained). timescale is already 1 in PLAYING.
-    this.camera.addShake(1);
+    this.camera.addShake(CFG.camera.shake.death);
     this.bus.emit('death');
     this._gameOver(false);
   }
@@ -692,7 +709,8 @@ export class Game {
         this.netMyId = m.id;
         this.netRole = m.seat === 0 ? 'host' : 'client';
         break;
-      case MSG.full: // room full — back to solo
+      case MSG.full: // room full — back to solo; close first so the live socket's handlers can't fire later frames into solo
+        this.net.close();
         this.net = null;
         break;
       case MSG.roster: this._netRoster(m); break;
@@ -768,7 +786,7 @@ export class Game {
         applyCard(pl, { kind: 'weapon', key: offers[i][0], level: 1 }); // auto-pick: the starting weapon
         pl._ghostOffers = offers[i]; // re-arm: the pair is the contract — the next level-up offers the held remainder
         pl.hp = pl.maxHp; // ghost base changed maxHp after _setRemoteChar refilled
-        if (!this.weaponOwner[offers[i][0]]) this.weaponOwner[offers[i][0]] = pl;
+        if (!this.itemOwner[offers[i][0]]) this.itemOwner[offers[i][0]] = pl;
       } else {
         pl._ghostOffers = offers[i]; // re-ghosted: fresh deal for the re-armed pair
       }
@@ -824,7 +842,7 @@ export class Game {
     const c = charDef(key);
     if (c.weapon) {
       pl.weapons[c.weapon] = 1;
-      if (!this.weaponOwner[c.weapon]) this.weaponOwner[c.weapon] = pl; // 11.6b: starting weapon pre-owned (excluded from others' offers)
+      if (!this.itemOwner[c.weapon]) this.itemOwner[c.weapon] = pl; // 11.6b: starting weapon pre-owned (excluded from others' offers)
     }
     recomputeStats(pl);
     pl.hp = pl.maxHp;
@@ -834,8 +852,9 @@ export class Game {
     if (this.netRole !== 'host') return;
     const r = this.remote.find((q) => q.id === m.id);
     if (!r) return;
-    r._mx = typeof m.mx === 'number' ? m.mx : 0;
-    r._my = typeof m.my === 'number' ? m.my : 0;
+    // clamp to the axes() range (|len| <= 1): hostile/corrupt wire must not drive a remote absurdly
+    r._mx = typeof m.mx === 'number' ? clamp(m.mx, -1, 1) : 0;
+    r._my = typeof m.my === 'number' ? clamp(m.my, -1, 1) : 0;
     if (m.dash) r._dash = true;
   }
 
@@ -856,11 +875,11 @@ export class Game {
     this._snapBuf = [];
     this._step = 0;
     this._coopSeed = seed;
-    this.weaponOwner = {}; // 11.5: ownership resets each run
+    this.itemOwner = {}; // 11.5: ownership resets each run
     this.net.sendRunStart(this.netMyId, seed, this.levelKey, this.runDuration); // 17.3: host broadcasts the duration (null = ENDLESS)
     this._applyAssign(); // 11.6.4 (D56/D59): per-seat chars + ghost 2-offer deal
     const hw = charDef(this.player.charKey).weapon; // 11.6b: the host's own starting weapon is pre-owned too
-    if (hw && !this.weaponOwner[hw]) this.weaponOwner[hw] = this.player;
+    if (hw && !this.itemOwner[hw]) this.itemOwner[hw] = this.player;
   }
 
   _remoteStep(dt, r) {
@@ -888,7 +907,7 @@ export class Game {
       const offers = cardOffers(pl.weapons, pl.passives, pl.synergies, this.rng, weaponCap(this.players.length), this._ownerExclusion(pl), pl._ghostOffers, pl.banished); // 18.4: per-picker banish honored; guests' own actions arrive via future input (counters + banish are per-player from day one)
       if (!offers.length) break;
       applyCard(pl, offers[0]); // host auto-picks; the client sees it via snapshots
-      if (offers[0].level === 1 && (offers[0].kind === 'weapon' || offers[0].kind === 'synergy')) this.weaponOwner[offers[0].key] = pl; // 11.5/11.6b: first picker owns
+      if (offers[0].level === 1) this.itemOwner[offers[0].key] = pl; // 11.5/11.6b/D91: first picker owns any item kind
     }
     this.bus.emit('levelup');
   }
@@ -907,6 +926,12 @@ export class Game {
   // --- co-op client: no local sim — apply host snapshots + interpolate ---
 
   _startClientRun(seed, levelKey, dur) {
+    // A mid-run joiner makes the host rebroadcast runstart to the whole room (_netRoster);
+    // an established client already in THIS run must skip it — re-running would regenerate the world.
+    // The seat-identity term keeps a genuinely re-joined client (new joined-id) on the re-run path.
+    if (this.state === 'PLAYING' && seed === this._clientSeed && this.netMyId === this._clientSeatId) return;
+    this._clientSeed = seed;
+    this._clientSeatId = this.netMyId;
     this.levelKey = levelKey || this.levelKey || 'm01';
     this.level = getLevel(this.levelKey);
     this._reskinPickups();
@@ -1008,7 +1033,19 @@ export class Game {
   }
 
   _reconcileRemote(n) {
+    // Build each remote with its SEAT-ASSIGNED char (same pure helper as the host): the wire
+    // carries no char field, and the old local-def placeholder rendered every remote as the
+    // local sheet for the whole run. Placeholder remains only for roster-skew frames.
+    const seats = this.netRoster.filter((e) => e.id !== this.netMyId);
     for (let i = this.remote.length; i < n - 1; i++) {
+      const entry = seats[i];
+      if (entry) {
+        const seatIdx = this.netRoster.indexOf(entry);
+        const pl = this._remotePlayer(entry.profile, resolveChars(this.netRoster)[seatIdx], seatIdx);
+        pl.id = entry.id;
+        this.remote.push(pl);
+        continue;
+      }
       const def = this.player.def;
       const pl = new Player(def);
       pl.flashes = [def.idle.map(flashCopy), def.run.map(flashCopy)];
@@ -1087,23 +1124,38 @@ export class Game {
     this.toMenu();
   }
 
-  // --- render (every rAF; raw dt, camera shake offsets included in view) ---
+  // --- render (every rAF; camera shake offsets are baked into the view rect) ---
+
+  // Lighting light-list for the darkness/glow passes: world statics + the local
+  // player + live remotes + live boss holes. Built into a reused buffer with pooled
+  // records so the draw path allocates nothing (Lighting.draw only reads the records).
+  _pushLight(x, y, r, rgb, flicker) {
+    const pool = this._lightPool;
+    let rec = pool[this._lightN];
+    if (!rec) { rec = { x, y, r, rgb, flicker }; pool.push(rec); }
+    else { rec.x = x; rec.y = y; rec.r = r; rec.rgb = rgb; rec.flicker = flicker; }
+    this._lightN++;
+    this._lightBuf.push(rec);
+  }
 
   _lights() {
     const L = CFG.lighting;
     const p = this.player;
     const pr = this.players.length > 1 ? CFG.coop.leashR : L.playerR; // 11.4: expanded co-op vision
-    const lights = this.world.lights.slice();
-    lights.push({ x: p.x, y: p.y, r: pr, rgb: L.playerRgb, flicker: L.playerFlicker });
-    for (const r of this.remote) if (!r.dead) lights.push({ x: r.x, y: r.y, r: pr, rgb: L.playerRgb, flicker: L.playerFlicker });
+    this._lightBuf.length = 0;
+    this._lightN = 0;
+    for (const l of this.world.lights) this._lightBuf.push(l);
+    this._pushLight(p.x, p.y, pr, L.playerRgb, L.playerFlicker);
+    for (const r of this.remote) if (!r.dead) this._pushLight(r.x, r.y, pr, L.playerRgb, L.playerFlicker);
     for (const e of this.enemies.list) {
-      if (e.boss && !e.dead) lights.push({ x: e.x, y: e.y, r: L.bossR, rgb: L.bossRgb, flicker: L.bossFlicker }); // 11.10: every live boss gets its light hole (solo = 1)
+      if (e.boss && !e.dead) this._pushLight(e.x, e.y, L.bossR, L.bossRgb, L.bossFlicker); // 11.10: every live boss gets its light hole (solo = 1)
     }
-    return lights;
+    return this._lightBuf;
   }
 
-  render(rdt) {
+  render() {
     const ctx = this.ctx;
+    if (this._vigDirty) { this.vignette = buildVignette(this.cw, this.ch); this._vigDirty = false; }
     const cam = this.camera;
     const vw = cam.w, vh = cam.h;
     const view = { x: cam.x + cam.ox, y: cam.y + cam.oy, w: vw, h: vh };
@@ -1135,15 +1187,17 @@ export class Game {
     for (const pl of this.players) ctx.drawImage(this.playerShadow, pl.x - sr, pl.y - sr * 0.5, sr * 2, sr);
     this.enemies.drawShadows(ctx, x0, y0, x1, y1);
     // 24.6 contact shadows under standing decor (top-left key → shadow falls down-right).
+    // One cull pass feeds both the shadow bake and the Y-sort gather (PERF: no second
+    // full-decor scan, no per-frame array literal).
     const ds = this.decorShadow;
-    if (ds) for (const d of this.world.decor) {
-      if (d.x < x0 || d.x > x1 || d.y < y0 || d.y > y1) continue;
-      const rw = d.w * 0.62; // ellipse width tracks the decor footprint
-      ctx.drawImage(ds, d.x - rw / 2 + rw * 0.12, d.y - rw * 0.13, rw, rw * 0.32);
-    }
-    const items = [];
+    const items = this._items;
+    items.length = 0;
     for (const d of this.world.decor) {
       if (d.x < x0 || d.x > x1 || d.y < y0 || d.y > y1) continue;
+      if (ds) {
+        const rw = d.w * 0.62; // ellipse width tracks the decor footprint
+        ctx.drawImage(ds, d.x - rw / 2 + rw * 0.12, d.y - rw * 0.13, rw, rw * 0.32);
+      }
       items.push(d);
     }
     for (const e of this.enemies.list) {
@@ -1152,7 +1206,7 @@ export class Game {
     }
     items.push(p);
     for (const r of this.remote) if (!r.dead) items.push(r);
-    items.sort((a, b) => a.y - b.y);
+    items.sort(byY);
     for (const it of items) {
       if (it === p || it.flashes) it.draw(ctx); // player instances (local + remote)
       else if (it.img) ctx.drawImage(it.img, it.x - (it.w * it.s) / 2, it.y - it.h * it.s);

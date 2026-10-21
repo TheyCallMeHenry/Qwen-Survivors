@@ -9,9 +9,9 @@ export const MSG = {
   joined: 'joined',    // S→C join ack: {t, id, seat, n, levelKey}
   full: 'full',        // S→C join rejected — room full
   roster: 'roster',    // S→C lobby: {t, ids, levelKey} (who is seated where)
-  runstart: 'runstart', // H→C: {t, seed} — shared world seed; run begins
+  runstart: 'runstart', // H→C: {t, id, seed, levelKey, dur} — shared world seed + duration; run begins
   input: 'input',      // C→S relay: {t, id, mx, my, dash} (host applies to sim)
-  state: 'state',      // H→S relay: {t, step, tick, players, score, kills}
+  state: 'state',      // H→S relay: {t, id, v, step, time, score, kills, players, enemies, pickups}
   left: 'left',        // S→C: {t, id}
   closed: 'closed',    // S→C: {t, reason}
 };
@@ -112,10 +112,6 @@ export function bossCount(n) {
   return Math.min(CFG.coop.maxPlayers, Math.max(1, Math.floor(n) || 1));
 }
 
-// 11.4 leash (A2): every player stays within R of EVERY other player (all
-// pairwise distances ≤ R — every player sees every other). Project (x, y) into
-// the intersection of the radius-R disks around `others` (convex — iterative
-// projection converges; the host re-clamps to the world margin afterwards).
 // 11.6.3 ghost fallback (D59): sanitize a per-seat unlocked-char list. Same
 // semantics as meta.loadChars (playable keys only, starter always present)
 // but pure — no LS. The join profile carries each seat's own list (D53).

@@ -2,13 +2,14 @@
 // the native WebSocket against the same origin that served the page (the
 // serve.mjs co-op room). Node-safe import (no top-level side effects); the
 // browser-only `new WebSocket(url)` happens in connect().
-import { pack } from './coop.js';
+import { pack, unpack } from './coop.js';
 
 export class CoopConn {
   constructor(url) {
     this.url = url;
     this.open = false;
     this.ws = null;
+    this._q = null; // non-array only while a handshake is in flight — see send()
     this.onMessage = null; // (obj) — one handler owns dispatch (game)
   }
 
@@ -16,16 +17,25 @@ export class CoopConn {
     if (this.ws) return;
     const ws = new WebSocket(this.url);
     this.ws = ws;
-    ws.onopen = () => { this.open = true; };
-    ws.onclose = () => { this.open = false; this.ws = null; this.onMessage && this.onMessage({ t: 'netclosed' }); };
-    ws.onerror = () => {};
+    this._q = []; // queue until the handshake opens (attachNet sends hello synchronously)
+    ws.onopen = () => {
+      this.open = true;
+      const q = this._q;
+      this._q = null;
+      for (const o of q) this.send(o); // flush in order
+    };
+    ws.onclose = () => { this.open = false; this.ws = null; this._q = null; this.onMessage && this.onMessage({ t: 'netclosed' }); };
+    ws.onerror = () => {}; // the browser always fires 'close' right after — netclosed covers it
     ws.onmessage = (ev) => {
-      const m = typeof ev.data === 'string' ? JSON.parse(ev.data) : null;
+      const m = typeof ev.data === 'string' ? unpack(ev.data) : null; // malformed frame must not throw
       if (m && this.onMessage) this.onMessage(m);
     };
   }
 
+  // Open → send now; still CONNECTING → queue (a hello fired right after
+  // connect() would otherwise be dropped — readyState is 0 until open).
   send(obj) {
+    if (this._q) { this._q.push(obj); return; }
     if (!this.ws || this.ws.readyState !== 1) return;
     try { this.ws.send(pack(obj)); } catch { /* closing */ }
   }
@@ -37,8 +47,17 @@ export class CoopConn {
   // shards (14.2, D54): host run-end only — the run-level award every client accrues.
   sendClosed(reason, shards) { this.send(shards == null ? { t: 'closed', reason } : { t: 'closed', reason, shards }); }
 
+  // Deliberate close: detach handlers first so the closing socket cannot deliver
+  // a late netclosed after leave/run-end — that race would kill a fresh
+  // connection the game opens in the meantime.
   close() {
-    if (this.ws) { try { this.ws.close(); } catch { /* already gone */ } this.ws = null; }
+    this._q = null;
+    if (this.ws) {
+      const ws = this.ws;
+      ws.onopen = ws.onclose = ws.onerror = ws.onmessage = null;
+      try { ws.close(); } catch { /* already gone */ }
+      this.ws = null;
+    }
     this.open = false;
   }
 }

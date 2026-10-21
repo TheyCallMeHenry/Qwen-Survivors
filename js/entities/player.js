@@ -186,6 +186,10 @@ export class Player {
   // 23.3: the over-health diminishes CFG.synergies.phoenix.decay of max HP per second
   // back to 100% (hp pinned at maxHp); a fresh heart re-applies and out-runs it.
   _overHeal(dt) {
+    // A hit can eat through the pool (hp falls to/below maxHp while the counter is
+    // untouched); re-clamp it to the real surplus, else the decay branch below would
+    // pull hp back up to maxHp for free.
+    if (this.overHeal > this.hp - this.maxHp) this.overHeal = Math.max(0, this.hp - this.maxHp);
     if (this.overHeal <= 0) { this.overHeal = 0; return; }
     const drain = this.maxHp * CFG.synergies.phoenix.levels[0].decay * dt;
     const target = Math.max(this.maxHp, this.hp - drain);
@@ -601,10 +605,11 @@ export function recomputeStats(p) {
 // Up to 3 distinct upgrade candidates: weapon upgrades, new weapons (≤ cap),
 // passives, and synergy cards (only once both synergizing weapons are max level).
 // 11.5 co-op: `cap` = this player's standard-weapon slots (base maxWeapons − (N−1));
-// `exclude` = Set of weapon AND synergy keys owned by ANOTHER player (first picker
-// owns the weapon/synergy + its upgrades for the run — never offered here, new or
-// upgrade). Passives are never locked; synergy gating follows the PICKER's own
-// weapons/passives (per-player dicts).
+// `exclude` = Set of weapon, synergy AND passive keys owned by ANOTHER player (first
+// picker owns the item + its upgrades for the run — never offered here, new or
+// upgrade). Zero shared/duplicate items across co-op players is an immutable design
+// law covering weapons, synergies AND passives (D91, user law 2026-10-20); synergy
+// gating follows the PICKER's own weapons/passives (per-player dicts).
 // 11.6.3 ghost: `ghostOffers` = the player's UNIQUE starting-weapon pair (D59) —
 // while set (the ghost's first level-up only) the offers are exactly that pair;
 // it is cleared after the first pick (applyCard) and the flow resumes normally.
@@ -631,6 +636,7 @@ export function cardOffers(weapons, passives, synergies, rng, cap = CFG.run.maxW
     else if (lvl === 0 && ownedW < cap) pool.push({ kind: 'weapon', key: k, level: 1 });
   }
   for (const k of Object.keys(CFG.passives)) {
+    if (locked && locked.has(k)) continue; // D91: another player owns this passive — zero duplicates
     if (ban && ban.has(k)) continue;
     const lvl = passives[k] || 0;
     if (lvl < CFG.passives[k].max) pool.push({ kind: 'passive', key: k, level: lvl + 1 });

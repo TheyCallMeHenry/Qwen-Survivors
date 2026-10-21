@@ -77,43 +77,56 @@ export class World {
     const vw = cam.w, vh = cam.h;
 
     // --- sky (screen space) ---
+    // Baked once per (level, view height) into a 1-px-wide gradient strip —
+    // perf guardrail: no createLinearGradient per frame. The horizon's ±8 px
+    // camera drift rides the drawImage dest height instead.
     const horizon = vh * 0.30 + (cam.y / this.H) * 8;
-    const grad = ctx.createLinearGradient(0, 0, 0, horizon);
-    grad.addColorStop(0, pal.skyTop);
-    grad.addColorStop(1, pal.skyHorizon);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, vw, horizon + 2);
+    if (sky._gradH !== vh) {
+      sky._gradH = vh;
+      const gh = Math.ceil(vh * 0.3) + 10;
+      const gc = makeCanvas(1, gh);
+      const gg = gc.getContext('2d');
+      const grad = gg.createLinearGradient(0, 0, 0, gh);
+      grad.addColorStop(0, pal.skyTop);
+      grad.addColorStop(1, pal.skyHorizon);
+      gg.fillStyle = grad;
+      gg.fillRect(0, 0, 1, gh);
+      sky._grad = gc;
+    }
+    ctx.drawImage(sky._grad, 0, 0, vw, horizon + 2);
 
     // 25.4d (perf): stars bake into offscreen canvases per (sky, view size, horizon±1px)
     // — twinkle rides globalAlpha on CFG.world.starBands average-alpha groups instead of
     // one fillRect + alpha set per star per frame.
     const SKY = CFG.world.starBands;
-    if (!sky._bands || sky._bandW !== vw || sky._bandH !== vh || Math.abs(sky._bandHz - horizon) > 1) {
-      sky._bandW = vw; sky._bandH = vh; sky._bandHz = horizon;
-      sky._bands = [];
-      for (let b = 0; b < SKY; b++) {
-        const c = makeCanvas(vw, vh);
-        const g = c.getContext('2d');
-        g.fillStyle = sky.star;
-        for (let i = 0; i < sky.stars.length; i++) {
-          if (i % SKY !== b) continue;
-          const s = sky.stars[i];
-          g.fillRect(s.x * vw, s.y * horizon * 0.9, s.r, s.r);
+    if (sky.stars.length) { // m03 has no stars — skip the bands entirely
+      if (!sky._bands || sky._bandW !== vw || sky._bandH !== vh || Math.abs(sky._bandHz - horizon) > 1) {
+        sky._bandW = vw; sky._bandH = vh; sky._bandHz = horizon;
+        sky._bands = [];
+        for (let b = 0; b < SKY; b++) {
+          const c = makeCanvas(vw, vh);
+          const g = c.getContext('2d');
+          g.fillStyle = sky.star;
+          for (let i = 0; i < sky.stars.length; i++) {
+            if (i % SKY !== b) continue;
+            const s = sky.stars[i];
+            g.fillRect(s.x * vw, s.y * horizon * 0.9, s.r, s.r);
+          }
+          sky._bands.push(c);
         }
-        sky._bands.push(c);
       }
-    }
-    for (let b = 0; b < SKY; b++) {
-      const band = sky._bands[b];
-      let aB = 0;
-      for (let i = b; i < sky.stars.length; i += SKY) {
-        const s = sky.stars[i];
-        aB += s.a * (0.55 + 0.45 * Math.sin(t * s.sp + s.ph));
+      for (let b = 0; b < SKY; b++) {
+        const band = sky._bands[b];
+        let aB = 0;
+        for (let i = b; i < sky.stars.length; i += SKY) {
+          const s = sky.stars[i];
+          aB += s.a * (0.55 + 0.45 * Math.sin(t * s.sp + s.ph));
+        }
+        ctx.globalAlpha = aB / Math.max(1, ((sky.stars.length - b + SKY - 1) / SKY | 0));
+        ctx.drawImage(band, 0, 0);
       }
-      ctx.globalAlpha = aB / Math.max(1, ((sky.stars.length - b + SKY - 1) / SKY | 0));
-      ctx.drawImage(band, 0, 0);
+      ctx.globalAlpha = 1;
     }
-    ctx.globalAlpha = 1;
 
     // moon
     ctx.drawImage(sky.moon, vw * sky.moonX, horizon * sky.moonY, 240 * sky.moonScale, 240 * sky.moonScale);
@@ -139,7 +152,7 @@ export class World {
     // --- world space ---
     ctx.save();
     ctx.translate(vw / 2 - cam.x, vh / 2 - cam.y);
-    const pad = 260;
+    const pad = CFG.world.decorPad;
     const x0 = Math.max(0, cam.x - vw / 2 - pad), x1 = Math.min(this.W, cam.x + vw / 2 + pad);
     const y0 = Math.max(0, cam.y - vh / 2 - pad), y1 = Math.min(this.H, cam.y + vh / 2 + pad);
 

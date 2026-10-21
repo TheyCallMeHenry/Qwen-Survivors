@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Pure-logic assertions (Node, no browser). Run: node tools/test-logic.mjs
-import { mulberry32, hash2, approach, clamp } from '../js/utils/math.js';
+import { mulberry32, hash2, approach, clamp, normAngle, TAU } from '../js/utils/math.js';
 import { CFG } from '../js/config.js';
 import { generateWorld } from '../js/world/generate.js';
 import { LEVELS, LEVEL_ORDER, getLevel } from '../js/world/levels.js';
@@ -10,7 +10,11 @@ import { Enemies } from '../js/entities/enemies.js';
 import { Player, cardOffers, applyCard, recomputeStats, cardEffectText, charDef, skipXp } from '../js/entities/player.js';
 import { Combat } from '../js/entities/combat.js';
 import { Pickups, escapeFromSpots } from '../js/entities/pickups.js';
+import { Particles } from '../js/entities/particles.js';
 import { GEM_PAL, HEART_PAL } from '../js/art/items.js';
+import { Lighting } from '../js/systems/lighting.js';
+import { Camera } from '../js/systems/camera.js';
+import { shadowSprite } from '../js/art/base.js';
 import { SNAP_V, WEAPON_KEYS, PASSIVE_KEYS, SYNERGY_KEYS, ENEMY_KEYS, E_FLAG_FLASH, E_FLAG_BURN, E_FLAG_BLIGHT, E_FLAG_BOSS, E_FLAG_FLIP, playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState } from '../js/net/sync.js';
 import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom, defaultChars, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations, actionCost, buyAction } from '../js/core/meta.js';
 import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
@@ -149,8 +153,9 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   const ps = w.playerStart;
   ok(w.colliders.every((c) => {
     const rr = c.r || Math.max(c.rx, c.ry) || 0;
-    return Math.hypot(c.x - ps.x, c.y - ps.y) > 70 + rr;
-  }), 'generateWorld: spawn clearance 70 + collider radius');
+    return c.landmark || Math.hypot(c.x - ps.x, c.y - ps.y) > 70 + rr; // landmarks always solid even near spawn (D92)
+  }), 'generateWorld: spawn clearance 70 + collider radius (landmarks exempt, D92)');
+  ok(w.colliders.some((c) => c.landmark), 'generateWorld: m01 well landmark retained (D92 — was always stripped before)');
   ok(w.decor.length > 100, 'generateWorld: standing decor non-trivial');
 }
 
@@ -841,7 +846,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(typeof m1.layout === 'function' && m1.weights(1000).rat === 5 && m1.boss.key === 'wraith' && m1.boss.at === 240, 'm01: layout/weights/boss wired');
   ok(typeof m2.layout === 'function' && typeof m2.weights === 'function' && m2.boss.key === 'ryu' && m2.boss.at === 240, 'm02: layout/weights/boss (Ryū) wired (13.2/13.3)');
   ok(typeof m3.layout === 'function' && typeof m3.weights === 'function' && m3.boss.key === 'shark' && m3.boss.at === 240, 'm03: layout/weights/boss (Great White) wired (13.4/13.5)');
-  ok(generateWorld(20260820, 'm01').trees.length === 276 && generateWorld(20260820, 'm01').decor.length === 335 && generateWorld(20260820, 'm01').colliders.length === 328, 'm01 layout: golden counts (seed 20260820) — identical to pre-13.1');
+  ok(generateWorld(20260820, 'm01').trees.length === 276 && generateWorld(20260820, 'm01').decor.length === 335 && generateWorld(20260820, 'm01').colliders.length === 329, 'm01 layout: golden counts (seed 20260820) — +1 collider = well landmark retained (D92)');
   // 13.2 — m02 (Higan) layout
   const g = generateWorld(20260822, 'm02');
   const g2 = generateWorld(20260822, 'm02');
@@ -856,9 +861,10 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const m02Decals = ['tuftG', 'petalDrop', 'flowerC', 'pebble', 'stone', 'moss', 'pathA', 'pathB', 'pathC'];
   ok(g.decals.length > 500 && g.decals.every((d) => m02Decals.includes(d.k)), 'm02: ~900+ decals from m02 set (+ paths)');
   ok(g.decals.filter((d) => d.k.startsWith('path')).length > 40, 'm02: stone paths (village/pond/ring/cluster trails)');
-  ok(g.colliders.every((c) => Math.hypot(c.x - g.playerStart.x, c.y - g.playerStart.y) > 70 + (c.r || Math.max(c.rx, c.ry) || 0)), 'm02: spawn clearance');
+  ok(g.colliders.every((c) => c.landmark || Math.hypot(c.x - g.playerStart.x, c.y - g.playerStart.y) > 70 + (c.r || Math.max(c.rx, c.ry) || 0)), 'm02: spawn clearance (landmarks exempt, D92)');
+  ok(g.colliders.some((c) => c.landmark), 'm02: landmark colliders retained (D92)');
   ok(g.well && g.ringShrine && inb(g.well) && inb(g.ringShrine), 'm02: well + ringShrine in bounds');
-  ok(g.trees.length === 274 && g.decor.length === 324 && g.colliders.length === 331, 'm02 layout: golden counts (seed 20260822)');
+  ok(g.trees.length === 274 && g.decor.length === 324 && g.colliders.length === 332, 'm02 layout: golden counts (seed 20260822) — +1 collider = well landmark retained (D92)');
   ok(aliveCap(120, m1) === 70 && aliveCap(120, m2) === 87.5 && batchSize(300, m2) === 8 && near(spawnInterval(100, m2), spawnInterval(100) / 1.25), 'spawner: per-level diff scales cap/batch/interval');
 }
 
@@ -919,9 +925,34 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const m03Decals = ['sandTuft', 'bubbleRise', 'coralDrop', 'shell', 'pebble', 'moss', 'ruinA', 'ruinB', 'ruinC'];
   ok(g.decals.length > 500 && g.decals.every((d) => m03Decals.includes(d.k)), 'm03: ~900+ decals from m03 set (+ ruin paths)');
   ok(g.decals.filter((d) => d.k.startsWith('ruin')).length > 40, 'm03: ruined street slabs (city/wreck/school trails)');
-  ok(g.colliders.every((c) => Math.hypot(c.x - g.playerStart.x, c.y - g.playerStart.y) > 70 + (c.r || Math.max(c.rx, c.ry) || 0)), 'm03: spawn clearance');
+  ok(g.colliders.every((c) => c.landmark || Math.hypot(c.x - g.playerStart.x, c.y - g.playerStart.y) > 70 + (c.r || Math.max(c.rx, c.ry) || 0)), 'm03: spawn clearance (landmarks exempt, D92)');
+  ok(g.colliders.some((c) => c.landmark), 'm03: city-dome landmark retained (D92 — was always stripped before)');
   ok(g.well && g.ringShrine && inb(g.well) && inb(g.ringShrine), 'm03: well (city) + dome (ringShrine) in bounds');
-  ok(g.trees.length === 319 && g.decor.length === 370 && g.colliders.length === 370, 'm03 layout: golden counts (seed 20260823)');
+  ok(g.trees.length === 319 && g.decor.length === 370 && g.colliders.length === 372, 'm03 layout: golden counts (seed 20260823) — +2 colliders = city-dome pair retained (D92)');
+}
+
+// Slice audit 2026-10-20: every generated object must stay on-map for ANY seed
+// (edge-adjacent placements — m01 cluster campfires, m02 pond-ring lanterns —
+// could previously park decor + collider + light off-map), and every seed (incl.
+// 0/negative/max-u32) must re-generate byte-identical layouts.
+{
+  const SEEDS = [0, -99, 4294967295, 20260820, 20260822, 20260823, 777];
+  for (const key of LEVEL_ORDER) {
+    const lv = getLevel(key);
+    for (const seed of SEEDS) {
+      const d = generateWorld(seed, key);
+      const M = lv.margin;
+      const inMap = (o) => o.x >= M && o.x <= lv.w - M && o.y >= M && o.y <= lv.h - M;
+      // lights carry a small vertical offset (−8…−30) → bounded to the map, not the margin
+      const onMap = (o) => o.x >= 0 && o.x <= lv.w && o.y >= 0 && o.y <= lv.h;
+      ok(
+        d.colliders.every(inMap) && d.decor.every(inMap) && d.lights.every(onMap) &&
+        d.campfires.every(inMap) && (d.lanterns || []).every(inMap),
+        `${key} seed ${seed}: colliders/decor/campfires/lanterns in margin, lights on-map`
+      );
+      ok(JSON.stringify(d) === JSON.stringify(generateWorld(seed, key)), `${key} seed ${seed}: deterministic re-generate`);
+    }
+  }
 }
 
 // 13.5 — m03 roster: stat tables ×1.56 (A4) + m03 weights (slot re-skins) + Great White boss
@@ -2113,6 +2144,330 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const ssrc = readFileSync(new URL('../tools/serve.mjs', import.meta.url), 'utf8');
   ok(/Math\.floor\(num\(m\.shards\)\)/.test(ssrc) && /shards > 0 \? \{ t: MSG\.closed, reason: 'host', shards \}/.test(ssrc),
     '14.2: serve relays a sanitized shards field on host close only');
+}
+
+// --- loop slice audit: rAF-chain survival + CFG-bound guardrails ------------
+{
+  // The Loop schedules the next frame BEFORE running update/render, so a throwing
+  // frame costs one bad frame instead of severing the chain (game freezes forever).
+  const queue = [];
+  globalThis.requestAnimationFrame = (cb) => { queue.push(cb); return queue.length; };
+  globalThis.cancelAnimationFrame = () => { queue.length = 0; }; // one frame pending at a time in this test
+  const { Loop } = await import('../js/core/loop.js');
+
+  ok(CFG.loop.maxFrameDt > 0 && CFG.loop.maxSteps >= 1,
+    'CFG.loop: frame-clamp + backlog-cap knobs live in config (rule 5)');
+
+  let ups = 0, ren = 0, boom = true;
+  const loop = new Loop({
+    update: () => { ups++; if (boom) { boom = false; throw new Error('update boom'); } },
+    render: () => { ren++; },
+  });
+  loop.start();
+  ok(queue.length === 1, 'loop: start() schedules exactly one frame');
+  try {
+    // In the browser the throw is swallowed by the rAF machinery; calling cb by
+    // hand lets it escape, so the harness must absorb it to observe the chain.
+    queue.shift()(performance.now() + 1000 / 60);
+  } catch { /* intentional 'update boom' */ }
+  ok(queue.length === 1, 'loop: chain SURVIVES a throwing update (next frame scheduled first)');
+  queue.shift()(performance.now() + 1000 / 60);
+  ok(ups >= 2 && ren === 1,
+    `loop: the throwing frame skips its own render, the next frame renders again (ups=${ups} ren=${ren})`);
+  loop.stop();
+  ok(queue.length === 0, 'loop: stop() leaves no orphan frame queued');
+
+  // Hit-stop freezes the sim but the render pass must keep running.
+  const hs = new Loop({ update: () => { ups++; }, render: () => { ren++; } });
+  hs.start();
+  hs.hitStop(0.2);
+  const u0 = ups, r0 = ren;
+  queue.shift()(performance.now() + 1000 / 60);
+  ok(ups === u0 && ren === r0 + 1, 'loop: hit-stop freezes update steps, render still runs');
+  hs.stop();
+
+  // Backlog guardrail: a 1 s gap is clamped to maxFrameDt and never catches up
+  // more than maxSteps steps in one frame (no death-spiral), debt dropped after.
+  const bl = new Loop({ update: () => { ups++; }, render: () => {} });
+  bl.start();
+  const u1 = ups;
+  queue.shift()(performance.now() + 1000);
+  ok(ups - u1 === CFG.loop.maxSteps,
+    `loop: 1 s gap runs exactly maxSteps (${CFG.loop.maxSteps}) catch-up steps (got ${ups - u1})`);
+  ok(bl.acc === 0, 'loop: leftover backlog dropped after the cap (no debt carried)');
+  bl.stop();
+}
+
+// --- Slice-audit regressions (combat/enemies/player review, 2026-10-20) ---
+{
+  // Over-heal pool eaten by a hit crossing maxHp: the decay branch must not pull hp
+  // back up to maxHp on a stale counter (the free-heal bug).
+  const pc = new Player({}); pc.reset(0, 0); pc.synergies.phoenix = 1;
+  pc.applyOverHeal(20);
+  new Combat().damagePlayer(pc, 30, 10, 0); // hp (maxHp+20) lands below maxHp
+  const hpAfterHit = pc.hp;
+  pc._overHeal(1 / 60);
+  ok(pc.hp === hpAfterHit && pc.overHeal === 0,
+    '23.3 fix: a hit through the over-heal pool cannot re-arm it via decay (no free heal)');
+
+  // AoE bbox headroom: a big foe whose centre sits past the raw blast bbox but within
+  // blast+foe r is still a grid candidate (the exact radius test decides the hit).
+  const g = new HashGrid(CFG.ai.gridCell);
+  const big = { x: 104, y: 0, r: 30, hp: 500, maxHp: 500, vx: 0, vy: 0, dead: false, flash: 0,
+    burnT: 0, blightT: 0, slowStacks: [], shockStacks: [], freezeT: 0, stunT: 0 };
+  g.add(big.x, big.y, big);
+  const ca = new Combat();
+  ca._explode({ x: 0, y: 0, radius: 95, dmg: 10, napalm: null, owner: null }, { grid: g });
+  ok(big.hp === 490, 'AoE fix: a big foe centred just past the raw blast bbox is still hit (bbox carries foe-r headroom)');
+
+  // Tempest bolts ride with their shooter (kill credit / blight routing, co-op 11.2).
+  const plT = { x: 300, y: 300, r: 14, dmgMul: 1, def: { h: 40 }, weapons: { blades: 1 },
+    synergies: { tempest: 1 }, _orbitT: 0, _tempestT: CFG.synergies.tempest.levels[0].rate };
+  const esT = { grid: { near: () => [] }, list: [] };
+  const ct = new Combat(); ct.enemies = esT;
+  ct._orbiters(0.01, plT, esT);
+  ok(ct.bolts.length > 0 && ct.bolts.every((b) => b.owner === plT),
+    'tempest fix: bolts fire with an owner (kill credit no longer falls back to the local player)');
+
+  // Cultist orbs carry the spawn-scaled dmg (diff × coopS), like contact damage does.
+  const es4 = new Enemies();
+  es4.diff = 2; es4.coopS = 1.5;
+  const cult = es4.spawn('cultist', 100, 100);
+  cult.cd = 0;
+  const tgt = { x: 360, y: 100, dead: false, r: 14 };
+  es4._ai(cult, 1 / 60, [tgt], { collidersNear: () => [] }, null);
+  ok(es4.orbs.length === 1 && es4.orbs[0].dmg === cult.dmg && cult.dmg === CFG.enemies.cultist.dmg * 3,
+    'orb fix: projectile carries the spawn-scaled shooter dmg (not the raw config base)');
+
+  // _axeCd stays bounded for axe-only runners (they never enter _orbiters, where the
+  // old cap lived — the Map grew every run with fresh spawn objects as keys).
+  const cx = new Combat();
+  cx.fireAxe(100, 100, 0, 5, 1, 1, { x: 100, y: 100, def: { h: 40 } });
+  const mob = [];
+  for (let i = 0; i < 513; i++) mob.push({ x: 100, y: 100, r: 12, hp: 999, maxHp: 999, vx: 0, vy: 0,
+    dead: false, flash: 0, burnT: 0, blightT: 0, slowStacks: [], shockStacks: [], freezeT: 0, stunT: 0 });
+  const esX = { grid: { near: () => mob }, list: mob };
+  cx._axes(1 / 60, esX);
+  cx._axes(1 / 60, esX);
+  ok(cx._axeCd.size <= 512, '_axeCd bound: capped even without blades (axe-only runner cannot leak the Map)');
+}
+
+// ——— Slice-audit regressions (pickups/particles/spawner, 2026-10-20) ———
+{
+  // Particles: draw strings pre-rendered at spawn (perf guardrail: no string
+  // concat inside draw()) + live-count saturation short-circuit + steal order.
+  const pt = new Particles(8);
+  ok(pt.live === 0, 'particle live count: starts empty');
+  pt.dot(0, 0, 0, 0, 1, 2, 1, 2, 3);
+  ok(pt.live === 1 && pt.pool.every((p) => !p.on || (typeof p.col === 'string' && p.col.startsWith('rgb('))),
+    'particle draw strings: dot() pre-renders the fill color at spawn');
+  pt.text(0, 0, '-5', [255, 0, 0]);
+  ok(pt.live === 2 && pt.pool.some((p) => p.on && p.fnt.startsWith('700 ')),
+    'particle draw strings: text() pre-renders the font at spawn');
+  for (let i = 0; i < 6; i++) pt.dot(i, 0, 0, 0, 1, 2, 0, 0, 0); // saturate (slots 2..7)
+  ok(pt.live === 8, 'particle live count: saturated at cap');
+  pt.dot(99, 0, 0, 0, 1, 2, 0, 0, 0); // pool full → steal the ring head (slot 0, oldest)
+  ok(pt.live === 8 && pt.pool[0].x === 99 && pt.pool[1].str === '-5',
+    'particle saturation: steal recycles the ring head, live unchanged');
+  for (let i = 0; i < 100; i++) pt.update(0.02); // 2 s > every life → all expire
+  ok(pt.live === 0, 'particle live count: update() expiry zeroes live');
+  pt.dot(0, 0, 0, 0, 1, 2, 0, 0, 0);
+  pt.reset();
+  ok(pt.live === 0 && pt.pool.every((p) => !p.on), 'particle live count: reset zeroes live');
+
+  // escapeFromSpots: optional `out` writes in place (zero-alloc per-step nudge);
+  // the 4-arg form keeps returning a fresh point (game.js kill drops).
+  const spot = { x: 1000, y: 800, rx: 200, ry: 90, ellipse: true };
+  const buf = { x: 0, y: 0 };
+  ok(escapeFromSpots(1000, 800, [spot], 6, buf) === buf && buf.x === 1206 && buf.y === 800,
+    'pickup escape reuse: out param writes in place (same math, dead-center → +x edge + pad)');
+  const fresh = escapeFromSpots(1300, 700, [spot], 6);
+  ok(fresh !== buf && fresh.x === 1300 && fresh.y === 700, 'pickup escape reuse: 4-arg call still allocates a fresh point');
+
+  // Twin guards (rule 16): magnet flight + decay each appear exactly once in the module.
+  const psrc = readFileSync(fileURLToPath(new URL('../js/entities/pickups.js', import.meta.url)), 'utf8');
+  ok((psrc.match(/\(magR - d\) \* 6/g) || []).length === 1,
+    'pickup magnet twin guard: the flight speed formula lives in one shared helper');
+  ok((psrc.match(/Math\.exp\(-3 \* dt\)/g) || []).length === 1,
+    'pickup drag hoist: the decay exp runs once per step, not once per slot');
+
+  // 17.3 boundary (spawner.bossTimes vs game.js `nextT < runDuration`):
+  // an event landing EXACTLY at run end never fires (strict <).
+  const eq2 = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  ok(eq2(bossTimes(240), []) && eq2(bossTimes(241), [240]),
+    'boss boundary: event at exactly run end does not fire (strict <, matches game.js)');
+}
+
+// --- net-slice audit regressions (2026-10-20) ---
+{
+  // conn.js: a send issued while the socket is still CONNECTING must be queued
+  // and flushed on open — attachNet calls sendHello synchronously right after
+  // connect(), and the old guard dropped it (co-op join never reached the server).
+  const { createGameServer, attachCoopRoom } = await import('./serve.mjs');
+  const { CoopConn } = await import('../js/net/conn.js');
+  const srv = createGameServer();
+  attachCoopRoom(srv);
+  await new Promise((res) => srv.listen(0, '127.0.0.1', res));
+  const url = `ws://127.0.0.1:${srv.address().port}/`;
+  const got = [];
+  const cc = new CoopConn(url);
+  cc.onMessage = (m) => got.push(m);
+  cc.connect();
+  cc.sendHello('m01', { maxHpBonus: 0 }); // before open — must queue, not drop
+  const waitFor = (pred, what, ms = 4000) => new Promise((res, rej) => {
+    const t0 = Date.now();
+    const iv = setInterval(() => {
+      const m = got.find(pred);
+      if (m) { clearInterval(iv); res(m); }
+      else if (Date.now() - t0 > ms) { clearInterval(iv); rej(new Error('conn audit timeout: ' + what)); }
+    }, 5);
+  });
+  const joined = await waitFor((m) => m.t === 'joined', 'joined after pre-open hello');
+  ok(joined.seat === 0 && attachCoopRoom.room().players.length === 1,
+    'conn audit: hello queued while CONNECTING flushes on open and seats the client');
+  cc.close();
+  await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });
+  await new Promise((res) => setTimeout(res, 120)); // let any close-handshake event land
+  ok(!got.some((m) => m.t === 'netclosed'),
+    'conn audit: deliberate close() detaches handlers — no late netclosed after leave');
+
+  // sync.js unpackState: value-level sanitization (serve.mjs relays inner arrays
+  // unvalidated — it only caps counts; the client gate must catch garbage itself).
+  const st0 = stateMsg(1, 1, 1, 1, [new Array(37).fill(1)], [[1, 0, 1, 1, 1, 1, 0, 0]], [[0, 0, 1, 1]]);
+  ok(unpackState(st0) === st0, 'unpack audit: valid numeric body accepted');
+  const badP = (i, v) => { const p = new Array(37).fill(1); p[i] = v; return unpackState({ ...st0, players: [p] }); };
+  ok(badP(0, '10') === null && badP(2, NaN) === null,
+    'unpack audit: non-numeric player slot → null (no NaN/string poisoning)');
+  ok(unpackState({ ...st0, enemies: [[1, 99, 1, 1, 1, 1, 0, 0]] }) === null,
+    'unpack audit: enemy type index out of ENEMY_KEYS range → null');
+  ok(unpackState({ ...st0, enemies: [[1, 0, 'x', 1, 1, 1, 0, 0]] }) === null,
+    'unpack audit: non-numeric enemy slot → null');
+  ok(unpackState({ ...st0, pickups: [[0, -1, 1, 1]] }) === null && unpackState({ ...st0, pickups: [[2, 0, 1, 1]] }) === null,
+    'unpack audit: pickup kind/slot out of domain → null');
+  const pk3 = { gems: [{ on: true }, { on: false }], hearts: [] };
+  applyPickupSnaps(pk3, [[0, 9, 1, 1]]); // out-of-range pool slot must not throw
+  ok(pk3.gems.every((g) => !g.on), 'applyPickupSnaps audit: out-of-range pool slot ignored');
+}
+
+// --- systems/art slice audit regressions (2026-10-20) ---
+{
+  // camera: view-edge clamp under zoom extremes (view far smaller / larger than the world)
+  const cam = new Camera();
+  cam.setView(100, 100);
+  for (let i = 0; i < 600; i++) cam.update(1 / 60, 0, 0, 0, 0);
+  ok(cam.x === 50 && cam.y === 50, 'camera: tiny view at world corner clamps to view half-edge');
+  cam.setView(9000, 9000); // view wider than the whole world → camera must dead-center
+  for (let i = 0; i < 120; i++) cam.update(1 / 60, 4000, 3000, 0, 0);
+  ok(cam.x === CFG.world.w / 2 && cam.y === CFG.world.h / 2,
+    'camera: view ≥ world size centers on world (no inverted clamp)');
+  ok(cam.ox === 0 && cam.oy === 0, 'camera: zero trauma → zero shake offset');
+
+  // lighting: base darkness REPLACES the persistent half-res canvas ('copy'), and the
+  // fillStyle is cached per base (same string across frames — no per-frame concat).
+  const l = new Lighting();
+  const dark = [];
+  const mkCtx = () => ({
+    globalCompositeOperation: '', globalAlpha: 1, fillStyle: '',
+    fillRect() { dark.push([this.globalCompositeOperation, this.fillStyle]); },
+    drawImage() {}, save() {}, restore() {},
+  });
+  const lg2 = mkCtx(), screen = mkCtx();
+  l.cv = { width: 1, height: 1 }; l.ctx = lg2; l.w = 8; l.h = 4; // skip the browser resize()
+  const view = { x: 0, y: 0, w: 16, h: 8 };
+  l.draw(screen, view, [], 0);
+  l.draw(screen, view, [], 1);
+  ok(dark.length === 2 && dark.every((d) => d[0] === 'copy'),
+    'lighting: per-frame base fill uses copy (no cross-frame darkness alpha stacking)');
+  ok(dark[0][1] === dark[1][1] && dark[0][1] === `rgba(${CFG.lighting.base},${CFG.lighting.baseAlpha})`,
+    'lighting: darkness fillStyle cached per base, honors CFG.lighting');
+
+  // base.shadowSprite: gradient + arc centred in the SQUARE bake canvas (rx,rx), so
+  // non-square callers (decorShadow 48×15) squash a whole ellipse, not a clipped top.
+  const seen = {};
+  const fakeG = () => ({
+    createRadialGradient: (x0, y0, r0, x1, y1, r1) => { seen.grad = [x0, y0, r0, x1, y1, r1]; return { addColorStop() {} }; },
+    createLinearGradient: () => ({ addColorStop() {} }),
+    beginPath() {}, fill() {}, fillRect() {}, drawImage() {},
+    arc: (x, y, r) => { seen.arc = [x, y, r]; },
+  });
+  globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: fakeG }) };
+  shadowSprite(48, 15);
+  delete globalThis.document;
+  ok(seen.grad[0] === 48 && seen.grad[1] === 48 && seen.grad[4] === 48,
+    'shadowSprite: gradient centred at (rx,rx) — no top-clip band for ry < rx');
+  ok(seen.arc[0] === 48 && seen.arc[1] === 48 && seen.arc[2] === 48,
+    'shadowSprite: fill arc matches the gradient centre');
+}
+
+// --- Input: focused UI owns Space; joystick knob follows the most-deflected stick ---
+{
+  const keyFns = [];
+  const prevAdd = globalThis.addEventListener;
+  const prevDoc = globalThis.document;
+  globalThis.addEventListener = (type, fn) => { if (type === 'keydown') keyFns.push(fn); };
+  globalThis.document = { addEventListener() {} };
+  globalThis.innerWidth = 800; globalThis.innerHeight = 600;
+  const { Input } = await import('../js/core/input.js');
+  const canvas = { addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0 }) };
+  const knob = { style: {} };
+  const inp = new Input(canvas, { joyBase: { style: {} }, joyKnob: knob });
+  const fire = (target) => keyFns.forEach((f) => f({ code: 'Space', repeat: false, preventDefault() {}, target }));
+  fire({ closest: () => null }); // focus on the game area: Space = dash (desktop quick-dash)
+  ok(inp.dashEdge === true, 'input: Space outside focused UI still queues a dash');
+  inp.consumeDash();
+  fire({ closest: (sel) => (sel.includes('button') ? { tag: 'btn' } : null) }); // focused button/card owns Space
+  ok(inp.dashEdge === false, 'input: Space on focused UI never reaches the game hotkeys');
+  // Multi-touch: the knob must follow the most-deflected stick, not the first finger
+  // (sticks carry no .m — the old comparison was always undefined).
+  inp.sticks.set(1, { ox: 0, oy: 0, dx: 3, dy: 0 });
+  inp.sticks.set(2, { ox: 0, oy: 0, dx: 40, dy: 0 });
+  inp.updateJoyUI();
+  ok(/translate\(40px, 0px\)/.test(knob.style.transform), 'input: joystick knob follows the most-deflected stick');
+  globalThis.addEventListener = prevAdd;
+  if (prevDoc === undefined) delete globalThis.document; else globalThis.document = prevDoc;
+  delete globalThis.innerWidth; delete globalThis.innerHeight;
+}
+
+// --- Audio/utils slice audit (2026-10-20): normAngle wrap + non-finite guard,
+// HashGrid packed keys with scratch reuse (contract), negative coords, Infinity guards ---
+{
+  ok(Number.isNaN(normAngle(Infinity)) && Number.isNaN(normAngle(-Infinity)) && Number.isNaN(normAngle(NaN)),
+    'normAngle: non-finite → NaN (no infinite loop)');
+  ok(near(normAngle(TAU * 3 + 1), 1) && near(normAngle(-TAU * 3 - 1), -1), 'normAngle: wraps multiple turns both ways');
+  ok(normAngle(Math.PI) === Math.PI && normAngle(3 * Math.PI) === Math.PI && normAngle(-Math.PI) === Math.PI,
+    'normAngle: consistent (-PI, PI] seam at +PI');
+  const big = normAngle(1e15); // while-loop wrap would crawl; modulo is O(1)
+  ok(Number.isFinite(big) && big > -Math.PI && big <= Math.PI, 'normAngle: huge finite angle wraps in O(1)');
+
+  const g = new HashGrid(96);
+  const pNeg = { x: -100, y: -100 };
+  g.add(pNeg.x, pNeg.y, pNeg); // negative cell index (packed key must handle it)
+  ok(g.near(-50, -50).includes(pNeg), 'HashGrid: negative-coord add found by near');
+  ok(g.range(0, 0, 150).includes(pNeg), 'HashGrid: negative-coord add found by range');
+  const r1 = g.range(0, 0, 150);
+  const r1len = r1.length;
+  g.near(-50, -50); // near uses its own scratch → range result stays intact
+  ok(r1.length === r1len && r1.includes(pNeg), 'HashGrid: near/range scratch buffers do not collide');
+  g.near(5000, 5000); // same-kind reuse: previous near result is gone, fresh query correct
+  ok(g.near(-50, -50).includes(pNeg), 'HashGrid: reused near buffer refills per query');
+  ok(g.range(Infinity, 0, 96).length === 0 && g.range(0, 0, NaN).length === 0,
+    'HashGrid.range: non-finite args → empty (no hang)');
+  g.clear();
+  ok(g.near(-50, -50).length === 0 && g._outRange.length === 0, 'HashGrid.clear: map + scratch released');
+}
+
+// D91 (user law 2026-10-20): ZERO shared/duplicate items in co-op — weapons, synergies AND passives.
+{
+  const excl = new Set(['dmg', 'speed', 'blades']);
+  let hitsExcl = 0;
+  let hitsCtrl = 0;
+  for (let s = 0; s < 24; s++) {
+    const o1 = cardOffers({}, {}, {}, mulberry32(s), 99, excl);
+    if (o1.some((c) => (c.kind === 'passive' && (c.key === 'dmg' || c.key === 'speed')) || (c.kind === 'weapon' && c.key === 'blades'))) hitsExcl++;
+    if (cardOffers({}, {}, {}, mulberry32(s), 99).some((c) => c.kind === 'passive' && c.key === 'dmg')) hitsCtrl++;
+  }
+  ok(hitsExcl === 0, 'D91: other-owned passive/weapon keys never appear in offers (24 seeds)');
+  ok(hitsCtrl > 0, 'D91: control — the unowned passive DOES appear when not excluded (assert can fire)');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

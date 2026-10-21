@@ -40,7 +40,7 @@ export class Camera {
     this.x = clamp(approach(this.x, tx, c.follow, dt), Math.min(hw, CFG.world.w / 2), Math.max(CFG.world.w - hw, CFG.world.w / 2));
     this.y = clamp(approach(this.y, ty, c.follow, dt), Math.min(hh, CFG.world.h / 2), Math.max(CFG.world.h - hh, CFG.world.h / 2));
     this.shake = Math.max(0, this.shake - c.shakeDecay * dt);
-    const m = this.shake * this.shake * 16;
+    const m = this.shake * this.shake * c.shakeAmp;
     this.ox = rand(-m, m);
     this.oy = rand(-m, m);
   }

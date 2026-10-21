@@ -277,8 +277,11 @@ body.touch #touch-ui[hidden] { display: none; }
   position: fixed; inset: 0; z-index: 30;
   /* 22.9: 'safe center' — plain center + overflow:auto made the top of tall menus
      (level cards) unreachable; safe centering keeps centering but top-aligns
-     (scrollable) when content exceeds the viewport. */
-  display: flex; align-items: safe center; justify-content: center;
+     (scrollable) when content exceeds the viewport. The plain-center line above is
+     the fallback for browsers that drop the safe keyword (stretch would break menus). */
+  display: flex;
+  align-items: center;
+  align-items: safe center; justify-content: center;
   padding: 20px;
   padding: calc(20px + var(--safe-t)) calc(20px + var(--safe-l)) calc(20px + var(--safe-b)) calc(20px + var(--safe-r));
   background: linear-gradient(180deg, rgba(5, 7, 15, 0.38), rgba(5, 7, 15, 0.72));

@@ -87,8 +87,6 @@ export function initMusic(game, sfx) {
   let howlAt = Infinity;
   let level = null; // 13.11: levelKey for the flavor layers (set at startMusic)
 
-  const off = [];
-
   const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 
   function build(c, musicBus, ambBus) {
@@ -432,11 +430,9 @@ export function initMusic(game, sfx) {
     setLevel(0);
   }
 
-  off.push(
-    bus.on('runstart', () => startMusic(true)),
-    bus.on('pause', (p) => (p ? stopMusic() : startMusic(false))),
-    bus.on('gameover', () => stopMusic()),
-  );
+  bus.on('runstart', () => startMusic(true));
+  bus.on('pause', (p) => (p ? stopMusic() : startMusic(false)));
+  bus.on('gameover', () => stopMusic());
 
   const update = () => {
     const c = sfx.ctx();

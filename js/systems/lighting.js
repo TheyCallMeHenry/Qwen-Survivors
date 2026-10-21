@@ -17,6 +17,8 @@ export class Lighting {
     this.h = 0;
     this._holeSpr = null; // single black-hole sprite (hole profile is rgb-independent)
     this._glowCache = new Map(); // 'r,g,b' -> glow sprite
+    this._baseKey = null;   // cached darkness fillStyle, keyed by base 'r,g,b'
+    this._baseFillS = '';
   }
 
   resize(w, h) {
@@ -30,6 +32,15 @@ export class Lighting {
     this.h = hh;
   }
 
+  // Darkness fillStyle baked once per base colour — no per-frame string concat (perf guardrail).
+  _baseFill(base) {
+    if (base !== this._baseKey) {
+      this._baseKey = base;
+      this._baseFillS = `rgba(${base},${CFG.lighting.baseAlpha})`;
+    }
+    return this._baseFillS;
+  }
+
   // cam = {x, y, w, h} view center + size. lights = [{x, y, r, rgb: 'r,g,b', flicker 0..1}] (world space).
   // base = 'r,g,b' darkness base (per-level palette; default = m01/CFG).
   draw(ctx, cam, lights, t, base = CFG.lighting.base) {
@@ -37,8 +48,11 @@ export class Lighting {
     const g = this.ctx;
     const ox = cam.x - cam.w / 2, oy = cam.y - cam.h / 2; // view top-left (world px)
 
-    g.globalCompositeOperation = 'source-over';
-    g.fillStyle = `rgba(${base},${CFG.lighting.baseAlpha})`;
+    // 'copy' REPLACES the canvas: it persists across frames, and 'source-over' would
+    // stack each frame's fill on the last (darkness alpha → 1), deadening CFG.lighting
+    // .baseAlpha to a no-op and crushing the soft hole edges within ~2 frames.
+    g.globalCompositeOperation = 'copy';
+    g.fillStyle = this._baseFill(base);
     g.fillRect(0, 0, this.w, this.h);
     g.globalCompositeOperation = 'destination-out';
     for (const L of lights) this._hole(g, L, ox, oy, t);
@@ -104,7 +118,7 @@ export class Lighting {
     const cx = (L.x - ox) * 0.5, cy = (L.y - oy) * 0.5;
     const r = L.r * 0.5;
     if (r <= 1) return;
-    g.globalAlpha = 0.92 * f; // source-over onto a fully transparent offscreen → premul alpha multiplies
+    g.globalAlpha = 0.92 * f; // destination-out: sprite alpha × this = fraction of darkness erased
     const d = r * 2;
     g.drawImage(this._holeSprite(), cx - r, cy - r, d, d);
     g.globalAlpha = 1;

@@ -246,23 +246,25 @@ export function initScreens(game, { icons }) {
   }
 
   // Co-op status (11.2): poll the net state, write the menu button + status
-  // line only on change (per-frame safe).
+  // line only on change (per-frame safe — coopUI runs every frame in every state).
   function coopUI() {
     let text = '';
+    let label;
     if (!game.net) {
-      coopBtn.textContent = 'Co-op: Join';
+      label = 'Co-op: Join';
     } else if (game.netMyId === null) {
-      coopBtn.textContent = 'Co-op…';
+      label = 'Co-op…';
       text = 'Joining room…';
     } else if (game.netRole === 'host') {
-      coopBtn.textContent = 'Co-op: Host · Leave';
+      label = 'Co-op: Host · Leave';
       text = `Co-op host — ${game.netRoster.length}/${CFG.coop.maxPlayers} in room (share this address)`;
     } else {
       const seat = game._seat();
-      coopBtn.textContent = 'Co-op: Guest · Leave';
+      label = 'Co-op: Guest · Leave';
       text = `Co-op guest — seat ${seat >= 0 ? seat + 1 : '?'} · pause is host-only`;
     }
     coopLeave.classList.toggle('hidden', !game.net);
+    if (coopBtn.textContent !== label) coopBtn.textContent = label;
     if (text !== coopText) {
       coopText = text;
       coopStatus.hidden = !text;

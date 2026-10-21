@@ -1,10 +1,10 @@
 // All tuning in one place. World units = CSS pixels.
 
 export const CFG = {
-  world: { w: 4200, h: 3200, margin: 70, tile: 256, cullPad: 300, starBands: 4 }, // starBands = 25.4d twinkle alpha-group count
+  world: { w: 4200, h: 3200, margin: 70, tile: 256, cullPad: 300, decorPad: 260, starBands: 4 }, // cullPad = Y-sort entity gather pad; decorPad = world-space decor/ridge cull pad; starBands = 25.4d twinkle alpha-group count
 
   run: {
-    time: 300,          // survive this long (s) to win (kept as the canonical default; 17.1)
+    time: 300,          // legacy canonical default; live end-time now comes from durations below (17.1/17.2)
     bossAt: 240,        // wraith spawn time (first boss event = 4:00)
     bossEvery: 300,     // cadence between boss events: 4:00, 9:00, 14:00, 19:00, … (17.3)
     victoryBonus: 10000,
@@ -56,7 +56,17 @@ export const CFG = {
   // Ghost per-player tints (D62): seat 0→3, Pac-Man ghost colors (Blinky/Pinky/Inky/Clyde).
   ghostColors: ['#ff4b4b', '#ff7bd9', '#4be3ff', '#ffa24b'],
 
-  camera: { follow: 9, lead: 0.14, shakeDecay: 3.4 },
+  // Camera follow/lead/decay + the four shake intensities the run fires (bomb,
+  // boss kill, player hurt, death) — rule 5: these were magic numbers in game.js.
+  camera: {
+    follow: 9, lead: 0.14, shakeDecay: 3.4, shakeAmp: 16, // shakeAmp = px offset at full shake
+    shake: { bomb: 0.6, bossKill: 0.8, hurt: 0.45, death: 1 },
+  },
+
+  // Main-loop guardrails (core/loop.js): the wall-clock gap clamp (tab switch,
+  // debugger) and the per-rAF fixed-step backlog cap. The 1/60 step itself is an
+  // architecture invariant (AGENTS frame pipeline), so it stays in the Loop.
+  loop: { maxFrameDt: 0.1, maxSteps: 5 },
 
   // View zoom (13.8): camera-view factor — 0.80 = zoomed out (×1.56 area) / 1.0 = full view.
   // Touch default 0.80 (D13), persisted per-browser; HUD DOM + minimap always stay 1×.

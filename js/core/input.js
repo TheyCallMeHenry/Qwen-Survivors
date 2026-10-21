@@ -22,7 +22,6 @@ export class Input {
     this.muteEdge = false;
     this.cardEdges = [false, false, false];
     this.gesture = false;
-    this.isTouchUi = false;
 
     this._onKey = (e) => this.keydown(e);
     this._onKeyUp = (e) => this.keyup(e);
@@ -55,6 +54,12 @@ export class Input {
   }
 
   keydown(e) {
+    // A focused button/card owns Enter/Space itself (its click/keydown handler runs).
+    // Without this deferral the preventDefault below breaks Space-activation, and a
+    // Space meant for a focused menu card also queued a dash — dash starts the game
+    // from MENU (game.js _menuUpdate).
+    if (e.code === 'Space' && e.target && e.target.closest &&
+        e.target.closest('button, input, select, textarea, [tabindex]')) return;
     if (PREVENT_CODES.has(e.code)) e.preventDefault();
     this.gesture = true;
     if (e.repeat) return;
@@ -144,8 +149,12 @@ export class Input {
   updateJoyUI() {
     const base = this.ui.joyBase, knob = this.ui.joyKnob;
     if (!base) return;
-    let s = null;
-    for (const st of this.sticks.values()) { if (!s || st.m > (s && s.m || 0)) { s = st; } }
+    // Follow the most-deflected stick (same rule as axes(); sticks carry no .m).
+    let s = null, sm = -1;
+    for (const st of this.sticks.values()) {
+      const m = Math.hypot(st.dx, st.dy);
+      if (m > sm) { sm = m; s = st; }
+    }
     if (!s) { base.style.display = 'none'; return; }
     const W = innerWidth, H = innerHeight;
     const bx = Math.max(74, Math.min(W - 74, s.ox));

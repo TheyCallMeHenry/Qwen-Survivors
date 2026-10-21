@@ -6,8 +6,11 @@ import { TAU } from '../utils/math.js';
 // m02 koi pond — registered colliders with `ellipse: true`) radially from the
 // spot center to its perimeter + pad (walkable ground just outside the edge).
 // Loops so overlapping spots resolve; capped so pathological stacks can't hang.
-export function escapeFromSpots(x, y, spots, pad) {
-  if (!spots || spots.length === 0) return { x, y };
+// Optional `out`: write target for hot per-frame callers (Pickups.update) so the
+// nudge costs zero allocations; callers without it get a fresh point as before.
+export function escapeFromSpots(x, y, spots, pad, out) {
+  out = out || { x: 0, y: 0 };
+  if (!spots || spots.length === 0) { out.x = x; out.y = y; return out; }
   let guard = 0;
   for (let moved = true; moved && guard++ < 8;) {
     moved = false;
@@ -24,8 +27,24 @@ export function escapeFromSpots(x, y, spots, pad) {
       moved = true;
     }
   }
-  return { x, y };
+  out.x = x; out.y = y;
+  return out;
 }
+
+// Shared magnet flight (gems + hearts, 12.6 — one implementation, not twins):
+// accelerate `o` toward the player (dx,dy = gem→player, d = pre-move distance),
+// faster the closer it gets. Never re-normalize at d≈0 (inv 0 → velocity 0;
+// the collect check in the caller fires long before that).
+const flyTo = (o, dx, dy, d, magR) => {
+  const inv = d > 0.001 ? 1 / d : 0;
+  const sp = Math.min(900, 220 + (magR - d) * 6);
+  o.vx = dx * inv * sp;
+  o.vy = dy * inv * sp;
+};
+
+// Scratch write target for the per-step gem nudge (single-threaded: update() is
+// the only holder — escapeFromSpots callers elsewhere get fresh objects).
+const _escOut = { x: 0, y: 0 };
 
 export class Pickups {
   constructor(sprites = {}) {
@@ -83,11 +102,12 @@ export class Pickups {
   // Returns {xp, heal} collected this step.
   update(dt, player, spots) {
     const out = { xp: 0, heal: 0 };
+    const drag = Math.exp(-3 * dt); // decay multiplier — one exp per step, not per slot
     if (spots && spots.length) {
       for (const g of this.gems) {
         if (!g.on || g.mag) continue;
-        const o = escapeFromSpots(g.x, g.y, spots, CFG.gems.escapePad);
-        g.x = o.x; g.y = o.y;
+        escapeFromSpots(g.x, g.y, spots, CFG.gems.escapePad, _escOut);
+        g.x = _escOut.x; g.y = _escOut.y;
       }
     }
     const magR = CFG.gems.magnetBase * (player.magnet || 1);
@@ -97,13 +117,10 @@ export class Pickups {
       const d = Math.hypot(dx, dy);
       if (!g.mag && d < magR) g.mag = true;
       if (g.mag) {
-        const inv = d > 0.001 ? 1 / d : 0;
-        const sp = Math.min(900, 220 + (magR - d) * 6);
-        g.vx = dx * inv * sp;
-        g.vy = dy * inv * sp;
+        flyTo(g, dx, dy, d, magR);
       } else {
-        g.vx *= Math.exp(-3 * dt);
-        g.vy *= Math.exp(-3 * dt);
+        g.vx *= drag;
+        g.vy *= drag;
       }
       g.x += g.vx * dt;
       g.y += g.vy * dt;
@@ -124,16 +141,13 @@ export class Pickups {
       // `d <=` matters: a heart sitting exactly ON the pull radius must be pulled, not
       // wait forever — that is precisely the L1 "within range" case.
       if (heartMagR > 0 && d <= heartMagR) {
-        const inv = d > 0.001 ? 1 / d : 0;
-        const sp = Math.min(900, 220 + (heartMagR - d) * 6);
-        h.vx = dx * inv * sp;
-        h.vy = dy * inv * sp;
+        flyTo(h, dx, dy, d, heartMagR);
       } else if (h.vx || h.vy) {
-        h.vx *= Math.exp(-3 * dt);
-        h.vy *= Math.exp(-3 * dt);
+        h.vx *= drag;
+        h.vy *= drag;
       }
-      h.x += (h.vx || 0) * dt;
-      h.y += (h.vy || 0) * dt;
+      h.x += h.vx * dt;
+      h.y += h.vy * dt;
       if (d < CFG.gems.collectR + player.r) {
         h.on = false;
         out.heal += CFG.gems.heartHeal;

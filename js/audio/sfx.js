@@ -24,8 +24,6 @@ export function initSfx(game) {
   let graph = null;
   let muted = readMuted();
 
-  const off = [];
-
   function readMuted() {
     try { return localStorage.getItem(CFG.scores.muteKey) === '1'; } catch { return false; }
   }
@@ -162,35 +160,37 @@ export function initSfx(game) {
 
   const last = Object.create(null);
   function play(name, arg) {
-    if (!ctx) return;
+    // Build the ctx here when a gesture already armed one: 'runstart' emits inside the
+    // same click chain (user activation) that sets input.gesture, and deferring creation
+    // to the next sfx.update() (render phase) would drop that first chime.
+    if (!ctx) { ensure(); if (!ctx) return; }
+    if (ctx.state !== 'running') return; // blocked/suspended: never schedule against a frozen currentTime
     const t = ctx.currentTime;
     if (t - (last[name] ?? -1e9) < (GAPS[name] || 0)) return;
     last[name] = t;
     RECIPES[name](t, arg);
   }
 
-  off.push(
-    bus.on('dash', () => play('dash')),
-    bus.on('kill', () => play('kill')),
-    bus.on('hurt', () => play('hurt')),
-    bus.on('death', () => play('death')),
-    bus.on('levelup', () => play('chime')),
-    bus.on('cards', () => play('chime')),
-    bus.on('card', () => play('card')),
-    bus.on('banner', () => play('banner')),
-    bus.on('runstart', () => play('runstart')),
-    bus.on('gameover', (s) => play('gameover', s)),
-    bus.on('pistol', () => play('pistol')),
-    bus.on('boom', () => play('boom')),
-    bus.on('fire', () => play('fire')),
-    bus.on('gem', () => play('gem')),
-    bus.on('denied', () => play('denied')),
-    bus.on('mute', () => setMuted(readMuted())),
-  );
+  bus.on('dash', () => play('dash'));
+  bus.on('kill', () => play('kill'));
+  bus.on('hurt', () => play('hurt'));
+  bus.on('death', () => play('death'));
+  bus.on('levelup', () => play('chime'));
+  bus.on('cards', () => play('chime'));
+  bus.on('card', () => play('card'));
+  bus.on('banner', () => play('banner'));
+  bus.on('runstart', () => play('runstart'));
+  bus.on('gameover', (s) => play('gameover', s));
+  bus.on('pistol', () => play('pistol'));
+  bus.on('boom', () => play('boom'));
+  bus.on('fire', () => play('fire'));
+  bus.on('gem', () => play('gem'));
+  bus.on('denied', () => play('denied'));
+  bus.on('mute', () => setMuted(readMuted()));
 
   const update = () => {
     if (ctx) {
-      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      if (ctx.state !== 'running') ctx.resume().catch(() => {}); // 'suspended' (blur) + iOS 'interrupted' (phone call)
       return;
     }
     ensure();
