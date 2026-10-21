@@ -1306,6 +1306,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(C.mage.cost === 0 && C.ranger.cost === 1500 && C.warden.cost === 3500 && C.swash.cost === 7500,
     '11.6.1: D58 costs — mage 0, ranger 1500, warden 3500, swash 7500');
   ok(C.order.every((k) => CFG.weapons[C[k].weapon]) && C.ghost.weapon === null, '11.6.1: starting weapons in weapons (ghost: none)');
+  ok(new Set(C.order.map((k) => C[k].weapon)).size === C.order.length, 'D91: every character has a DISTINCT starting weapon (co-op zero-duplicate law — new roster entries must keep this)');
   ok(C.ghost.hp === 100 && C.ghost.dmg === 1 && C.ghost.speed === 265, '11.6.1: ghost = baseline (100 / 1.0 / 265)');
   ok(C.order.every((k) => C[k].hp > 0 && C[k].dmg > 0 && C[k].speed > 0), '11.6.1: stats positive');
   ok(charDef('nope') === C.mage && charDef('mage') === C.mage, '11.6.1: charDef unknown → mage');

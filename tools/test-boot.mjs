@@ -2446,19 +2446,19 @@ m03RunDone = true;
   assert(pl1.charKey === 'warden' && pl1.maxHp === CFG.characters.warden.hp + pl1.metaHp && pl1.weapons.garlic === 1
     && Math.abs(pl1.dmgMul - CFG.characters.warden.dmg) < 1e-9,
     '11.6.4: remote (seat 1) spawned from its profile char — warden 150 HP, ×0.85 dmg, Wraith Garlic');
-  assert(pl2.charKey === 'ranger' && pl2.maxHp === CFG.characters.ranger.hp + pl2.metaHp && pl2.weapons.blades === 1
+  assert(pl2.charKey === 'ranger' && pl2.maxHp === CFG.characters.ranger.hp + pl2.metaHp && pl2.weapons.bow === 1
     && Math.abs(pl2.dmgMul - CFG.characters.ranger.dmg) < 1e-9,
-    '11.6.4: remote (seat 2) spawned from its profile char — ranger 110 HP, Aegis Blades');
+    '11.6.4: remote (seat 2) spawned from its profile char — ranger 110 HP, Bow & Arrow');
   assert(new Set([hostG.player.charKey, pl1.charKey, pl2.charKey]).size === 3,
     '11.6.4: per-seat chars unique across the lobby (D56)');
   // 11.6b (D29 respec): starting-weapon pre-ownership — each seat's starting weapon is
   // registered owned at run start, so it is excluded from the OTHER seats' offers.
   assert(hostG.itemOwner.wand === hostG.player && hostG.itemOwner.garlic === pl1
-    && hostG.itemOwner.blades === pl2,
-    '11.6b: starting weapons pre-owned at run start (wand/garlic/blades → their seats)');
-  assert(hostG._ownerExclusion(pl1).has('wand') && hostG._ownerExclusion(pl1).has('blades')
+    && hostG.itemOwner.bow === pl2,
+    '11.6b: starting weapons pre-owned at run start (wand/garlic/bow → their seats)');
+  assert(hostG._ownerExclusion(pl1).has('wand') && hostG._ownerExclusion(pl1).has('bow')
     && !hostG._ownerExclusion(pl1).has('garlic')
-    && hostG._ownerExclusion(hostG.player).has('garlic') && hostG._ownerExclusion(hostG.player).has('blades')
+    && hostG._ownerExclusion(hostG.player).has('garlic') && hostG._ownerExclusion(hostG.player).has('bow')
     && !hostG._ownerExclusion(hostG.player).has('wand'),
     '11.6b: other seats\' starters are excluded from offers, own starter is not');
   // Synergy first-pick ownership: host force-picks blight (forced card bypasses gating,
@@ -2544,8 +2544,8 @@ m03RunDone = true;
   await rawA.wait((m) => m.t === 'roster' && m.players.length === 4, 'host roster 4');
   await tick(60);
   const pl3 = hostG.players[3];
-  assert(pl3 && pl3.charKey === 'swash' && pl3.maxHp === CFG.characters.swash.hp + pl3.metaHp && pl3.weapons.flame === 1,
-    '11.6.4: late joiner with a TAKEN pick is reassigned its next unlocked char (swash, Pyre Lance)');
+  assert(pl3 && pl3.charKey === 'swash' && pl3.maxHp === CFG.characters.swash.hp + pl3.metaHp && pl3.weapons.pistols === 1,
+    '11.6.4: late joiner with a TAKEN pick is reassigned its next unlocked char (swash, Twin Fangs)');
   assert(resolveChars(hostG.netRoster).join() === 'mage,warden,ranger,swash',
     '11.6.4: host-authoritative resolution — every seat unique, seat order');
   await rawD.wait((m) => m.t === 'runstart', 'c3 runstart');

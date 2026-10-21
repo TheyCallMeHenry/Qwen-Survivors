@@ -48,8 +48,8 @@ export const CFG = {
     order: ['mage', 'warden', 'ranger', 'swash'],
     mage:    { name: 'Mage',         weapon: 'wand',   cost: 0,    hp: 60,  dmg: 1.35, speed: 275, accent: '#9fe8ff', desc: 'Glass cannon — +35% weapon damage, low max HP. Starts with the Moonbolt Wand.' },
     warden:  { name: 'Warden',       weapon: 'garlic', cost: 3500, hp: 150, dmg: 0.85, speed: 230, accent: '#ffb454', desc: 'Tanky, slowest move speed, lower-medium damage. Starts with the Wraith Garlic aura.' },
-    ranger:  { name: 'Ranger',       weapon: 'blades', cost: 1500, hp: 110, dmg: 1.0,  speed: 320, accent: '#a4ffc9', desc: 'Fast and balanced. Starts with the Aegis Blades orbiters.' },
-    swash:   { name: 'Swashbuckler', weapon: 'flame',  cost: 7500, hp: 90,  dmg: 1.15, speed: 300, accent: '#e8b45a', desc: 'Agile, upper-medium damage. Starts with the Pyre Lance stream.' },
+    ranger:  { name: 'Ranger',       weapon: 'bow',    cost: 1500, hp: 110, dmg: 1.0,  speed: 320, accent: '#a4ffc9', desc: 'Fast and balanced. Starts with the Bow & Arrow.' },
+    swash:   { name: 'Swashbuckler', weapon: 'pistols', cost: 7500, hp: 90,  dmg: 1.15, speed: 300, accent: '#e8b45a', desc: 'Agile, upper-medium damage. Starts with the Twin Fangs.' },
     ghost:   { name: 'Ghost',        weapon: null,     cost: 0,    hp: 100, dmg: 1.0,  speed: 265, accent: null, desc: 'Faceless fallback — baseline stats, no starting weapon.' },
   },
 
