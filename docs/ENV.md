@@ -13,7 +13,7 @@ Owned here; never re-narrated in PROGRESS.md.
 
 ## Git
 
-- Branch layout: `main` (Pages source) + work branch `overnight-2026-08-22`; commit/push only on explicit user ask (AGENTS rule 7).
+- Branch layout: `main` (Pages source, published) + one permanent work branch `dev` (D100 — renamed from `overnight-2026-08-22` on 2026-10-22; never re-dated); commit/push only on explicit user ask (AGENTS rule 7).
 - **Push from the agent shell works** (harness push succeeded 2026-09-04, session-log entry for `e502417`/`e5e9469`/`68c455e`). No credential workaround needed.
 - **Pages staleness = the standing test-channel trap:** the user's only test channel is the published Pages build, which serves `main` only. Work-branch commits are invisible to the user until an explicit ff-merge + push to `main`. When the user reports "feature X missing," check whether it is unpublished before auditing code (D73 lesson, 2026-08-28).
 - Repo is **public** — never commit user-private content; `human-user-notes_AI-agent-ignore/` is off-limits and gitignored.

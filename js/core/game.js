@@ -1172,10 +1172,13 @@ export class Game {
     const cam = this.camera;
     const vw = cam.w, vh = cam.h;
     const view = { x: cam.x + cam.ox, y: cam.y + cam.oy, w: vw, h: vh };
-    // Zoom (13.8): the enlarged view rect is centered on the canvas (no-op at zoom 1);
-    // the vignette is a 1× canvas overlay, so it stays outside this transform.
+    // Zoom (13.8; 29.2 fix): the enlarged view must be SCALED onto the canvas, not just
+    // centered — a 1:1-centered oversize view was clipped off-canvas, so the visible area was
+    // zoom-independent (user: "zero difference" between settings). scale(zoom) makes the
+    // world-unit → canvas-px ratio exactly zoom: view (vw×vh) maps precisely onto (cw×ch).
+    // The vignette is a 1× canvas overlay, so it stays outside this transform.
     ctx.save();
-    ctx.translate((this.cw - vw) / 2, (this.ch - vh) / 2);
+    ctx.scale(this.zoom, this.zoom);
 
     if (this.state === 'MENU') {
       this.world.drawBackground(ctx, view, this.menuT);

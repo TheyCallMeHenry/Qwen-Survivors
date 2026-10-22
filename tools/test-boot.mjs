@@ -39,11 +39,14 @@ const okR = (v) => Number.isFinite(v) && v >= 0;
 // volume is the proxy for it). Counted inside the ctx proxy only; the harness
 // set() no-ops, so nothing else can instrument this way.
 const drawOps = { drawImage: 0, arc: 0, ellipse: 0, fill: 0, fillRect: 0, stroke: 0, fillText: 0, radial: 0 };
+// 29.2: transform-call recorder (zoom must reach the raster — defect test asserts scale() presence).
+const tOps = { scale: [] };
 
 function makeCtx() {
   return new Proxy({}, {
     get(_, p) {
       if (p === 'canvas') return { width: 1, height: 1 };
+      if (p === 'scale') return (x, y) => { tOps.scale.push([x, y]); };
       if (p === 'createRadialGradient') return (x0, y0, r0, x1, y1, r1) => {
         drawOps.radial++;
         if (!okR(r0) || !okR(r1)) throw new IndexSizeError();
@@ -766,6 +769,28 @@ assert(byId['touch-ui'].hidden === true, '22.10: #touch-ui visible during MENU')
   assert(byId['set-mute'].classList.contains('muted'), 'settings mute: row not marked muted');
   byId['set-mute'].click(); pump(30);
   assert(localStorage.getItem(CFG.scores.muteKey) === '0', 'settings mute: un-mute did not persist');
+}
+
+// 29.2 — zoom must REACH THE RASTER: root cause of "zero difference between Full view and Zoomed
+// out" is that render() never scaled the enlarged view (visible area was zoom-independent). The
+// composition check: view width × zoom must equal the canvas width exactly (the scale pass maps
+// the view onto the canvas), proven by observing scale() calls with the current zoom as arguments.
+{
+  const setZoomTo = (z) => { while (game.zoom !== z) byId['set-zoom'].click(); };
+  setZoomTo(CFG.zoom.touch);
+  tOps.scale.length = 0;
+  game.render();
+  assert(tOps.scale.some(([x, y]) => Math.abs(x - CFG.zoom.touch) < 1e-9 && Math.abs(y - CFG.zoom.touch) < 1e-9),
+    '29.2: render() does not scale by zoom (0.80) — zoomed-out would show identical pixels to Full view');
+  assert(Math.abs(game.camera.w * game.zoom - game.cw) < 1e-6 && Math.abs(game.camera.h * game.zoom - game.ch) < 1e-6,
+    '29.2: view×zoom must map exactly onto the canvas (0.80 state)');
+  setZoomTo(CFG.zoom.full);
+  tOps.scale.length = 0;
+  game.render();
+  assert(tOps.scale.some(([x, y]) => Math.abs(x - 1) < 1e-9 && Math.abs(y - 1) < 1e-9),
+    '29.2: full-view render must keep the same 1.0-scale composition (uniform path, no special-casing)');
+  assert(Math.abs(game.camera.w * game.zoom - game.cw) < 1e-6 && Math.abs(game.camera.h * game.zoom - game.ch) < 1e-6,
+    '29.2: view×zoom must map exactly onto the canvas (1.0 state)');
 }
 
 // 11.6.2 — character select E2E (D58 Soulshard shop + selection + run-start application)

@@ -13,6 +13,22 @@
 
 ## Entries (newest first)
 
+### 2026-10-22 — Branch-label concern + research mandate; later 45-day freshness restriction; then APPROVAL (D100)
+- **Received:** 2026-10-22
+- **Classification:** design decision + process rule + approval
+- **Context:** after the 29.2 checkpoint; the work branch name `overnight-2026-08-22` had outlived its meaning.
+- **Verbatim (opening):** "At this point, 'overnight-2026-08-22' is a significantly misleading title/label for this version/branch. It's 2026-10-22 today, and we're working throughout the day, not just 'overnight'. Please research the best, most practical, and most optimal manner of branch naming conventions, then present your findings + recommendations, then await my approval before codifying the new approach into the AGENTS.md file rules."
+- **Verbatim (round 2):** "Perform another round of research, this time specifically target results meeting all of the previously stated criteria while also only accepting results provided/presented/meaningfully updated within the past 45 days."
+- **Verbatim (approval):** "I approve your recommended approach; proceed with implementation."
+- **Effect:** D100 executed (permanent `dev` work branch); findings in `docs/branch-naming-research-2026-10-22.md`.
+
+### 2026-10-22 — Laser intent confirmed
+- **Received:** 2026-10-22
+- **Classification:** answer/approval
+- **Context:** answers session 40's comprehension check — user had asked the laser directive be restated before implementation.
+- **Verbatim:** "Yes, your restatement of the continuous laser weapon appears to match my intent."
+- **Effect:** clears the laser rework (anchor-orbit around player, orbit continues while beam inactive, reactivation at any angle expected; every level-up +rotation speed slightly + less downtime; level 3 adds a 2nd beam exactly opposite; level 5 adds a 3rd, all three equidistant, same velocity, same active timings).
+
 ### 2026-10-22 — Record sync request + playtest notes file received
 - **Received:** 2026-10-22 (no time; date only)
 - **Verbatim (chat):** "Sync the record so a cold session could resume without asking me anything: decisions, findings, research, tests run and their real results, troubleshooting attempts and resolutions, and the exact next step. Keep it lean — no transcripts and no line references; the code is the implementation record."
