@@ -14,6 +14,23 @@ import { buildGhost } from '../art/heroes.js';   // Phase 27 from-scratch sheets
 import { drawIconScaled } from '../art/items.js';
 import { charAccent, ghostColor, resolveChars } from '../net/coop.js';
 
+// Ordered loadout split for the HUD equipment area (task 29.5): weapons in their own
+// group, items (synergies + passives) in a separate group. Pure (no DOM) so
+// tools/test-logic.mjs can pin the split. Order within each group follows CFG definition
+// order, and the flattened sequence (weapons → synergies → passives) is unchanged, so the
+// boot + co-op seat E2E that read a row's children still match.
+export function loadoutRows(pl) {
+  const collect = (table, src, kind) => {
+    const out = [];
+    for (const k in table) if (src && src[k]) out.push({ kind, key: k, level: src[k] });
+    return out;
+  };
+  return [
+    collect(CFG.weapons, pl.weapons, 'weapon'),
+    [...collect(CFG.synergies, pl.synergies, 'synergy'), ...collect(CFG.passives, pl.passives, 'passive')],
+  ];
+}
+
 export function initHud(game, { icons } = {}) {
   const $ = (id) => document.getElementById(id);
   const hud = $('hud');
@@ -63,27 +80,59 @@ export function initHud(game, { icons } = {}) {
     chip.append(cv, num);
     return { chip, num };
   };
-  // Ordered loadout entries for a player: weapons (CFG order), then synergies, passives.
-  const loadoutEntries = (pl) => {
-    const out = [];
-    for (const k in CFG.weapons) if (pl.weapons[k]) out.push({ kind: 'weapon', key: k, level: pl.weapons[k] });
-    for (const k in CFG.synergies) if (pl.synergies && pl.synergies[k]) out.push({ kind: 'synergy', key: k, level: pl.synergies[k] });
-    for (const k in CFG.passives) if (pl.passives[k]) out.push({ kind: 'passive', key: k, level: pl.passives[k] });
-    return out;
+  // Renders a player's loadout into `container` as two visually separated bands —
+  // weapons, then items (synergies + passives) — via an explicit two-row grid so a group
+  // that exceeds one row wraps inside its own band instead of bleeding into the other's
+  // (task 29.5). Chips stay direct children in the existing order, so the co-op seat E2E +
+  // boot E2E that read the row's children still match. `cell`/`gap` are the real chip box
+  // for this context (seat-0 34/4, seat panels 24/3) so the column count is measured
+  // against the live width — mobile-safe, no horizontal overflow.
+  const renderRows = (container, rows, cell, gap) => {
+    container.innerHTML = '';
+    container._gatCell = null; // 29.8: drop any stale reload-ring target when the row is rebuilt
+    container.style.display = 'grid';
+    // Column count that fits this box; fall back to the widest box (~8 chips) when the
+    // element has no measurable width yet (before first layout / in the headless tests).
+    const avail = container.clientWidth || (cell * 8 + gap * 7);
+    const cols = Math.max(1, Math.floor((avail + gap) / (cell + gap)));
+    let row = 1;
+    for (const group of rows) {
+      if (!group.length) continue;
+      group.forEach((e, i) => {
+        const def = CFG.weapons[e.key] || CFG.synergies[e.key] || CFG.passives[e.key];
+        const icon = icons && def ? icons[def.icon] : null;
+        const { chip } = buildChip(icon, e.level);
+        chip.title = `${def ? def.name : e.key} · Lv ${e.level}`;
+        chip.setAttribute('aria-label', `${def ? def.name : e.key}, level ${e.level}`);
+        chip.style.gridRow = String(row + Math.floor(i / cols));
+        chip.style.gridColumn = String((i % cols) + 1);
+        container.appendChild(chip);
+        if (e.kind === 'weapon' && e.key === 'gatling') container._gatCell = chip; // 29.8: ring target
+      });
+      row += Math.ceil(group.length / cols); // hard line break between groups
+    }
   };
   const syncEquip = (pl) => {
-    const entries = loadoutEntries(pl);
-    const sig = entries.map((e) => `${e.key}:${e.level}`).join(',');
+    const rows = loadoutRows(pl);
+    const sig = rows[0].concat(rows[1]).map((e) => `${e.key}:${e.level}`).join(',');
     if (equipSig.get(pl) === sig) return; // unchanged since last build
     equipSig.set(pl, sig);
-    equipRow.innerHTML = ''; // matches screens.js list-rebuild convention
-    for (const e of entries) {
-      const def = CFG.weapons[e.key] || CFG.synergies[e.key] || CFG.passives[e.key];
-      const icon = icons && def ? icons[def.icon] : null;
-      const { chip, num } = buildChip(icon, e.level);
-      chip.title = `${def ? def.name : e.key} · Lv ${e.level}`;
-      chip.setAttribute('aria-label', `${def ? def.name : e.key}, level ${e.level}`);
-      equipRow.appendChild(chip);
+    renderRows(equipRow, rows, 34, 4); // seat-0 row (matches #equip-row chip size)
+  };
+
+  // 29.8: gatling reload ring. Player._weapons publishes a monotonically-decreasing remaining
+  // time (_gatReload, from _gatReloadTotal). Drive it as a --cd sweep on the weapon chip's cell,
+  // the same change-detected custom-property idiom as the dash cooldown: the ring shows only while
+  // reloading and clears the instant the mag refills. No per-frame text/DOM churn; CSS paints it.
+  const syncGat = (cell, pl) => {
+    if (!cell) return;
+    if (pl._gatReload > 0) {
+      if (!cell._gatOn) { cell.classList.add('gat-reload'); cell._gatOn = true; }
+      const frac = pl._gatReloadTotal > 0 ? clamp(pl._gatReload / pl._gatReloadTotal, 0, 1) : 0;
+      const s = frac.toFixed(3);
+      if (cell._cd !== s) { cell._cd = s; cell.style.setProperty('--cd', s); }
+    } else if (cell._gatOn) {
+      cell.classList.remove('gat-reload'); cell._gatOn = false;
     }
   };
 
@@ -161,17 +210,13 @@ export function initHud(game, { icons } = {}) {
     setTxt(pan.hpLabel, `${Math.max(0, Math.ceil(pl.hp))} / ${Math.ceil(cap)}`);
     setScale(pan.xpFill, clamp(pl.xp / CFG.xpNeed(pl.level), 0, 1));
     setTxt(pan.lvl, `LV ${pl.level}`);
-    // 19.3: per-seat equipment chips (rebuilt only when this seat's loadout changes).
-    const entries = loadoutEntries(pl);
-    const sig = entries.map((e) => `${e.key}:${e.level}`).join(',');
+    // 19.3: per-seat equipment chips (rebuilt only when this seat's loadout changes),
+    // split into weapon / item bands exactly like the seat-0 row (29.5 co-op parity).
+    const rows = loadoutRows(pl);
+    const sig = rows[0].concat(rows[1]).map((e) => `${e.key}:${e.level}`).join(',');
     if (pan._sig !== sig) {
       pan._sig = sig;
-      pan.equip.innerHTML = '';
-      for (const e of entries) {
-        const def = CFG.weapons[e.key] || CFG.synergies[e.key] || CFG.passives[e.key];
-        const { chip } = buildChip(icons && def ? icons[def.icon] : null, e.level);
-        pan.equip.appendChild(chip);
-      }
+      renderRows(pan.equip, rows, 24, 3); // seat-panel chips (.seat-equip 24px)
     }
     const cd = String(clamp(pl.dashCd / CFG.player.dashCd, 0, 1));
     if (pan._cd !== cd) { pan._cd = cd; pan.dash.style.setProperty('--cd', cd); }
@@ -249,6 +294,7 @@ export function initHud(game, { icons } = {}) {
     setScale(xpFill, clamp(p.xp / CFG.xpNeed(p.level), 0, 1));
     setTxt(lvlBadge, `LV ${p.level}`);
     syncEquip(p); // 19.1: seat-0 (solo = local) equipment row, rebuilt only on loadout change
+    syncGat(equipRow._gatCell, p); // 29.8: gatling reload ring — driven only while reloading
     // 17.3: count down the selected duration; ENDLESS (null) counts up. runDuration is
     // always number|null by the time a run state renders (set in game.js at run start).
     setTxt(timer, fmtTime(game.runDuration === null ? game.t : game.runDuration - game.t));

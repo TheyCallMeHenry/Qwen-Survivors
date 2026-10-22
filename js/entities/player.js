@@ -2,7 +2,7 @@
 // weapon firing, XP/levels, and the pure level-up card logic.
 // Node-safe: no canvas at top level (flash frames injected at runtime).
 import { CFG } from '../config.js';
-import { approach, clamp, rand } from '../utils/math.js';
+import { approach, clamp, rand, TAU } from '../utils/math.js';
 
 // 11.6: playable-character stat lookup (D57). `key` = character key; falls back to the
 // starter (mage) so plain test objects without charKey behave as the solo default.
@@ -28,6 +28,7 @@ export class Player {
     this.passives = {};  // passiveKey -> level (0..max)
     this.synergies = {}; // synergyKey -> level (0..1) — outside maxWeapons
     this.dmgMul = 1; this.speedMul = 1; this.magnet = 1; this.regen = 0;
+    this.cdMul = 1; // 29.14 Coffee: weapon-cooldown multiplier (recomputeStats owns it)
     this.xpMul = 1; this.dashCdMul = 1;
     this.metaHp = 0; this.metaDmg = 0; this.metaSpeed = 0;
     this.animT = 0; this.frameIdx = 0; this.moving = false; this.flip = false;
@@ -38,11 +39,16 @@ export class Player {
     this._ringCd = 0; this._ringBeams = []; // 12.4: Ring of Chain Lightning tick + live arcs
     // Phase 21 (D96) per-weapon timers/state (never synced — clients never simulate;
     // companion state rides the snapshot companions array, not these fields).
-    this._cannonCd = 0; this._laserCd = 0; this._laserT = 0; this._webCd = 0;
-    this._gatCd = 0; this._gatMag = CFG.weapons.gatling.burst; this._gatReload = 0;
+    // 29.7 (D99): _laserAng = the live orbit angle, advanced every tick the weapon
+    // is owned (active or not); 29.9: _wolves = the live pack, _companion stays a
+    // reference to wolves[0] (the co-op snapshot tail streams that one object).
+    this._cannonCd = 0; this._laserCd = 0; this._laserT = 0; this._laserAng = 0; this._webCd = 0;
+    // 29.8: _gatReload is the remaining reload time (monotonic countdown), _gatReloadTotal its
+    // value at reload start — together the HUD ring reads a decreasing fraction of time left.
+    this._gatCd = 0; this._gatMag = CFG.weapons.gatling.burst; this._gatReload = 0; this._gatReloadTotal = 0;
     this._batCd = 0; this._batSwing = 0; this._boulderCd = 0; this._boulder = null;
     this._tongueCd = 0; this._tongueFx = null; this._ballCd = 0; this._ball = null;
-    this._companion = null; this._shieldBank = null; this._skateCd = new Map();
+    this._companion = null; this._wolves = null; this._shieldBank = null; this._skateCd = new Map();
     this._bulletShots = 0; // 12.6 Storm Volley: rounds fired since the last strike (every 4th)
     this._garlicT = 0; this._orbitT = 0; this._tempestT = 0;
     this._flame = { fuel: 0, reloading: false };
@@ -75,6 +81,7 @@ export class Player {
     this.passives = {}; // Phase 20 / D66: runs start with NO passives — level-up picks only
     this.synergies = {};
     this.dmgMul = 1; this.speedMul = 1; this.magnet = 1; this.regen = 0;
+    this.cdMul = 1;
     this.xpMul = 1; this.dashCdMul = 1;
     this.metaHp = 0; this.metaDmg = 0; this.metaSpeed = 0;
     this.animT = 0; this.frameIdx = 0; this.moving = false; this.flip = false;
@@ -83,11 +90,11 @@ export class Player {
     this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0; this._snowCd = 0;
     this._bowCharge = 0;
     this._ringCd = 0; this._ringBeams = [];
-    this._cannonCd = 0; this._laserCd = 0; this._laserT = 0; this._webCd = 0;
-    this._gatCd = 0; this._gatMag = CFG.weapons.gatling.burst; this._gatReload = 0; // runs/mid-picks start with a full mag
+    this._cannonCd = 0; this._laserCd = 0; this._laserT = 0; this._laserAng = 0; this._webCd = 0;
+    this._gatCd = 0; this._gatMag = CFG.weapons.gatling.burst; this._gatReload = 0; this._gatReloadTotal = 0; // runs/mid-picks start with a full mag
     this._batCd = 0; this._batSwing = 0; this._boulderCd = 0; this._boulder = null;
     this._tongueCd = 0; this._tongueFx = null; this._ballCd = 0; this._ball = null;
-    this._companion = null; this._shieldBank = null; this._skateCd.clear();
+    this._companion = null; this._wolves = null; this._shieldBank = null; this._skateCd.clear();
     this._bulletShots = 0; // 12.6 Storm Volley shot counter
     this._garlicT = 0; this._orbitT = 0; this._tempestT = 0;
     this._flame = { fuel: 0, reloading: false };
@@ -311,7 +318,7 @@ export class Player {
             combat.fireBolt(this.x, sy, a2, S.dmg * this.dmgMul, S.pierce,
               this.synergies.blight ? CFG.synergies.blight.levels[0] : null, this);
           }
-          this._wandCd = S.rate;
+          this._wandCd = S.rate * this.cdMul;
         }
       }
     }
@@ -323,7 +330,7 @@ export class Player {
         const sy = this._spawnY();
         const ang = e ? Math.atan2(e.y - sy, e.x - this.x) : this.aimAng;
         combat.fireAxe(this.x, sy, ang, S.dmg * this.dmgMul, S.size, S.count, this);
-        this._axeCd = S.cd;
+        this._axeCd = S.cd * this.cdMul;
       }
     }
     if (this.weapons.pistols) {
@@ -350,7 +357,7 @@ export class Player {
           combat.fireBullet(this.x, sy, a1, S.dmg * this.dmgMul, inf, this, storm1);
           combat.fireBullet(this.x, sy, a2, S.dmg * this.dmgMul, inf, this, storm2);
           if (combat.pulse) combat.pulse('pistol');
-          this._pistolCd = S.rate;
+          this._pistolCd = S.rate * this.cdMul;
         }
       }
     }
@@ -369,7 +376,7 @@ export class Player {
         dist = Math.max(dist, C.bombMin);
         const nap = this.synergies.napalm ? CFG.synergies.napalm.levels[0] : null;
         combat.fireBomb(this.x, sy, ang, dist, S.dmg * this.dmgMul, S.r, S.fuse, nap, this);
-        this._bombCd = S.cd;
+        this._bombCd = S.cd * this.cdMul;
       }
     }
     if (this.weapons.flame) {
@@ -378,7 +385,7 @@ export class Player {
       if (f.fuel <= 0 && !f.reloading) f.fuel = S.fuel; // not fired yet — start full
       if (f.fuel > S.fuel) f.fuel = S.fuel;
       if (f.reloading) {
-        f.fuel += (S.fuel / S.recharge) * dt;
+        f.fuel += (S.fuel / (S.recharge * this.cdMul)) * dt; // Coffee: recharge is the flame's downtime
         if (f.fuel >= S.fuel) { f.fuel = S.fuel; f.reloading = false; }
       } else {
         const e = this._nearest(enemies, S.range);
@@ -408,7 +415,7 @@ export class Player {
           const bfLvl = this.synergies.blueFlame || 0;
           combat.fireSnowball(this.x, sy, e.x, e.y, S.dmg * this.dmgMul, S.r, this,
             bfLvl > 0 ? CFG.synergies.blueFlame.levels[bfLvl - 1] : null);
-          this._snowCd = S.cd;
+          this._snowCd = S.cd * this.cdMul;
         }
       }
     }
@@ -422,7 +429,7 @@ export class Player {
         if (e) {
           const sy = this._spawnY();
           combat.fireShockBolt(this.x, sy, e, S.dmg * this.dmgMul, S.jumps, this);
-          this._ringCd = CFG.combat.ringCd;
+          this._ringCd = CFG.combat.ringCd * this.cdMul;
         }
       }
     }
@@ -444,7 +451,7 @@ export class Player {
               faLvl > 0 ? CFG.synergies.flamingArrows.levels[faLvl - 1] : null,
               hpLvl > 0 ? CFG.synergies.heartPiercer.levels[hpLvl - 1] : null);
           }
-          this._bowCd = S.rate;
+          this._bowCd = S.rate * this.cdMul;
         }
       } else if (this._bowCd <= 0) {
         const e = this._nearest(enemies, CFG.combat.wandRange);
@@ -456,24 +463,30 @@ export class Player {
       const S = W.cannon.levels[this.weapons.cannon - 1];
       this._cannonCd -= dt;
       if (this._cannonCd <= 0) {
-        const e = this._nearest(enemies, CFG.combat.wandRange);
+        const e = this._nearest(enemies, CFG.combat.cannonRange);
         if (e) {
           const sy = this._spawnY();
           const hs = this.synergies.heShell || 0;
           combat.fireShell(this.x, sy, Math.atan2(e.y - sy, e.x - this.x), S.dmg * this.dmgMul, S.blastR,
             hs > 0 ? CFG.synergies.heShell.levels[hs - 1] : null, this);
-          this._cannonCd = S.cd;
+          this._cannonCd = S.cd * this.cdMul;
         }
       }
     }
     if (this.weapons.laser) {
       const S = W.laser.levels[this.weapons.laser - 1];
+      // 29.7 (D99): the orbit is CONTINUOUS — _laserAng advances every tick the
+      // weapon is owned, inside or outside the active window, so a reactivation
+      // fires at whatever angle the orbit has reached (spec-tested invariant).
+      this._laserAng = (this._laserAng + S.rot * dt) % TAU;
       if (this._laserT > 0) {
         this._laserT -= dt;
-        if (this._laserT <= 0) this._laserCd = S.cd; // long cooldown between shots (spec)
+        if (this._laserT <= 0) this._laserCd = S.cd * this.cdMul; // downtime between windows
       } else if ((this._laserCd -= dt) <= 0 && this._nearest(enemies, S.len)) {
         this._laserT = S.dur;
-        combat.fireBeam(this, S);
+        // L3 adds a 2nd beam exactly opposite; L5 a 3rd — equidistant
+        // (TAU/count), same angular velocity (shared orbit) and same active timings.
+        for (let i = 0; i < S.count; i++) combat.fireBeam(this, S, this._laserAng + (i * TAU) / S.count);
         if (combat.pulse) combat.pulse('laser');
       }
     }
@@ -491,7 +504,7 @@ export class Player {
           const av = this.synergies.avalanche || 0;
           combat.fireBoulder(this, this.x + sx * CFG.combat.boulderR, this.y + sy * CFG.combat.boulderR,
             sx, sy, S.dmg * this.dmgMul, av > 0 ? CFG.synergies.avalanche.levels[av - 1] : null);
-          this._boulderCd = S.cd;
+          this._boulderCd = S.cd * this.cdMul;
         }
       }
     }
@@ -503,7 +516,7 @@ export class Player {
         if (e) {
           const sy = this._spawnY();
           combat.fireWeb(this.x, sy, e.x, e.y, S.dmg * this.dmgMul, S.r, S.hold, this);
-          this._webCd = S.cd;
+          this._webCd = S.cd * this.cdMul;
         }
       }
     }
@@ -512,9 +525,9 @@ export class Player {
       const S = G.levels[this.weapons.gatling - 1];
       if (this._gatReload > 0) {
         this._gatReload -= dt; // the 3 s reload (spec) — firing resumes with a fresh mag
-        if (this._gatReload <= 0) this._gatMag = G.burst;
+        if (this._gatReload <= 0) { this._gatReload = 0; this._gatReloadTotal = 0; this._gatMag = G.burst; }
       } else {
-        if (this._gatMag <= 0) { this._gatReload = G.reload; }
+        if (this._gatMag <= 0) { this._gatReload = this._gatReloadTotal = G.reload * this.cdMul; }
         else if ((this._gatCd -= dt) <= 0) {
           const e = this._nearest(enemies, CFG.combat.wandRange);
           if (e) {
@@ -522,7 +535,7 @@ export class Player {
             const a = Math.atan2(e.y - sy, e.x - this.x) + rand(-S.spread, S.spread);
             combat.fireBullet(this.x, sy, a, S.dmg * this.dmgMul, null, this, null);
             this._gatMag--;
-            this._gatCd = S.cd;
+            this._gatCd = S.cd * this.cdMul;
             if (combat.pulse && this._gatMag % 8 === 0) combat.pulse('pistol'); // crack, not 40 chirps
           }
         }
@@ -533,7 +546,7 @@ export class Player {
       this._batCd -= dt;
       if (this._batSwing > 0) this._batSwing -= dt;
       if (this._batCd <= 0 && this._nearest(enemies, CFG.combat.batRange + 30)) {
-        this._batCd = S.cd;
+        this._batCd = S.cd * this.cdMul;
         this._batSwing = 0.18; // draw() telegraph arc
         combat.batSwing(this, S);
       }
@@ -548,7 +561,7 @@ export class Player {
           const gf = this.synergies.gutFeast || 0;
           combat.fireTongue(this, e, S.dmg * this.dmgMul, S.poison * this.dmgMul, S.poisonDur,
             gf > 0 ? CFG.synergies.gutFeast.levels[gf - 1].mul : 1);
-          this._tongueCd = S.cd;
+          this._tongueCd = S.cd * this.cdMul;
         }
       }
     }
@@ -559,7 +572,7 @@ export class Player {
         const e = this._nearest(enemies, CFG.combat.ballSearchR);
         if (e) {
           this._ball = { t: 0, target: e, hits: 0, hitsMax: S.hits, hit: new Set(), dmg: S.dmg };
-          this._ballCd = W.ball.cd; // 10 s at every level (spec)
+          this._ballCd = W.ball.cd * this.cdMul; // 10 s at every level (spec); Coffee shortens it
           if (combat.pulse) combat.pulse('ball');
         }
       }
@@ -791,8 +804,14 @@ const WEAPON_FIELDS = {
     ['dps', (v) => `${v} dmg/s`, (a, b) => `dmg ${a}→${b} dmg/s`],
     ['len', (v) => `length ${v}`, (a, b) => `length ${a}→${b}`],
     ['w', (v) => `width ${v}`, (a, b) => `width ${a}→${b}`],
+    // 29.7 (D99) orbit mechanic — the card states beam count and sweep speed.
+    ['count', (v) => `${v} beam${v > 1 ? 's' : ''}`, (a, b) => `beams ${a}→${b}`],
+    ['rot', (v) => `orbit ${Math.round((v * 180) / Math.PI)}°/s`, (a, b) => `orbit ${Math.round((a * 180) / Math.PI)}→${Math.round((b * 180) / Math.PI)}°/s`],
   ],
-  wolf: [
+  wolfpack: [
+    // 29.9: L3/L5 are spawn-only levels — the count delta is the card's whole copy
+    // there (dmg/bleed rows are deliberately identical, so no stat delta shows).
+    ['count', (v) => `${v} wolf${v > 1 ? 's' : ''}`, (a, b) => `wolves ${a}→${b}`],
     ['dmg', (v) => `pounce ${v} dmg`, (a, b) => `pounce ${a}→${b} dmg`],
     ['bleed', (v) => `bleed ${v} dmg/s`, (a, b) => `bleed ${a}→${b} dmg/s`],
     ['bleedDur', (v) => `bleed ${fmtS(v)} s`, (a, b) => `bleed ${fmtS(a)}→${fmtS(b)} s`],
@@ -858,6 +877,8 @@ const PASSIVE_EFFECT = {
   dmg: (v, L) => `+${pct(v)} weapon damage → total +${pct(v * L)}`,
   magnet: (v, L) => `+${pct(v)} pickup range → total +${pct(v * L)}`,
   regen: (v, L) => `+${round3(v)} HP/s → total ${round3(v * L)} HP/s`,
+  // 29.14 Coffee: additive per-level cooldown cut, total like the other scalar passives.
+  coffee: (v, L) => `−${pct(v)} weapon cooldowns → total −${pct(v * L)}`,
 };
 
 // Phase 21 run-items (D95): `levels`-table passives — the card states the granted
@@ -895,7 +916,7 @@ const SYNERGY_EFFECT = {
   heartMagnet: (s) => `Hearts are pulled toward you from ${pct(s.pull)} of your pickup range`,
   // Phase 21 (D96) — five new synergies
   heShell: (s) => `Cannon blasts ignite foes — ${s.dps} dmg/s burn for ${fmtS(s.dur)} s`,
-  staticPelt: (s) => `Wolf pounces add a shock stack + chain burst to ${s.jumps} foe${s.jumps > 1 ? 's' : ''}`,
+  staticPelt: (s) => `The pack\u2019s pounces add a shock stack + chain burst to ${s.jumps} foe${s.jumps > 1 ? 's' : ''}`,
   homerKing: (s) => `HOMERUN odds improve to 1-in-${s.odds}`,
   gutFeast: (s) => `Eaten foes restore ×${s.mul} more HP`,
   avalanche: (s) => `Boulder hits add ${s.stacks} slow stack${s.stacks > 1 ? 's' : ''}${s.bonus > 0 ? ` and +${s.bonus} dmg` : ''}`,
@@ -935,6 +956,9 @@ export function recomputeStats(p) {
   if (p.passives.skates) p.speedMul *= 1 + CFG.passives.skates.levels[p.passives.skates - 1].spd;
   p.magnet = 1 + CFG.passives.magnet.val * (p.passives.magnet || 0);
   p.regen = CFG.passives.regen.val * (p.passives.regen || 0);
+  // 29.14 Coffee: one additive multiplier for ALL weapon cooldowns (armed in
+  // _weapons). Same scalar-val scheme as speed/dmg; max 5 × 0.12 floors cdMul at 0.40.
+  p.cdMul = 1 - CFG.passives.coffee.val * (p.passives.coffee || 0);
   p.maxHp = c.hp + CFG.passives.hp.val * (p.passives.hp || 0) + (p.metaHp || 0);
 }
 

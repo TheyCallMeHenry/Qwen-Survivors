@@ -56,6 +56,23 @@ function boot() {
   const sfx = initSfx(game);
   const music = initMusic(game, sfx);
 
+  // 29.1 (diagnostic): ?fps=1 shows a live frame-rate readout so the user can
+  // measure on their own phone/desktop (Node-side sim was clean; early-run lag
+  // points to device fill cost). URL-gated, DOM-only, one update/second — the
+  // render pipeline is untouched. (A CFG config entry would live in config.js,
+  // outside this task's write scope; the URL param is the gate.)
+  if (new URLSearchParams(location.search).get('fps') === '1') {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:9999;padding:2px 8px;background:rgba(0,0,0,.55);color:#7CFC00;font:14px monospace;pointer-events:none';
+    document.body.appendChild(el);
+    let last = 0, lastT = performance.now();
+    setInterval(() => {
+      const n = loop.frames, t = performance.now();
+      el.textContent = `${Math.round(((n - last) * 10000) / (t - lastT)) / 10} fps · ${canvas.width}×${canvas.height}px`;
+      last = n; lastT = t;
+    }, 1000);
+  }
+
   addEventListener('resize', resize);
   resize();
   loop.start();

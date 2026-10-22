@@ -8,6 +8,17 @@
 // Node-safe: no canvas at top level.
 import { CFG } from '../config.js';
 import { TAU, approach, clamp, rand } from '../utils/math.js';
+import { tankBlastSprite, reflectFlashSprite } from '../art/items.js';
+import { buildPackWolves } from '../art/characters.js';
+
+// 29.10: lifetime of the reflect-hit flash (purely cosmetic — the reflect itself is
+// instant in _shieldStep; this only paces the baked mirror-burst blit).
+const REFLECT_FX = 0.32;
+
+// 29.9/29.10/29.12 visual art for these hooks, built ONCE per Combat instance on first
+// use (pre-rendered offscreen canvases — draw only ever blits). Kept here because
+// game.js is frozen to Phase-21 wiring; nothing gameplay-relevant depends on it.
+const buildCombatFx = () => ({ tank: tankBlastSprite(), flash: reflectFlashSprite(), wolves: buildPackWolves() });
 
 export class Combat {
   constructor() {
@@ -19,14 +30,16 @@ export class Combat {
     this.arrows = [];
     this.snowballs = []; // 12.3: lobbed snowballs (bomb-style flight, burst ON impact)
     // Phase 21 (D96): Tank Cannon shells, laser beams, Rolling Boulders, web strands.
-    // Wolf companion / Mirror Shield state lives ON the owning player (p._companion,
-    // p._boulder, p._shieldBank) so the snapshot tail + ownership follow the player.
+    // Wolfpack / Mirror Shield state lives ON the owning player (p._wolves + the
+    // p._companion leader ref, p._boulder, p._shieldBank) so the snapshot tail + ownership follow the player.
     this.shells = [];
     this.beams = [];
     this.boulders = [];
     this.webs = [];
 
     this.explosions = [];
+    this.reflectFx = [];  // 29.10: mirror-bursts at reflect points (visual only)
+    this._fx = null;      // 29.9/29.10/29.12: lazy baked art cache (see buildCombatFx)
     this.t = 0;
     this.enemies = null;
     this.boltImg = null;
@@ -76,6 +89,7 @@ export class Combat {
     this.boulders.length = 0;
     this.webs.length = 0;
     this.explosions.length = 0;
+    this.reflectFx.length = 0;
     this.t = 0;
     this._orbCd.clear();
     this._axeCd.clear();
@@ -200,7 +214,8 @@ export class Combat {
   // Tank Cannon shell: pierces the FIRST foe at full damage, terminates in the
   // SECOND with an AoE blast (dmg × CFG.combat.shellBlastK in blastR). `ignite`
   // (Shells of Perdition synergy row {dps,dur}) makes the blast set the blast radius
-  // burning; lifetime = the weapon's aim range at shell speed (range knob reuse).
+  // burning; lifetime = CFG.combat.cannonRange at shell speed (29.12: the dedicated
+  // 1.5× Tank Cannon range, no longer the shared wandRange).
   fireShell(x, y, ang, dmg, blastR, ignite = null, owner = null) {
     const C = CFG.combat;
     this.shells.push({
@@ -209,16 +224,19 @@ export class Combat {
       vy: Math.sin(ang) * C.shellSpeed,
       rot: ang, dmg, blastR, ignite, owner,
       hit: new Set(),
-      life: C.wandRange / C.shellSpeed + 0.1,
+      life: C.cannonRange / C.shellSpeed + 0.1,
     });
   }
 
-  // Continuous Laser: one sustained beam along the owner's aim (fixed at fire time);
-  // the ORIGIN follows the owner while the beam lasts. Damage flows through D21
-  // dpsTick every frame for `dur` (no flash/knockback — a sear, not a hit).
-  fireBeam(owner, S) {
+  // Continuous Laser (29.7/D99): beams ride the owner's live orbit — the angle is
+  // NOT locked at fire time; combat reads owner._laserAng (advanced every tick by
+  // Player._weapons, active or not) plus this beam's fixed offset `off` (0 for the
+  // first, TAU/count for the equidistant extra beams). The ORIGIN follows the owner
+  // while the beam lasts. Damage flows through D21 dpsTick every frame for `dur`
+  // (no flash/knockback — a sear, not a hit).
+  fireBeam(owner, S, off = 0) {
     this.beams.push({
-      owner, ang: owner.aimAng, t: 0, dur: S.dur,
+      owner, off, t: 0, dur: S.dur,
       len: S.len, w: S.w, dps: S.dps * owner.dmgMul,
     });
   }
@@ -316,12 +334,18 @@ export class Combat {
     for (const p of players) {
       if (p.weapons.garlic) this._garlic(dt, p, enemies);
       if (p.weapons.blades) this._orbiters(dt, p, enemies);
-      if (p.weapons.wolf && !p.dead) this._companion(dt, p, enemies);
+      if (p.weapons.wolfpack && !p.dead) this._wolfpack(dt, p, enemies);
     }
     for (let i = this.explosions.length - 1; i >= 0; i--) {
       const x = this.explosions[i];
       x.t += dt;
       if (x.t >= x.dur) this.explosions.splice(i, 1);
+    }
+    // 29.10: expire the reflect flashes (visual list — never read by any sim path)
+    for (let i = this.reflectFx.length - 1; i >= 0; i--) {
+      const f = this.reflectFx[i];
+      f.t += dt;
+      if (f.t >= REFLECT_FX) this.reflectFx.splice(i, 1);
     }
     // 12.4: lightning arcs are short-lived visuals living on their owner player
     for (const p of players) {
@@ -591,7 +615,9 @@ export class Combat {
   // the Shells of Perdition burn when the shooter had it.
   _shellBlast(b, enemies) {
     const C = CFG.combat;
-    this.explosions.push({ x: b.x, y: b.y, t: 0, dur: C.bombFlash, r: b.blastR });
+    // 29.12: `tank` tags this blast for its own sprite + rhythm in draw (visual only;
+    // the explosions record stays a pure cosmetic entry, math unchanged).
+    this.explosions.push({ x: b.x, y: b.y, t: 0, dur: C.bombFlash, r: b.blastR, tank: true });
     for (const e of enemies.grid.range(b.x, b.y, b.blastR + CFG.ai.gridCell)) {
       if (e.dead) continue;
       const dx = e.x - b.x, dy = e.y - b.y;
@@ -606,15 +632,17 @@ export class Combat {
     if (this.pulse) this.pulse('boom');
   }
 
-  // P21 laser beam: every live enemy within `w` px of the segment gets its dps
-  // every frame (dpsTick = no flash/knockback, D21 kill-credit via _killer).
+  // P21 laser beam (29.7/D99 orbit): the live angle is owner._laserAng + the
+  // beam's equidistant offset; every live enemy within `w` px of the segment gets
+  // its dps every frame (dpsTick = no flash/knockback, D21 kill-credit via _killer).
   _beams(dt, enemies) {
     for (let i = this.beams.length - 1; i >= 0; i--) {
       const b = this.beams[i];
       b.t += dt;
       if (b.t >= b.dur || b.owner.dead) { this.beams.splice(i, 1); continue; }
       const ox = b.owner.x, oy = b.owner._spawnY();
-      const ex = ox + Math.cos(b.ang) * b.len, ey = oy + Math.sin(b.ang) * b.len;
+      const ang = b.owner._laserAng + b.off;
+      const ex = ox + Math.cos(ang) * b.len, ey = oy + Math.sin(ang) * b.len;
       const segx = ex - ox, segy = ey - oy;
       const l2 = segx * segx + segy * segy || 1;
       for (const e of enemies.grid.range(ox, oy, b.len + CFG.ai.gridCell)) {
@@ -740,6 +768,7 @@ export class Combat {
         o.reflected = true;
         o.by = p;
         bank.n--;
+        this.reflectFx.push({ x: o.x, y: o.y, t: 0 }); // 29.10: mirror-burst at the reflect point
         if (this.onFx) this.onFx('reflect', o.x, o.y);
         if (bank.n <= 0) break;
       }
@@ -767,71 +796,85 @@ export class Combat {
     }
   }
 
-  // P21 Wolf companion (host-sim only; clients render the snapshot tail). Never
-  // dies; hovers beside the owner inside companionLeash and autonomously pounces
-  // the nearest foe (pounce cd 2.0 s spec-fixed, growth lives in dmg/bleed only).
+  // P21 Wolfpack (host-sim only; clients render the snapshot tail). 29.9: the pack
+  // grows with the weapon — rows carry `count` (1/1/2/2/3); extra wolves spawn at
+  // the owner's CURRENT stats and every wolf BITES FROM THE CURRENT ROW, so an L4
+  // stat-up lands on the whole pack (no per-wolf stat snapshots). Wolves never die;
+  // each hovers inside companionLeash and autonomously pounces the nearest foe
+  // (pounce cd 2.0 s spec-fixed). Targeting keeps the existing pick (_nearestTo,
+  // enemies.list scan — deliberately NOT the spatial grid, user directive 29.9).
+  // _companion stays a reference to wolves[0] = the leader the 4-slot co-op tail
+  // streams (clients render the leader only; extending the tail is future sync work).
   // staticPelt synergy row {jumps}: the bite adds one shock stack + a chain burst.
-  _companion(dt, p, enemies) {
+  _wolfpack(dt, p, enemies) {
     const C = CFG.combat;
-    const S = CFG.weapons.wolf.levels[p.weapons.wolf - 1];
-    let c = p._companion;
-    if (!c) c = p._companion = { x: p.x, y: p.y - 12, state: 'follow', target: null, cd: 0, flip: false, animT: rand(0, 3) };
-    c.animT += dt;
-    if (c.state === 'pounce') {
-      const e = c.target;
-      // abandon: foe died OR left the leash circle (e.g. knocked away by a bat swing)
-      if (!e || e.dead || Math.hypot(e.x - p.x, e.y - p.y) > C.companionLeash + e.r) {
-        c.state = 'follow'; c.cd = C.companionPounceCd; c.target = null;
-      }
-      else {
-        const oy = e.y - e.r * 0.4;
-        const dx = e.x - c.x, dy = oy - c.y;
-        const d = Math.hypot(dx, dy) || 1;
-        const step = C.companionSpeed * dt;
-        c.x += (dx / d) * step;
-        c.y += (dy / d) * step;
-        c.flip = dx < 0;
-        if (d <= step + e.r * 0.7) {
-          this.damageEnemy(e, S.dmg * p.dmgMul, dx / d, dy / d, 0, p);
-          if (!e.dead) {
-            e.bleedT = Math.max(e.bleedT || 0, S.bleedDur);
-            e.bleedDps = Math.max(e.bleedDps || 0, S.bleed * p.dmgMul);
-            const st = p.synergies && p.synergies.staticPelt;
-            if (st) {
-              this.applyShock(e);
-              this._chainArc(e, CFG.synergies.staticPelt.levels[st - 1].jumps, p);
+    const S = CFG.weapons.wolfpack.levels[p.weapons.wolfpack - 1];
+    if (!p._wolves) p._wolves = [];
+    while (p._wolves.length < S.count) {
+      const wi = p._wolves.length; // join in a trailing formation — wolves never stack on one point
+      p._wolves.push({ x: p.x - wi * 22, y: p.y - 12, state: 'follow', target: null, cd: 0, flip: false, animT: rand(0, 3) });
+    }
+    p._companion = p._wolves[0];
+    for (let wi = 0; wi < p._wolves.length; wi++) {
+      const c = p._wolves[wi];
+      c.animT += dt;
+      if (c.state === 'pounce') {
+        const e = c.target;
+        // abandon: foe died OR left the leash circle (e.g. knocked away by a bat swing)
+        if (!e || e.dead || Math.hypot(e.x - p.x, e.y - p.y) > C.companionLeash + e.r) {
+          c.state = 'follow'; c.cd = C.companionPounceCd; c.target = null;
+        }
+        else {
+          const oy = e.y - e.r * 0.4;
+          const dx = e.x - c.x, dy = oy - c.y;
+          const d = Math.hypot(dx, dy) || 1;
+          const step = C.companionSpeed * dt;
+          c.x += (dx / d) * step;
+          c.y += (dy / d) * step;
+          c.flip = dx < 0;
+          if (d <= step + e.r * 0.7) {
+            this.damageEnemy(e, S.dmg * p.dmgMul, dx / d, dy / d, 0, p);
+            if (!e.dead) {
+              e.bleedT = Math.max(e.bleedT || 0, S.bleedDur);
+              e.bleedDps = Math.max(e.bleedDps || 0, S.bleed * p.dmgMul);
+              const st = p.synergies && p.synergies.staticPelt;
+              if (st) {
+                this.applyShock(e);
+                this._chainArc(e, CFG.synergies.staticPelt.levels[st - 1].jumps, p);
+              }
             }
+            c.state = 'follow';
+            c.cd = C.companionPounceCd;
+            c.target = null;
           }
-          c.state = 'follow';
-          c.cd = C.companionPounceCd;
-          c.target = null;
+        }
+      } else {
+        c.cd -= dt;
+        if (c.cd <= 0) {
+          const e = this._nearestTo(p, enemies, C.companionLeash);
+          if (e) { c.state = 'pounce'; c.target = e; }
+        }
+        // hover near the owner: only walk when drifting too far (each wolf trails
+        // at its own formation slot — leader wi 0 keeps the original anchor)
+        const ax = p.x - wi * 22, ay = p.y - 12;
+        const dx = ax - c.x, dy = ay - c.y;
+        const d = Math.hypot(dx, dy);
+        if (d > 26) {
+          const step = Math.min(d, C.companionSpeed * dt);
+          c.x += (dx / d) * step;
+          c.y += (dy / d) * step;
+          c.flip = dx < 0;
         }
       }
-    } else {
-      c.cd -= dt;
-      if (c.cd <= 0) {
-        const e = this._nearestTo(p, enemies, C.companionLeash);
-        if (e) { c.state = 'pounce'; c.target = e; }
+      // leash clamp applies in BOTH states ("stays ≤192 px of owner" — spec)
+      const od = Math.hypot(c.x - p.x, c.y - p.y);
+      if (od > C.companionLeash) {
+        c.x = p.x + ((c.x - p.x) / od) * C.companionLeash;
+        c.y = p.y + ((c.y - p.y) / od) * C.companionLeash;
       }
-      // hover near the owner: only walk when drifting too far
-      const ax = p.x, ay = p.y - 12;
-      const dx = ax - c.x, dy = ay - c.y;
-      const d = Math.hypot(dx, dy);
-      if (d > 26) {
-        const step = Math.min(d, C.companionSpeed * dt);
-        c.x += (dx / d) * step;
-        c.y += (dy / d) * step;
-        c.flip = dx < 0;
-      }
+      c.x = clamp(c.x, CFG.world.margin, CFG.world.w - CFG.world.margin);
+      c.y = clamp(c.y, CFG.world.margin, CFG.world.h - CFG.world.margin);
     }
-    // leash clamp applies in BOTH states ("stays ≤192 px of owner" — spec)
-    const od = Math.hypot(c.x - p.x, c.y - p.y);
-    if (od > C.companionLeash) {
-      c.x = p.x + ((c.x - p.x) / od) * C.companionLeash;
-      c.y = p.y + ((c.y - p.y) / od) * C.companionLeash;
-    }
-    c.x = clamp(c.x, CFG.world.margin, CFG.world.w - CFG.world.margin);
-    c.y = clamp(c.y, CFG.world.margin, CFG.world.h - CFG.world.margin);
   }
 
   // Nearest live enemy to (owner) within `range` (wolf pounce pick).
@@ -1045,8 +1088,8 @@ export class Combat {
   // garlic clocks are advanced cosmetically in _clientUpdate). Remote players have
   // no _orbitT/_garlicT in the snapshot (projectiles never cross the wire, 16.2
   // snapshot-neutral) → their blades/ring are not drawn on the client.
-  // enemies (P21) supplies the shared wolf-sheet frames for companion draws — the
-  // client has a real Enemies instance, so companions render on both sides.
+  // P21 companions (29.9 art law) draw from a self-built pack sheet (see
+  // buildCombatFx) — no Enemies dependency: host and client render every pack wolf.
   draw(ctx, t, players, enemies) {
     const C = CFG.combat;
     if (this.boltImg) for (const b of this.bolts) {
@@ -1077,20 +1120,27 @@ export class Combat {
       ctx.drawImage(this.axeImg, -s / 2, -s / 2, s, s);
       ctx.restore();
     }
-    // P21 Wolf companion: same bottom-anchored sheet contract as enemies — the
-    // wolf enemy frames ARE the companion art (host: live sim state; client:
-    // snapshot tail written onto p._companion by applyPlayerSnap).
-    if (enemies && enemies.defs && enemies.defs.wolf) for (const pl of players || []) {
-      const c = pl._companion;
-      if (!c || !pl.weapons.wolf) continue;
-      const def = enemies.defs.wolf;
-      const n = def.frames.length;
-      const fr = n > 1 ? ((c.animT * CFG.enemies.wolf.fps) | 0) % n : 0;
-      ctx.save();
-      ctx.translate(c.x, c.y);
-      if (c.flip) ctx.scale(-1, 1);
-      ctx.drawImage(def.frames[fr], -def.w / 2, -def.h);
-      ctx.restore();
+    // P21 Wolfpack (29.9): the pack draws its OWN art — larger, more aggressive,
+    // coat = wolf index (light brown / dark grey / dark brown), never the enemy
+    // wolf skin (host: live sim state, every wolf; client: the snapshot tail's
+    // leader object on p._companion — see _wolfpack). Bottom-anchored sheet
+    // contract as enemies; the anim clock (c.animT) rides the wire.
+    for (const pl of players || []) {
+      const ws = pl._wolves || (pl._companion ? [pl._companion] : null);
+      if (!ws || !pl.weapons.wolfpack) continue;
+      if (!this._fx) this._fx = buildCombatFx();
+      const sh = this._fx.wolves;
+      const n = sh.frames[0].length;
+      for (let wi = 0; wi < ws.length; wi++) {
+        const c = ws[wi];
+        const frames = sh.frames[Math.min(wi, sh.frames.length - 1)];
+        const fr = n > 1 ? ((c.animT * CFG.enemies.wolf.fps) | 0) % n : 0;
+        ctx.save();
+        ctx.translate(c.x, c.y);
+        if (c.flip) ctx.scale(-1, 1);
+        ctx.drawImage(frames[fr], -sh.w / 2, -sh.h);
+        ctx.restore();
+      }
     }
     // 16.2 latent-fix: this.player was never assigned (constructor/ctor sites), so the
     // blades (and the garlic ring below) were NEVER drawn — the block below now loops the
@@ -1156,8 +1206,32 @@ export class Combat {
         // so the blast read smaller than what it hurt for its first third. Now the
         // flash starts AT the true radius and only expands while fading out (≥1.0× floor).
         const s = x.r * 2 * (1 + 0.25 * k);
+        // 29.12: the Tank Cannon blast is visually DISTINCT from Sunder bombs —
+        // hard-edged shock-star sprite (above), snap-out expansion, then a SLAM
+        // fade (vs the bomb's slow linear fade). Shape + rhythm differ, not just hue.
+        if (x.tank) {
+          if (!this._fx) this._fx = buildCombatFx();
+          const ts = x.r * 2 * (1 + 0.5 * Math.min(1, k * 2.4)); // snap out, then hold
+          ctx.globalAlpha = k < 0.4 ? 1 : 1 - (k - 0.4) / 0.6;   // slam out
+          ctx.drawImage(this._fx.tank, x.x - ts / 2, x.y - ts / 2, ts, ts);
+          continue;
+        }
         ctx.globalAlpha = 0.85 * (1 - k);
         ctx.drawImage(x.frost && this.frostImg ? this.frostImg : this.explosionImg, x.x - s / 2, x.y - s / 2, s, s);
+      }
+      ctx.restore();
+    }
+    // 29.10: reflect-hit moments — a baked mirror burst at the point an orb was
+    // reversed (spawned by _shieldStep; purely cosmetic, nothing consumes it).
+    if (this.reflectFx.length) {
+      if (!this._fx) this._fx = buildCombatFx();
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const f of this.reflectFx) {
+        const k = f.t / REFLECT_FX;
+        const s = 30 + 36 * k; // quick burst outward, then gone
+        ctx.globalAlpha = 1 - k;
+        ctx.drawImage(this._fx.flash, f.x - s / 2, f.y - s / 2, s, s);
       }
       ctx.restore();
     }
@@ -1179,12 +1253,13 @@ export class Combat {
       ctx.drawImage(this.boulderImg, -this.boulderImg.width / 2, -this.boulderImg.height / 2);
       ctx.restore();
     }
-    // P21 Continuous Laser: additive beam from the owner's mid-torso along the
-    // locked aim angle (origin follows the owner; the angle is fixed at fire).
+    // P21 Continuous Laser (29.7/D99): additive beam from the owner's mid-torso
+    // riding the live orbit angle (owner._laserAng + this beam's equidistant offset).
     for (const b of this.beams) {
       if (b.owner.dead) continue;
       const ox = b.owner.x, oy = b.owner._spawnY();
-      const ex = ox + Math.cos(b.ang) * b.len, ey = oy + Math.sin(b.ang) * b.len;
+      const ang = b.owner._laserAng + b.off;
+      const ex = ox + Math.cos(ang) * b.len, ey = oy + Math.sin(ang) * b.len;
       const k = Math.min(1, b.t / 0.08); // quick ramp-in, hold, no fade-out (laser feel)
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
@@ -1247,6 +1322,40 @@ export class Combat {
       ctx.arc(pl.x, pl.y, S.r * (0.97 + 0.03 * Math.sin(ph * TAU)), 0, TAU);
       ctx.stroke();
       ctx.globalAlpha = 1;
+    }
+    // 29.10 Mirror Shield ACTIVE indicator — while reflect charges remain the shield
+    // reads as a standing mirror ring at its true reflect radius (pulsing pale blue,
+    // torso-centered like _shieldStep) with charge pips on the ring's underside:
+    // bright ticks = banked reflects, dim = spent. The client only knows the passive
+    // level (snapshot) → it draws the ring without pips. Visual only — _shieldStep
+    // remains the sole judge of reflects and the bank.
+    for (const pl of players || []) {
+      const lvl = pl.passives && pl.passives.shield;
+      if (!lvl || pl.dead) continue;
+      const row = CFG.passives.shield.levels[lvl - 1];
+      const oy = pl.y - pl.def.h * 0.5;
+      ctx.save();
+      ctx.globalAlpha = 0.14 + 0.06 * Math.sin(t * 2.6);
+      ctx.strokeStyle = '#a8d8ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(pl.x, oy, row.r, 0, TAU);
+      ctx.stroke();
+      const bank = pl._shieldBank;
+      if (bank) {
+        const mid = Math.PI * 0.5; // pips cluster at the ring's bottom
+        for (let i = 0; i < C.shieldCharges; i++) {
+          const a = mid + (i - (C.shieldCharges - 1) / 2) * 0.22;
+          const ready = i < bank.n;
+          ctx.globalAlpha = ready ? 0.9 : 0.28;
+          ctx.strokeStyle = ready ? '#dff2ff' : '#3d5568';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.arc(pl.x, oy, row.r, a - 0.06, a + 0.06);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
     }
   }
 }

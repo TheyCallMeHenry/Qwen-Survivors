@@ -1970,10 +1970,10 @@ m03RunDone = true;
     pP.weapons = {}; pP.synergies = {}; pP.passives = {};
     // Every P21 cooldown must reset too — a prior probe's shot cd (cannon 2.6 s,
     // boulder 7 s, tongue 2.2 s…) would otherwise gate the next probe's fire pass.
-    pP._cannonCd = 0; pP._laserCd = 0; pP._laserT = 0; pP._webCd = 0; pP._gatCd = 0;
+    pP._cannonCd = 0; pP._laserCd = 0; pP._laserT = 0; pP._laserAng = 0; pP._webCd = 0; pP._gatCd = 0;
     pP._gatMag = Wp.gatling.burst; pP._gatReload = 0; pP._batCd = 0; pP._boulderCd = 0;
     pP._tongueCd = 0; pP._ballCd = 0;
-    pP._companion = null; pP._boulder = null; pP._ball = null; pP._shieldBank = null; pP._tongueFx = null;
+    pP._companion = null; pP._wolves = null; pP._boulder = null; pP._ball = null; pP._shieldBank = null; pP._tongueFx = null;
     for (const arr of [gP.combat.shells, gP.combat.beams, gP.combat.boulders, gP.combat.webs,
       gP.combat.bullets, gP.combat.bolts, gP.combat.explosions]) arr.length = 0;
     clearFoesP();
@@ -2026,28 +2026,99 @@ m03RunDone = true;
     assert(gP.combat.beams.length === 0 && 1e6 - e.hp > 0 && e.vx === 0,
       `P21 laser: sears the foe with no knockback, beam dies at dur (dealt=${(1e6 - e.hp).toFixed(1)})`);
   }
-  // --- Wolf Companion: pounce + bite + bleed, leash clamp, staticPelt shock ---
+  // --- 29.7 (D99): orbit runs while INACTIVE; reactivation at the reached angle;
+  // the L3 cycle emits 2 exactly-opposite beams, L5 three equidistant ones. ---
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    pP.weapons.laser = 1;
+    const a0 = pP._laserAng;
+    for (let t = 0; t < 120; t++) fireP(); // no foe spawned — the beam never fires
+    const adv = pP._laserAng - a0;
+    assert(adv > Wp.laser.levels[0].rot * 1.5 && gP.combat.beams.length === 0,
+      `29.7 laser: orbit advances every inactive tick (${adv.toFixed(2)} rad over 2 s, zero beams)`);
+    mkFoeP('goblin', pP.x + 150, torsoP());
+    fireP();
+    assert(gP.combat.beams.length === 1 && Math.abs(gP.combat.beams[0].off - pP._laserAng) < 1e-9,
+      '29.7 laser: reactivation fires at whatever angle the orbit reached');
+  }
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    mkFoeP('goblin', pP.x + 150, torsoP());
+    const norm = (a) => { a %= 6.283185307179586; if (a > 3.141592653589793) a -= 6.283185307179586; if (a < -3.141592653589793) a += 6.283185307179586; return a; };
+    for (const [lvl, n] of [[3, 2], [5, 3]]) {
+      resetP21(); regridP();
+      mkFoeP('goblin', pP.x + 150, torsoP());
+      pP.weapons.laser = lvl;
+      let t = 0;
+      while (!gP.combat.beams.length && t < 60) { regridP(); fireP(); t++; }
+      const offs = gP.combat.beams.map((b) => b.off);
+      const gaps = offs.slice(1).map((o) => Math.abs(norm(o - offs[0]))).sort((a, b) => a - b);
+      const sep = (2 * Math.PI) / n; // n=2: [π]; n=3: [2π/3, 2π/3] (the 120°/240° pair normalizes to 120/120…)
+      assert(offs.length === n && gaps.every((g) => Math.abs(g - (n === 2 ? Math.PI : 2 * Math.PI / 3)) < 1e-9) &&
+        gP.combat.beams.every((b) => b.dur === Wp.laser.levels[lvl - 1].dur),
+        `29.7 laser L${lvl}: ${n} equidistant beams (${sep.toFixed(3)} rad sep), one shared active window`);
+    }
+  }
+  // --- Wolfpack (29.9): pounce + bite + bleed, leash clamp, staticPelt shock ---
   resetP21();
   pP.x = 400; pP.y = 600;
   {
     const e = mkFoeP('goblin', pP.x + 150, pP.y);
-    pP.weapons.wolf = 1;
+    pP.weapons.wolfpack = 1;
     regridP();
     let t = 0;
     while (1e6 - e.hp <= 0 && t < 150) { gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
-    const WL = Wp.wolf.levels[0];
-    assert(pP._companion && 1e6 - e.hp > 0 && e.bleedT > 0 && e.bleedDps >= WL.bleed,
-      `P21 wolf: companion bites + bleeds (dealt=${(1e6 - e.hp).toFixed(0)} bleedT=${e.bleedT} dps=${e.bleedDps})`);
+    const WL = Wp.wolfpack.levels[0];
+    assert(pP._companion && pP._companion === pP._wolves[0] && 1e6 - e.hp > 0 && e.bleedT > 0 && e.bleedDps >= WL.bleed,
+      `P21 wolfpack: pack bites + bleeds, leader ref intact (dealt=${(1e6 - e.hp).toFixed(0)} bleedT=${e.bleedT} dps=${e.bleedDps})`);
     pP.x += 500; // owner bolts away — the leash clamp must drag the wolf back
     for (let n = 0; n < 30; n++) gP.combat.update(1 / 60, gP.players, gP.enemies);
     const cd = Math.hypot(pP._companion.x - pP.x, pP._companion.y - pP.y);
-    assert(cd <= Cp.companionLeash + 2, `P21 wolf: leash clamp holds (dist=${cd.toFixed(1)} ≤ ${Cp.companionLeash})`);
+    assert(cd <= Cp.companionLeash + 2, `P21 wolfpack: leash clamp holds (dist=${cd.toFixed(1)} ≤ ${Cp.companionLeash})`);
+  }
+  // --- 29.9 pack levels: L3 spawns a 2nd wolf, L5 a 3rd (L2/L4 keep the count) ---
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    for (const [lvl, want] of [[2, 1], [3, 2], [4, 2], [5, 3]]) {
+      pP.weapons.wolfpack = lvl;
+      gP.combat.update(1 / 60, gP.players, gP.enemies);
+      assert((pP._wolves || []).length === want && pP._companion === pP._wolves[0],
+        `29.9 wolfpack: L${lvl} runs exactly ${want} live wolves (leader tail intact)`);
+    }
+  }
+  // --- 29.14 Coffee: one additive multiplier shortens weapon cooldowns (laser
+  // downtime + boulder cd probed exactly; test-logic covers the per-type sweep) ---
+  resetP21();
+  pP.x = 400; pP.y = 600;
+  {
+    const k = 1 - CFG.passives.coffee.val * 3;
+    pP.passives = { coffee: 3 }; recomputeStats(pP);
+    mkFoeP('goblin', pP.x + 150, pP.y);
+    pP.weapons.boulder = 1;
+    let t = 0;
+    while (!gP.combat.boulders.length && t < 60) { regridP(); fireP(); t++; }
+    assert(Math.abs(pP._boulderCd - Wp.boulder.levels[0].cd * k) < 1e-9,
+      `29.14 Coffee: boulder cd armed × cdMul (${pP._boulderCd.toFixed(3)} = ${Wp.boulder.levels[0].cd}×${k})`);
+    resetP21();
+    pP.x = 400; pP.y = 600;
+    pP.passives = { coffee: 3 }; recomputeStats(pP);
+    mkFoeP('goblin', pP.x + 150, torsoP());
+    pP.weapons.laser = 1;
+    t = 0;
+    while (!gP.combat.beams.length && t < 60) { regridP(); fireP(); t++; }
+    while (pP._laserT > 0 && t < 300) { fireP(); t++; }
+    assert(Math.abs(pP._laserCd - Wp.laser.levels[0].cd * k) < 1e-9,
+      `29.14 Coffee: laser downtime armed × cdMul (${pP._laserCd.toFixed(3)} = ${Wp.laser.levels[0].cd}×${k})`);
+    pP.passives = {};
   }
   resetP21();
   pP.x = 400; pP.y = 600;
   {
     const e = mkFoeP('goblin', pP.x + 150, pP.y);
-    pP.weapons.wolf = 1; pP.synergies.staticPelt = 1;
+    pP.weapons.wolfpack = 1; pP.synergies.staticPelt = 1;
     regridP();
     let t = 0;
     while (e.shockStacks.length === 0 && t < 150) { gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
@@ -2249,13 +2320,13 @@ m03RunDone = true;
   }
   // --- The 5 fused synergies reach the offer pool when their pair is owned at max (reqAtMax) ---
   {
-    const w9 = { cannon: 5, flame: 5, wolf: 5, ringLightning: 5, bat: 5, bow: 5, tongue: 5, boulder: 5, snowball: 5 };
+    const w9 = { cannon: 5, flame: 5, wolfpack: 5, ringLightning: 5, bat: 5, bow: 5, tongue: 5, boulder: 5, snowball: 5 };
     const seen = new Set();
     for (let s = 1; s <= 60; s++) for (const c of cardOffers(w9, { hp: 3 }, {}, mulberry32(s), 5, null, null, null)) seen.add(c.key);
     for (const k of ['heShell', 'staticPelt', 'homerKing', 'gutFeast', 'avalanche'])
       assert(seen.has(k), `P21 offers: ${k} never surfaced across 60 seeds`);
   }
-  // --- P21 draw pass: shell/boulder/web sprites + beam + companion emit real draw ops ---
+  // --- P21 draw pass: shell/boulder/web sprites + orbit beams + PACK wolves emit real draw ops ---
   {
     resetP21();
     pP.x = 400; pP.y = 600; pP.aimAng = 0;
@@ -2263,8 +2334,11 @@ m03RunDone = true;
     gP.combat.fireBoulder(pP, pP.x + Cp.boulderR, pP.y, 1, 0, 50, null);
     gP.combat.fireWeb(pP.x, torsoP(), pP.x + 120, pP.y, 10, 90, 0.7, pP);
     gP.combat.fireBeam(pP, { dur: 1.0, dps: 10, len: Cp.wandRange, w: 12 });
-    pP.weapons.wolf = 1;
+    pP.weapons.wolfpack = 1;
     pP._companion = { x: pP.x, y: pP.y - 12, state: 'follow', target: null, cd: 0, flip: false, animT: 0 };
+    pP._wolves = [pP._companion,
+      { x: pP.x - 22, y: pP.y - 12, state: 'follow', target: null, cd: 0, flip: false, animT: 0 },
+      { x: pP.x - 44, y: pP.y - 12, state: 'follow', target: null, cd: 0, flip: false, animT: 0 }];
     const before = drawOps.drawImage;
     gP.combat.draw(makeCtx(), 1, gP.players, gP.enemies);
     assert(drawOps.drawImage - before > 0, `P21 draw pass: sprites blit (${drawOps.drawImage - before} drawImage)`);
@@ -2841,7 +2915,7 @@ m03RunDone = true;
   // absent (host-owned), phoenix + heartMagnet (unowned) must be present.
   const pl1P0 = { ...pl1.passives };
   pl1.weapons = { wand: 5, garlic: 5, axe: 5 }; // 3 maxed = cap 3 filled; gates blight(wand+garlic)+phoenix(passives) only
-  pl1.passives = { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3, shield: 5, skates: 5 }; // P21: item-passives maxed too — pool stays pure synergies
+  pl1.passives = { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3, shield: 5, skates: 5, coffee: 5 }; // P21/29.14: item-passives maxed too — pool stays pure synergies
   const pl1Excl = cardOffers(pl1.weapons, pl1.passives, pl1.synergies, hostG.rng, weaponCap(3), hostG._ownerExclusion(pl1));
   assert(pl1Excl.every((c) => c.kind === 'synergy' && (c.key === 'phoenix' || c.key === 'heartMagnet'))
     && !pl1Excl.some((c) => c.key === 'blight') && pl1Excl.some((c) => c.key === 'phoenix'),
@@ -3288,5 +3362,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 8 weapons (wand-off kill window) · ` +
   `all 8 weapons observed live (bolts/axes/blades/garlic/bullets/bombs/flames/arrows) · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 12.8 per-synergy E2Es (flamingArrows burn-on-hit · heartPiercer bonus+pierce exactly 1 extra · blueFlame freeze+burn on burst · stormVolley 4th-volley both-rounds strike + chain shock) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · 14 in-run Soulshards counter (live floor(score/400) projection, change-detected) + 14.2 unified co-op earnings (run-level total rides the room close, client accrues in full, meta player-specific)P21 boot battery (9 new weapons + 2 item-passives live: cannon punch→blast + heShell ignite · laser sear no-kb · wolf pounce/bleed/leash/staticPelt shock · boulder squish/decay/one-at-a-time/avalanche stacks · web burst hold · gatling mag→reload→full-mag refill · bat knockback + HOMERUN KO branch (rand-pinned) · tongue poison/drag/eat-heal with gutFeast ×mul · cannonball roll self-propelled + i-frame gate open/close; Mirror Shield reflect+bank+spend; Ice Skates glide drift + slide-hits-both with re-hit lock; 5 new chars selectable: pre-owned starter, zero passives, per-char hp/dmg; 5 fused synergies offered across 60 seeds; P21 sprite draw pass) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · 14 in-run Soulshards counter (live floor(score/400) projection, change-detected) + 14.2 unified co-op earnings (run-level total rides the room close, client accrues in full, meta player-specific)P21 boot battery (9 new weapons + 2 item-passives live: cannon punch→blast + heShell ignite · laser orbit sear no-kb (continuous rotation while idle, 180°/120° multi-beam) · wolfpack pounce/bleed/leash/staticPelt shock + pack growth 1/1/2/2/3 · Coffee cdMul on boulder+laser cds · boulder squish/decay/one-at-a-time/avalanche stacks · web burst hold · gatling mag→reload→full-mag refill · bat knockback + HOMERUN KO branch (rand-pinned) · tongue poison/drag/eat-heal with gutFeast ×mul · cannonball roll self-propelled + i-frame gate open/close; Mirror Shield reflect+bank+spend; Ice Skates glide drift + slide-hits-both with re-hit lock; 5 new chars selectable: pre-owned starter, zero passives, per-char hp/dmg; 5 fused synergies offered across 60 seeds; P21 sprite draw pass) · loop alive throughout`,
 );

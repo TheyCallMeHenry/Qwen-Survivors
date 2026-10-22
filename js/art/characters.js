@@ -766,3 +766,97 @@ export function buildCharacters(levelKey) {
 // Playable-character roster art: RETIRED here in Phase 27 — buildRoster/buildGhost now
 // live only in art/heroes.js (from-scratch sheets). Callers import from there.
 
+// ── 29.9 Wolfpack companion art (NOT the enemy wolf skin) ────────────────────────
+// User law: the bonded pack must never read as enemy wolves — bigger silhouettes
+// (54×38 vs the enemy's 46×32), aggressive low-head gallop with pinned-back ears,
+// erect hackle spikes, bared fangs, amber eyes (the enemy's are red), and violet
+// moon-lit fur tips echoing the Werewolf hero (pack identity, heroes.js).
+// Each wolf's coat is its index identity: light brown / dark grey / dark brown.
+// Contrast-checked against every enemy skin here: enemy wolf blue-grey (#454d58…),
+// rat warm grey (#6b7076), bat violet (#55486e), goblin green, brute taupe-brown
+// (#5a4a40 — greyish, vs the pack's saturated brown+grey+tan and different shape),
+// cultist robed, bosses dark — no pack coat matches any of them, and the pack's
+// four-legged gallop + fangs + violet tips distinguish it from the bipedal brute.
+// No gradients except formShade's linear pass → boot radial stays 0 even if these
+// are ever built inside an instrumented frame.
+export const PACK_PALS = [
+  { body: '#b08256', dark: '#7c5a36', light: '#c9a06e', belly: '#e6d2ac' }, // light brown (1st)
+  { body: '#4a505a', dark: '#2c3138', light: '#5d646f', belly: '#8b929c' }, // dark grey (2nd)
+  { body: '#5b3d24', dark: '#38230f', light: '#77522f', belly: '#9a7448' }, // dark brown (3rd)
+];
+const PACK_TIP = 'rgba(192,132,252,0.85)'; // moon-lit fur tips (Werewolf pack bond)
+const PACK_EYE = '#ffb648';
+
+function packWolfFrame(pal, l1, l2) {
+  return canvasOf(54, 38, (g) => {
+    // raised, forward-swept tail (speed read) with a violet tip
+    g.strokeStyle = pal.dark; g.lineWidth = 3.4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(11, 16); g.quadraticCurveTo(4, 12, 2, 5); g.stroke();
+    g.strokeStyle = PACK_TIP; g.lineWidth = 2.6;
+    g.beginPath(); g.moveTo(3.2, 7.5); g.quadraticCurveTo(2.4, 6, 2, 5); g.stroke();
+    // legs (drive further than the enemy wolf — longer stride)
+    g.fillStyle = pal.dark;
+    g.fillRect(16 + l1, 24, 4, 12);
+    g.fillRect(24 + l2, 24, 4, 12);
+    g.fillRect(33 + l2, 24, 4, 12);
+    g.fillRect(39 + l1, 24, 4, 12);
+    // body: longer, lower, driving forward
+    g.fillStyle = pal.body;
+    g.beginPath(); g.ellipse(28, 19, 17, 8.5, 0, 0, TAU); g.fill();
+    formShade(g, 11, 10.5, 34, 17); // 24.4 top-left light, linear only
+    // dark dorsal band under the hackle spikes (posture contrast the enemy lacks)
+    g.fillStyle = pal.dark;
+    poly(g, [[15, 14], [41, 14], [41, 16.6], [15, 16.6]]); g.fill();
+    // belly patch (friend read — enemies have none), dimmed so the coat stays primary
+    g.globalAlpha = 0.5; g.fillStyle = pal.belly;
+    g.beginPath(); g.ellipse(28, 24.5, 10, 3, 0, 0, TAU); g.fill();
+    g.globalAlpha = 1;
+    // hackle spikes along the back (aggression)
+    g.fillStyle = pal.dark;
+    for (const x of [18, 25, 32]) {
+      poly(g, [[x, 11], [x + 3.5, 6.5], [x + 6, 11.5]]); g.fill();
+    }
+    // fur tips on the haunch, violet
+    g.strokeStyle = PACK_TIP; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(13, 14); g.lineTo(10, 12); g.stroke();
+    // head: lowered and thrust forward (the enemy's sits high and round), lighter
+    // than the body + outlined so the aggressive face reads at 1×
+    g.fillStyle = pal.light;
+    poly(g, [[38, 12], [49, 14], [52, 19], [49, 24], [38, 22]]); g.fill();
+    g.strokeStyle = 'rgba(10,14,20,0.75)'; g.lineWidth = 1.4; g.lineJoin = 'round';
+    poly(g, [[38, 12], [49, 14], [52, 19], [49, 24], [38, 22]]); g.closePath(); g.stroke();
+    // brow/muzzle band (darker than the lit head plane) — drawn BEFORE the eye so it shades, not hides
+    g.fillStyle = pal.body;
+    poly(g, [[38, 12], [49, 14], [46, 17], [39, 16]]); g.fill();
+    // open snarling jaw + fangs
+    g.fillStyle = pal.dark;
+    poly(g, [[44, 22], [51, 23], [48, 27], [43, 25]]); g.fill();
+    g.fillStyle = '#f4f7fa';
+    poly(g, [[46.5, 23], [48, 26.5], [49.5, 23.2]]); g.fill();
+    poly(g, [[43, 22.3], [44, 25], [45.4, 22.6]]); g.fill();
+    // pinned-back ears (aggressive posture), violet-tipped
+    g.fillStyle = pal.dark;
+    poly(g, [[38, 12], [30, 6], [36, 15]]); g.fill();
+    poly(g, [[42, 11], [37, 3.5], [45, 11]]); g.fill();
+    g.strokeStyle = PACK_TIP; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(30.5, 6.5); g.lineTo(33.5, 9); g.stroke();
+    g.beginPath(); g.moveTo(37.5, 4.2); g.lineTo(40, 7.5); g.stroke();
+    // amber eye (enemy wolf's is red)
+    g.fillStyle = PACK_EYE;
+    g.beginPath(); g.ellipse(45, 18.2, 1.6, 1.1, 0, 0, TAU); g.fill();
+    g.fillStyle = '#161c24';
+    g.beginPath(); g.ellipse(51.5, 18.5, 1.4, 1.1, 0, 0, TAU); g.fill();
+  });
+}
+
+// Pack sheet for combat's companion draws: frames indexed by wolf order
+// (0 = light brown leader, 1 = dark grey, 2 = dark brown), 4-frame gallop
+// cycle on the same leg-offset rhythm as the enemy wolf (anim rate stays
+// CFG.enemies.wolf.fps — combat owns the clock, this module only bakes art).
+export function buildPackWolves() {
+  return {
+    w: 54, h: 38, shadowR: 13,
+    frames: PACK_PALS.map((pal) => [[5, 0], [0, 5], [0, 0], [-5, 0]].map(([l1, l2]) => packWolfFrame(pal, l1, l2))),
+  };
+}
+

@@ -13,6 +13,7 @@ export class Loop {
     this.last = 0;
     this.acc = 0;
     this.step = 1 / 60;
+    this.frames = 0; // rAF ticks executed — 29.1 ?fps=1 readout source (count-only, no render cost)
     this._raf = null;
     this._frame = (t) => {
       if (!this.running) return;
@@ -20,6 +21,7 @@ export class Loop {
       // update/render must cost one bad frame, never the whole loop (the old
       // bottom-of-body reschedule severed the rAF chain on any exception).
       this._raf = requestAnimationFrame(this._frame);
+      this.frames++;
       let dt = (t - this.last) / 1000;
       this.last = t;
       dt = Math.min(dt, CFG.loop.maxFrameDt); // clamp huge gaps (tab switch, debugger)

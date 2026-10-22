@@ -51,7 +51,7 @@ export const CFG = {
     ranger:  { name: 'Ranger',       weapon: 'bow',    cost: 1500, hp: 110, dmg: 1.0,  speed: 320, accent: '#a4ffc9', desc: 'Fast and balanced. Starts with the Bow & Arrow.' },
     swash:   { name: 'Swashbuckler', weapon: 'bombs', cost: 7500, hp: 90,  dmg: 1.15, speed: 300, accent: '#e8b45a', desc: 'Agile, upper-medium damage. Starts with Sunder Bombs. (D94 re-tool.)' },
     baseball: { name: 'Baseball Player', weapon: 'bat', cost: 5000, hp: 120, dmg: 1.1, speed: 285, accent: '#f06543', desc: 'Bruiser — massive knockback control. Starts with the Baseball Bat.' },
-    werewolf: { name: 'Werewolf',    weapon: 'wolf',   cost: 7500, hp: 110, dmg: 1.05, speed: 305, accent: '#c084fc', desc: 'Fast striker with an autonomous pack-hunter. Starts bonded to a Wolf companion.' },
+    werewolf: { name: 'Werewolf',    weapon: 'wolfpack', cost: 7500, hp: 110, dmg: 1.05, speed: 305, accent: '#c084fc', desc: 'Fast striker with an autonomous pack-hunter. Starts bonded to a Wolfpack.' },
     golem:   { name: 'Stone Golem',  weapon: 'boulder', cost: 10000, hp: 190, dmg: 0.9, speed: 195, accent: '#9aa7b8', desc: 'Slowest juggernaut — crushes small fries outright. Starts with the Rolling Boulder.' },
     toad:    { name: 'Giant Toad',   weapon: 'tongue', cost: 12500, hp: 140, dmg: 0.95, speed: 240, accent: '#7ed957', desc: 'Sustain tank — hauls foes in and eats them to heal. Starts with the Frog Tongue.' },
     gunslinger: { name: 'Wild West Gunslinger', weapon: 'pistols', cost: 15000, hp: 85, dmg: 1.2, speed: 295, accent: '#d9a066', desc: 'Deadliest duo — high damage, thinnest skin. Starts with the Twin Fangs. (D94.)' },
@@ -222,7 +222,9 @@ export const CFG = {
     // docs/phase21-resolutions-2026-10-20.md §B (user-approved 2026-10-20) ----
     cannon: {
       name: 'Tank Cannon',
-      desc: 'Fires a heavy shell that punches one foe, then detonates on the next.',
+      // 29.12 (2026-10-22): text corrected to the real behaviour (pierce through the
+      // first foe, terminal detonation on the second) — user-requested wording.
+      desc: 'Fires a heavy shell that punches through one foe, then detonates on the next.',
       icon: 'cannon',
       levels: [
         { cd: 2.6, dmg: 90, blastR: 70 },
@@ -236,36 +238,52 @@ export const CFG = {
       name: 'Continuous Laser',
       desc: 'A sustained beam that sears every foe it sweeps. Long cooldown.',
       icon: 'laser',
+      // 29.7 (D99, user-confirmed 2026-10-22): the beam ORBITS, anchored at the
+      // owner. rot = angular velocity (rad/s); the orbit angle lives on the player
+      // (Player._laserAng) and advances EVERY tick, active window or not — a
+      // reactivation fires at whatever angle the orbit has reached. cd = downtime
+      // between active windows; every level-up raises rot and lowers cd (spec).
+      // count = simultaneous beams, equidistant (L3: 2 at 180°, L5: 3 at 120°),
+      // sharing the orbit angle, angular velocity, dur and cd exactly.
       levels: [
-        { cd: 5.0, dur: 1.2, dps: 34, len: 240, w: 12 },
-        { cd: 4.6, dur: 1.3, dps: 42, len: 250, w: 12 },
-        { cd: 4.2, dur: 1.4, dps: 52, len: 260, w: 14 },
-        { cd: 3.8, dur: 1.5, dps: 64, len: 270, w: 14 },
-        { cd: 3.4, dur: 1.6, dps: 78, len: 285, w: 16 },
+        { cd: 5.0, dur: 1.2, dps: 34, len: 240, w: 12, rot: 1.0, count: 1 },
+        { cd: 4.6, dur: 1.3, dps: 42, len: 250, w: 12, rot: 1.15, count: 1 },
+        { cd: 4.2, dur: 1.4, dps: 52, len: 260, w: 14, rot: 1.3, count: 2 },
+        { cd: 3.8, dur: 1.5, dps: 64, len: 270, w: 14, rot: 1.45, count: 2 },
+        { cd: 3.4, dur: 1.6, dps: 78, len: 285, w: 16, rot: 1.6, count: 3 },
       ],
     },
-    wolf: {
-      name: 'Wolf Companion',
-      desc: 'A bonded wolf that hounds foes near you and bleeds them. Never dies.',
-      icon: 'wolf',
+    wolfpack: {
+      name: 'Wolfpack',
+      desc: 'Wolves bonded to you hound foes near you and bleed them. The pack never dies.',
+      icon: 'wolf', // 29.9 art half shipped: three-pack card icon + per-wolf coats live in js/art (icons.wolf, PACK_PALS)
+      // 29.9 (user law 2026-10-22): level rules alternate stat-up / spawn-only.
+      // L2 = stat-up; L3 = spawn a 2nd wolf at the CURRENT stats (rows identical —
+      // no stat-up); L4 = stat-up that applies to ALL wolves (the pack reads the
+      // current row at bite time — wolves never snapshot stats); L5 = spawn a 3rd
+      // wolf, no stat-up. count = live wolves; targeting keeps the existing
+      // pounce pick (combat._nearestTo), NOT the spatial grid (user directive).
       levels: [
-        { dmg: 30, bleed: 8, bleedDur: 3.0 },
-        { dmg: 38, bleed: 10, bleedDur: 3.0 },
-        { dmg: 48, bleed: 13, bleedDur: 3.0 },
-        { dmg: 60, bleed: 16, bleedDur: 3.2 },
-        { dmg: 75, bleed: 20, bleedDur: 3.5 },
+        { dmg: 30, bleed: 8, bleedDur: 3.0, count: 1 },
+        { dmg: 38, bleed: 10, bleedDur: 3.0, count: 1 },
+        { dmg: 38, bleed: 10, bleedDur: 3.0, count: 2 },
+        { dmg: 60, bleed: 16, bleedDur: 3.2, count: 2 },
+        { dmg: 60, bleed: 16, bleedDur: 3.2, count: 3 },
       ],
     },
     boulder: {
       name: 'Rolling Boulder',
       desc: 'Sends a boulder rolling in a cardinal line, crushing small fries. One at a time.',
       icon: 'boulder',
+      // 29.6 (user playtest 2026-10-22): "fires too infrequently" — initial cd 4.0 s,
+      // −0.3 s per level-up (L1=4.0 … L5=2.8). The fire-site picks this row by level,
+      // so the curve lives entirely in the table.
       levels: [
-        { cd: 7.0, dmg: 70 },
-        { cd: 6.5, dmg: 90 },
-        { cd: 6.0, dmg: 110 },
-        { cd: 5.5, dmg: 130 },
-        { cd: 5.0, dmg: 155 },
+        { cd: 4.0, dmg: 70 },
+        { cd: 3.7, dmg: 90 },
+        { cd: 3.4, dmg: 110 },
+        { cd: 3.1, dmg: 130 },
+        { cd: 2.8, dmg: 155 },
       ],
     },
     webs: {
@@ -435,8 +453,8 @@ export const CFG = {
     },
     staticPelt: {
       name: 'Static Pelt',
-      desc: 'The wolf\u2019s pounce shocks its quarry and calls a chain burst.',
-      icon: 'staticPelt', requires: ['wolf', 'ringLightning'],
+      desc: 'The pack\u2019s pounces shock their quarry and call a chain burst.',
+      icon: 'staticPelt', requires: ['wolfpack', 'ringLightning'],
       levels: [
         { jumps: 2 }, { jumps: 3 }, { jumps: 4 }, { jumps: 5 }, { jumps: 6 },
       ],
@@ -476,6 +494,16 @@ export const CFG = {
     dmg:    { name: 'Rune of Might',  desc: '+12% weapon damage', icon: 'sword', max: 5, val: 0.12 },
     magnet: { name: 'Lodestone',      desc: '+60% pickup range', icon: 'magnet', max: 3, val: 0.60 },
     regen:  { name: 'Moon Sigil',     desc: 'Regenerate 0.8 HP/s', icon: 'sigil', max: 3, val: 0.8 },
+    // 29.14 Coffee: fire-rate passive. Scheme = the existing scalar-`val` passives
+    // (speed/dmg style): one ADDITIVE increment per level, folded in recomputeStats
+    // into a single multiplier cdMul = 1 − val × levels that _weapons applies when
+    // arming EVERY weapon cooldown (cd/rate + gatling reload + flame recharge). All
+    // equipped weapons share the one multiplier; max 5 levels → cdMul floor 0.40
+    // (−60% cooldowns at max). Not offered twice in co-op: the pool/lock machinery
+    // is key-driven (D91), so registration through CFG.passives is all it takes.
+    // icon: 29.14 art half shipped — the dedicated mug slot (icons.coffee, plain
+    // white mug with steaming brown coffee) replaced the borrowed 'sigil' reference.
+    coffee: { name: 'Coffee', desc: '−12% weapon cooldowns', icon: 'coffee', max: 5, val: 0.12 },
     // Phase 21 "run-equipable items" (D95): passive-pool entries with per-level `levels`
     // tables (behavior lookups in combat/player), not scalar `val` increments.
     shield: {
@@ -493,10 +521,13 @@ export const CFG = {
       icon: 'skates', max: 5,
       // spd = extra move-speed fraction; glideK = deceleration multiplier on release;
       // slideDmg = per-impact damage to BOTH (0.5 s re-hit lock per foe; cap 6 at max)
+      // 29.13 (2026-10-22): glideK roughly halved at every level — the user wants a
+      // clearly slipperier feel and a much longer glide after input stops (L1 slide
+      // time at 400 px/s ≈ 0.5 s → ≈ 0.93 s). No new mechanics.
       levels: [
-        { spd: 0.05, glideK: 0.35, slideDmg: 2 }, { spd: 0.075, glideK: 0.30, slideDmg: 3 },
-        { spd: 0.10, glideK: 0.25, slideDmg: 4 }, { spd: 0.125, glideK: 0.20, slideDmg: 5 },
-        { spd: 0.15, glideK: 0.15, slideDmg: 6 },
+        { spd: 0.05, glideK: 0.20, slideDmg: 2 }, { spd: 0.075, glideK: 0.17, slideDmg: 3 },
+        { spd: 0.10, glideK: 0.14, slideDmg: 4 }, { spd: 0.125, glideK: 0.11, slideDmg: 5 },
+        { spd: 0.15, glideK: 0.08, slideDmg: 6 },
       ],
     },
   },
@@ -588,9 +619,11 @@ export const CFG = {
     flameWobAmp: 14, flameWobFreq: 9, flameHit: 0.22,
 
     // Phase 21 (D96) — new-weapon mechanics knobs (per-level damage lives in CFG.weapons)
-    shellSpeed: 460, shellR: 11, shellBlastK: 0.5,           // Tank Cannon
+    // 29.12 (2026-10-22): cannonRange = dedicated Tank Cannon acquisition + firing
+    // range, 1.5× the old shared wandRange (560 → 840); the shell's life rides it too.
+    shellSpeed: 460, shellR: 11, shellBlastK: 0.5, cannonRange: 840,
     laserSpeed: 720, laserTick: 0.1,                         // Continuous Laser sweep rate + tick
-    companionLeash: 192, companionPounceCd: 2.0, companionSpeed: 380, // Wolf (pounce cd spec-fixed)
+    companionLeash: 192, companionPounceCd: 2.0, companionSpeed: 380, // Wolfpack (pounce cd spec-fixed)
     boulderSpeed: 300, boulderR: 34, boulderDecay: 0.75, boulderMaxHits: 6, boulderSquishR: 12,
     webSpeed: 430, webR: 9,                                  // Web-slingers
     gatlingSpeed: 640, gatlingLife: 0.55, gatlingR: 4,       // Gatling Gun

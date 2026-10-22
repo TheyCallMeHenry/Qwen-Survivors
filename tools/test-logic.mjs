@@ -15,9 +15,10 @@ import { GEM_PAL, HEART_PAL } from '../js/art/items.js';
 import { Lighting } from '../js/systems/lighting.js';
 import { Camera } from '../js/systems/camera.js';
 import { shadowSprite } from '../js/art/base.js';
-import { SNAP_V, WEAPON_KEYS, PASSIVE_KEYS, SYNERGY_KEYS, ENEMY_KEYS, E_FLAG_FLASH, E_FLAG_BURN, E_FLAG_BLIGHT, E_FLAG_BOSS, E_FLAG_FLIP, playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState } from '../js/net/sync.js';
+import { SNAP_V, SNAP_PLEN, WEAPON_KEYS, PASSIVE_KEYS, SYNERGY_KEYS, ENEMY_KEYS, E_FLAG_FLASH, E_FLAG_BURN, E_FLAG_BLIGHT, E_FLAG_BOSS, E_FLAG_FLIP, playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState } from '../js/net/sync.js';
 import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom, defaultChars, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations, actionCost, buyAction } from '../js/core/meta.js';
-import { rankScore, loadScores, saveScores, scoreKeyFor } from '../js/ui/screens.js';
+import { rankScore, loadScores, saveScores, scoreKeyFor, isNewOffer, cardTitleFor } from '../js/ui/screens.js';
+import { loadoutRows } from '../js/ui/hud.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
 import { MSG, pack, unpack, profileFromMeta, joinProfile, sanitizeChars, allStarterLobby, ghostColor, charAccent, allocateGhostOffers, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap, bossCount, selChar, assignChars, resolveChars, sanitizeShards } from '../js/net/coop.js';
@@ -273,14 +274,14 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   // No weapon cards at all (ownedW=5=cap) yet blight/tempest are offered → synergies do NOT
   // count against maxWeapons.
   const maxed = cardOffers({ wand: 5, garlic: 5, axe: 5, blades: 5, pistols: 5 }, { speed: 3, magnet: 3 }, {}, mulberry32(2));
-  const legalKeys = new Set(['hp', 'dmg', 'regen', 'shield', 'skates', 'blight', 'tempest']);
+  const legalKeys = new Set(['hp', 'dmg', 'regen', 'shield', 'skates', 'coffee', 'blight', 'tempest']);
   ok(maxed.length === 3 && maxed.every((c) => c.kind === 'passive' || c.kind === 'synergy')
     && maxed.every((c) => legalKeys.has(c.key)), 'cardOffers: exhausted pool → remaining passives + gated synergies only');
   // Phase 9 (11.5: cap 4→5; 12.6 rebaseline): 5 maxed weapons push ownedW to the cap with
   // no garlic (blight stays gated); all passives maxed → the pool is exactly the synergies whose
   // own sources are in hand {inferno, tempest, phoenix, heartMagnet}. cardOffers caps the draw
   // at 3 cards (unchanged), so assert 3 DISTINCT members of that exact set.
-  const trio = cardOffers({ pistols: 5, flame: 5, wand: 5, axe: 5, blades: 5 }, { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3, shield: 5, skates: 5 }, {}, mulberry32(4));
+  const trio = cardOffers({ pistols: 5, flame: 5, wand: 5, axe: 5, blades: 5 }, { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3, shield: 5, skates: 5, coffee: 5 }, {}, mulberry32(4));
   const trioSet = new Set(['inferno', 'tempest', 'phoenix', 'heartMagnet']);
   ok(trio.length === 3 && trio.every((c) => c.kind === 'synergy' && trioSet.has(c.key))
     && new Set(trio.map((c) => c.key)).size === 3, 'cardOffers: gated pool {inferno, tempest, phoenix, heartMagnet} → 3 distinct drawn (12.6)');
@@ -486,6 +487,68 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ]);
   ok([...iconNames].every((n) => new RegExp(`icons\\.${n}\\s*=`).test(src)),
     '12.2: every CFG icon name (incl. bow) exists in buildIcons()');
+}
+
+// --- 29.3: level-up cards present un-owned offers as NEW (no "· Lv" label, no pips) while
+// owned upgrades keep their level display. Pure helpers exported by js/ui/screens.js. ---
+{
+  const defPassive = { name: 'Lodestone', max: 3 };
+  const defWeapon = { name: 'Moonbolt Wand', max: 5 };
+  const defSynergy = { name: 'Blight Hex' };
+  // Un-owned passive offer (the reported defect): name only, no level label, no pips.
+  const p = cardTitleFor('passive', defPassive, 1, false);
+  ok(p.title === 'Lodestone' && !p.title.includes('Lv'), '29.3: un-owned passive shows no level label');
+  ok(p.pips === 0, '29.3: un-owned passive shows no pips');
+  // Owned passive upgrade keeps the "· Lv cur/max" label + its pips.
+  const pu = cardTitleFor('passive', defPassive, 2, true);
+  ok(pu.title === 'Lodestone · Lv 2/3' && pu.pips === 3, '29.3: owned passive keeps its level display');
+  // Un-owned weapon offer → NEW; owned weapon keeps "· Lv n" + pips.
+  const wNew = cardTitleFor('weapon', defWeapon, 1, false);
+  ok(wNew.title === 'Moonbolt Wand' && wNew.pips === 0, '29.3: un-owned weapon shows NEW, no level');
+  const wOwn = cardTitleFor('weapon', defWeapon, 3, true);
+  ok(wOwn.title === 'Moonbolt Wand · Lv 3' && wOwn.pips === 5, '29.3: owned weapon keeps level + pips');
+  // Synergy never shows a level regardless of the owned flag.
+  const sy = cardTitleFor('synergy', defSynergy, 1, true);
+  ok(sy.title === 'Blight Hex' && sy.pips === 0, '29.3: synergy shows no level label/pips');
+  // isNewOffer is the single source for the .new class: un-owned = new, owned = not.
+  const pl = { weapons: { wand: 1 }, passives: {}, synergies: {} };
+  ok(isNewOffer({ kind: 'passive', key: 'magnet' }, pl) === true, '29.3: un-owned passive = new offer');
+  ok(isNewOffer({ kind: 'weapon', key: 'wand' }, pl) === false, '29.3: owned weapon = not a new offer');
+  ok(isNewOffer({ kind: 'weapon', key: 'garlic' }, pl) === true, '29.3: un-owned weapon = new offer');
+  ok(isNewOffer({ kind: 'synergy', key: 'blight' }, pl) === true, '29.3: synergy = new offer');
+  const pl2 = { weapons: {}, passives: { magnet: 1 }, synergies: {} };
+  ok(isNewOffer({ kind: 'passive', key: 'magnet' }, pl2) === false, '29.3: owned passive = not a new offer');
+  // cardTitleFor agrees with isNewOffer: a real un-owned offer renders as NEW (name only).
+  const offer = { kind: 'passive', key: 'magnet', level: 1 };
+  ok(cardTitleFor('passive', CFG.passives.magnet, offer.level, !isNewOffer(offer, pl)).title === CFG.passives.magnet.name,
+    '29.3: un-owned real passive offer renders as NEW (name only)');
+}
+
+// --- 29.5: the HUD equipment area splits weapons into their own row and items/passives into a
+// separate row. loadoutRows (exported by js/ui/hud.js) is the pure grouping the row builder
+// lays out as two visually separated bands. The flat render order stays weapons → synergies →
+// passives so the existing boot E2E that reads a row's children still matches. ---
+{
+  const wKey = Object.keys(CFG.weapons)[0];
+  const wKey2 = Object.keys(CFG.weapons)[1];
+  const pKey = Object.keys(CFG.passives)[0];
+  const sKey = Object.keys(CFG.synergies)[0];
+  const pl = { weapons: { [wKey2]: 1, [wKey]: 3 }, synergies: { [sKey]: 2 }, passives: { [pKey]: 1 } };
+  const [weapons, items] = loadoutRows(pl);
+  ok(weapons.length === 2 && weapons.every((e) => e.kind === 'weapon'), '29.5: weapon row holds only weapon entries');
+  ok(items.length === 2 && items.every((e) => e.kind !== 'weapon'), '29.5: item/passive row holds only non-weapons');
+  ok(items.some((e) => e.kind === 'synergy') && items.some((e) => e.kind === 'passive'),
+    '29.5: synergy + passive both land in the item/passive row');
+  // Group order follows CFG definition order inside each band (not the insertion order).
+  ok(weapons.map((e) => e.key).join(',') === [wKey, wKey2].join(','), '29.5: weapon row keeps CFG order');
+  // Flat sequence the DOM appends is unchanged → boot parity.
+  ok(weapons.concat(items).map((e) => e.kind).join(',') === 'weapon,weapon,synergy,passive',
+    '29.5: flat render order stays weapons → synergies → passives (boot parity)');
+  ok(weapons[0].level === 3 && items.every((e) => Number.isInteger(e.level) && e.level > 0),
+    '29.5: entries carry the current level for owned chips');
+  // An empty group produces an empty band (the row builder skips blank bands — no stray row).
+  const [onlyW, noItems] = loadoutRows({ weapons: { [wKey]: 1 }, synergies: {}, passives: {} });
+  ok(onlyW.length === 1 && noItems.length === 0, '29.5: no items → empty item band (row builder skips it)');
 }
 
 // --- 12.3: Snowball Launcher — lobbed AoE + accumulating slow → freeze (Combat/Enemies, Node-safe) ---
@@ -1135,8 +1198,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
 
 // --- 11.2 host-authoritative sync: snapshot codec + per-player ownership ---
 {
-  ok(WEAPON_KEYS.length === 19 && PASSIVE_KEYS.length === 7 && SYNERGY_KEYS.length === 15 && ENEMY_KEYS.length === 9,
-    '11.2: key tables follow CFG order/counts (P21 rebaseline: 19 weapons · 7 passives · 15 synergies)');
+  ok(WEAPON_KEYS.length === 19 && PASSIVE_KEYS.length === 8 && SYNERGY_KEYS.length === 15 && ENEMY_KEYS.length === 9,
+    '11.2: key tables follow CFG order/counts (29.14 rebaseline: 19 weapons · 8 passives · 15 synergies)');
 
   const p = new Player({});
   p.reset(10, 20);
@@ -1146,7 +1209,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   p.actLeft = { skip: 2, reroll: 1, banish: 5 };
   p.xp = 12.345; p.hp = 55.55; p.dashT = 0.333; p.dashCd = 1.666; p.flip = true;
   const ps = playerSnap(p);
-  ok(ps.length === 57, '11.2: playerSnap is 57 slots (SNAP_V=7, P21 rebaseline: 19+7+15 re-layout + 4-slot companion tail)');
+  ok(ps.length === SNAP_PLEN && SNAP_PLEN === 58, '11.2: playerSnap is 58 slots (SNAP_V=8, 29.14 rebaseline: 19+8+15 re-layout + 4-slot companion tail)');
   const p2 = new Player({});
   p2.reset(0, 0);
   applyPlayerSnap(p2, ps);
@@ -1892,13 +1955,13 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   for (let i = 0; i < 6; i++) pk.update(1 / 60, plHM5, null);
   ok(pk.hearts.some((h) => h.on && h.x < CFG.gems.magnetBase + 60), '12.6 heartMagnet L5: doubled pull radius reaches the far heart');
 
-  // Sync wire: synergy LEVELS ride the snapshot (SNAP_V=5, 34 slots).
+  // Sync wire: synergy LEVELS ride the player snapshot (slot layout derived from key counts).
   const pSnap = new Player({}); pSnap.reset(0, 0);
   pSnap.synergies.heartPiercer = 3;
   const snapSlots = playerSnap(pSnap);
   const S_OFF = 9 + WEAPON_KEYS.length + PASSIVE_KEYS.length; // mirrors sync.js header offsets
-  ok(snapSlots.length === 57 && snapSlots[S_OFF + SYNERGY_KEYS.indexOf('heartPiercer')] === 3,
-    '12.6 sync: heartPiercer level 3 survives the wire (57-slot snap, P21 rebaseline)');
+  ok(snapSlots.length === SNAP_PLEN && snapSlots[S_OFF + SYNERGY_KEYS.indexOf('heartPiercer')] === 3,
+    '12.6 sync: heartPiercer level 3 survives the wire (58-slot snap, 29.14 rebaseline)');
 }
 
 // --- 19.1 equipment row (HTML + CSS content asserts; browser render verified on Pages) ---
@@ -2344,9 +2407,9 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
 
   // sync.js unpackState: value-level sanitization (serve.mjs relays inner arrays
   // unvalidated — it only caps counts; the client gate must catch garbage itself).
-  const st0 = stateMsg(1, 1, 1, 1, [new Array(57).fill(1)], [[1, 0, 1, 1, 1, 1, 0, 0]], [[0, 0, 1, 1]]);
+  const st0 = stateMsg(1, 1, 1, 1, [new Array(SNAP_PLEN).fill(1)], [[1, 0, 1, 1, 1, 1, 0, 0]], [[0, 0, 1, 1]]);
   ok(unpackState(st0) === st0, 'unpack audit: valid numeric body accepted');
-  const badP = (i, v) => { const p = new Array(57).fill(1); p[i] = v; return unpackState({ ...st0, players: [p] }); };
+  const badP = (i, v) => { const p = new Array(SNAP_PLEN).fill(1); p[i] = v; return unpackState({ ...st0, players: [p] }); };
   ok(badP(0, '10') === null && badP(2, NaN) === null,
     'unpack audit: non-numeric player slot → null (no NaN/string poisoning)');
   ok(unpackState({ ...st0, enemies: [[1, 99, 1, 1, 1, 1, 0, 0]] }) === null,
@@ -2608,7 +2671,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   // Wolf companion: spawn + pounce + bleed + fixed 2.0 s cd + leash clamp + staticPelt.
   {
     const c = new Combat();
-    const pl = new Player({ h: 64 }); pl.reset(200, 200); pl.weapons.wolf = 1;
+    const pl = new Player({ h: 64 }); pl.reset(200, 200); pl.weapons.wolfpack = 1;
     const e1 = mk(300, 200, { hp: 100000 });
     let leashed = true;
     for (let i = 0; i < 600; i++) {
@@ -2629,7 +2692,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     ok(bites.length >= 2 && bites.every((t, i) => i === 0 || t - bites[i - 1] >= 1.9),
       `P21 wolf: pounce cd never below the fixed 2.0 s (${bites.map((b) => (b - t0).toFixed(1)).join(', ')})`);
     // staticPelt: the bite adds a shock stack
-    const pl2 = new Player({ h: 64 }); pl2.reset(300, 300); pl2.weapons.wolf = 1; pl2.synergies.staticPelt = 1;
+    const pl2 = new Player({ h: 64 }); pl2.reset(300, 300); pl2.weapons.wolfpack = 1; pl2.synergies.staticPelt = 1;
     const c2 = new Combat();
     const e2 = mk(400, 300, { hp: 100000 });
     for (let i = 0; i < 600; i++) c2.update(1 / 60, [pl2], stub([e2]));
@@ -2656,6 +2719,33 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     }
     ok(reloadSeen && magAfterReload >= G.burst - 1,
       `P21 gatling: empty mag → the fixed ${G.reload} s reload → fresh ${G.burst}-round mag (${magAfterReload})`);
+  }
+
+  // 29.8: the gatling reload is observable as a monotonically-decreasing remaining time — this is
+  // what the HUD reload ring (js/ui/hud.js syncGat) reads, so pin it here: the countdown starts at
+  // the spec reload duration, drops strictly every tick while reloading, and hits 0 exactly as the
+  // mag refills (the instant the indicator must clear).
+  {
+    const c = new Combat();
+    const pl = new Player({ h: 64, run: [0], idle: [0] }); pl.reset(300, 300); pl.weapons = { gatling: 1 };
+    const e = mk(340, 300);
+    const world = { collidersNear: () => [] };
+    const G = CFG.weapons.gatling;
+    let total = 0, prev = -1, mono = true, sawReload = false, refilled = false;
+    for (let i = 0; i < 60 * 12; i++) {
+      pl.update(1 / 60, { x: 0, y: 0 }, c, stub([e]), world);
+      const r = pl._gatReload;
+      if (r > 0) {
+        if (!sawReload) { sawReload = true; total = pl._gatReloadTotal; prev = r; }
+        else if (r >= prev) mono = false; // must fall strictly on every tick of the reload
+        else prev = r;
+      } else if (sawReload) { refilled = pl._gatMag >= G.burst && pl._gatReloadTotal === 0; if (refilled) break; }
+    }
+    ok(sawReload && total > 0, `P29.8 gatling: reload start publishes a positive remaining-total (${total})`);
+    ok(Math.abs(total - G.reload * pl.cdMul) < 1e-9,
+      `P29.8 gatling: remaining-total equals the spec reload × cdMul (${total} vs ${G.reload * pl.cdMul})`);
+    ok(mono, 'P29.8 gatling: remaining reload time strictly decreases each tick until refill');
+    ok(refilled, 'P29.8 gatling: remaining time reaches 0 and total clears exactly as the mag refills');
   }
 
   // Mirror Shield: reflect orbs (3/window), reflected orbs hit foes, never players.
@@ -2702,6 +2792,295 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   }
 }
 
+// --- 29.x (user playtest 2026-10-22): Boulder cd curve, Tank Cannon ×1.5 range, Skate glide ---
+{
+  const C = CFG.combat;
+  const mk = (x, y, o = {}) => ({ x, y, vx: 0, vy: 0, r: 13, hp: 300, maxHp: 300, flash: 0, dead: false, boss: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0, ...o });
+  const stub = (list) => ({ list, grid: { near: () => list, range: () => list } });
+  const world = { collidersNear: () => [] };
+  const mkPl = () => { const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(400, 400); return p; };
+
+  // 29.6 Boulder: initial cd 4.0 s, −0.3 s per level-up (L1=4.0 … L5=2.8). The fire-site
+  // arms the cooldown from the level-indexed row, so one firing player per level proves the
+  // level-up mechanic applies the subtraction (reset() already zeroes every weapon timer).
+  const bcd = CFG.weapons.boulder.levels.map((s) => s.cd);
+  ok(JSON.stringify(bcd) === JSON.stringify([4.0, 3.7, 3.4, 3.1, 2.8]),
+    `29.6 boulder: per-level cd curve 4.0 −0.3×level (${bcd.join(',')})`);
+  for (let lvl = 1; lvl <= 5; lvl++) {
+    const p = mkPl(); p.weapons.boulder = lvl;
+    const c = new Combat();
+    p.update(1 / 60, { x: 0, y: 0 }, c, stub([mk(600, 400)]), world);
+    ok(p._boulderCd === bcd[lvl - 1],
+      `29.6 boulder: L${lvl} first shot arms exactly ${bcd[lvl - 1]} s cooldown (${p._boulderCd})`);
+  }
+
+  // 29.12 Tank Cannon: dedicated range knob = 1.5× the old shared wandRange (560 → 840),
+  // used by BOTH target acquisition and shell flight; card text states the real behaviour.
+  ok(C.cannonRange === C.wandRange * 1.5, `29.12 cannon: cannonRange = 1.5× the old range (${C.cannonRange})`);
+  ok(CFG.weapons.cannon.desc === 'Fires a heavy shell that punches through one foe, then detonates on the next.',
+    '29.12 cannon: card description = punch-through + terminal detonation (user wording 2026-10-22)');
+  const cA = new Combat(); const plA = mkPl(); plA.weapons.cannon = 1;
+  plA.update(1 / 60, { x: 0, y: 0 }, cA, stub([mk(1100, 400)]), world); // ~700 px away
+  ok(cA.shells.length === 1, '29.12 cannon: a foe ~700 px away (beyond the old 560) is acquired and fired at');
+  const cB = new Combat(); const plB = mkPl(); plB.weapons.cannon = 1;
+  plB.update(1 / 60, { x: 0, y: 0 }, cB, stub([mk(1300, 400)]), world); // ~900 px away
+  ok(cB.shells.length === 0, '29.12 cannon: a foe ~900 px away (beyond 840) is not fired at');
+  const cS = new Combat();
+  cS.fireShell(400, 400, 0, 10, 70);
+  ok(Math.abs(cS.shells[0].life - (C.cannonRange / C.shellSpeed + 0.1)) < 1e-12,
+    `29.12 cannon: shell life = cannonRange / shellSpeed (${cS.shells[0].life.toFixed(3)} s)`);
+  let ticks = 0;
+  for (; ticks < 600 && cS.shells.length; ticks++) cS.update(1 / 60, [], stub([]));
+  const travel = (ticks * C.shellSpeed) / 60;
+  ok(travel > 840 && travel <= 900,
+    `29.12 cannon: empty-field shell flies the extended range (${travel.toFixed(0)} px, far past the old ~606 px)`);
+
+  // 29.13 Ice Skates: glideK cut at every level — after input stops the glide lasts
+  // much longer (1 s at 400 px/s: bare player stops dead, L1 skates still slide ≈24 px/s;
+  // the old L1 glideK 0.35 would already have stopped too).
+  const gk = CFG.passives.skates.levels.map((s) => s.glideK);
+  ok(JSON.stringify(gk) === JSON.stringify([0.2, 0.17, 0.14, 0.11, 0.08]),
+    `29.13 skates: glideK cut at every level (${gk.join(',')})`);
+  const mkSk = (sk) => { const p = mkPl(); p.passives = sk ? { skates: 1 } : {}; p.vx = 400; p.vy = 0; return p; };
+  const cG = new Combat(); const pSk = mkSk(true), pBare = mkSk(false);
+  for (let i = 0; i < 60; i++) {
+    pSk.update(1 / 60, { x: 0, y: 0 }, cG, stub([]), world);
+    pBare.update(1 / 60, { x: 0, y: 0 }, cG, stub([]), world);
+  }
+  ok(pSk.vx > 15 && pBare.vx < 1,
+    `29.13 skates: still sliding fast 1.0 s after input release (skates ${pSk.vx.toFixed(1)} px/s vs bare ${pBare.vx.toFixed(3)})`);
+}
+
+// --- 29.7 (D99): Continuous Laser orbit rework — continuous rotation while active
+// AND inactive; per-level rot↑/cd↓; equidistant beams at L3 (180°) and L5 (120°). ---
+{
+  const mk = (x, y, o = {}) => ({ x, y, vx: 0, vy: 0, r: 13, hp: 300, maxHp: 300, flash: 0, dead: false, boss: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0, ...o });
+  const stub = (list) => ({ list, grid: { near: () => list, range: () => list } });
+  const world = { collidersNear: () => [] };
+  const mkPl = () => { const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(400, 400); return p; };
+  const LL = CFG.weapons.laser.levels;
+
+  // Config shape (D99): every level-up raises orbit speed AND shortens downtime;
+  // beam count grows 1→2 at L3 (opposite) and →3 at L5 (equidistant).
+  ok(LL.every((s) => s.rot > 0 && s.count >= 1), '29.7 laser: every level row carries rot + count');
+  let mono = true;
+  for (let i = 1; i < LL.length; i++) if (!(LL[i].rot > LL[i - 1].rot && LL[i].cd < LL[i - 1].cd)) mono = false;
+  ok(mono, `29.7 laser: rot↑ AND cd↓ at every level-up (${LL.map((s) => `${s.rot}/${s.cd}`).join(' ')})`);
+  ok(JSON.stringify(LL.map((s) => s.count)) === '[1,1,2,2,3]', '29.7 laser: beam count 1/1/2/2/3 (2nd at L3, 3rd at L5)');
+
+  // INVARIANT (explicit, per task): the orbit advances EVERY tick even while the
+  // beam is INACTIVE — a parked probe with no reachable foe never fires, yet the
+  // angle moves continuously through all 120 idle ticks.
+  const p = mkPl(); p.weapons.laser = 1;
+  const c = new Combat();
+  let aPrev = p._laserAng, advancedAll = true;
+  for (let i = 0; i < 120; i++) {
+    p.update(1 / 60, { x: 0, y: 0 }, c, stub([mk(4000, 4000)]), world); // never in range
+    if (!(p._laserAng > aPrev)) advancedAll = false;
+    aPrev = p._laserAng;
+  }
+  ok(advancedAll && c.beams.length === 0 && p._laserAng >= LL[0].rot * 1.99,
+    `29.7 laser: orbit runs while inactive (${p._laserAng.toFixed(3)} rad advanced over 2 s idle, zero beams)`);
+
+  // Reactivation happens at the REACHED angle, not a reset/aim angle.
+  p.update(1 / 60, { x: 0, y: 0 }, c, stub([mk(500, p._spawnY())]), world);
+  ok(c.beams.length === 1 && Math.abs(c.beams[0].off - p._laserAng) < 1e-12,
+    `29.7 laser: first volley fires at the angle the orbit reached (${c.beams[0].off.toFixed(3)} rad)`);
+  const a1 = c.beams[0].off;
+
+  // Full cycle: the angle keeps advancing through the active window AND the whole
+  // downtime; the next volley's angle = a1 + rot × elapsed ticks (no pause, no reset).
+  let a2 = null, t = 0;
+  while (a2 === null && t < 900) {
+    p.update(1 / 60, { x: 0, y: 0 }, c, stub([mk(500, p._spawnY())]), world);
+    c.update(1 / 60, [p], stub([mk(500, p._spawnY())]));
+    t++;
+    if (c.beams.length && Math.abs(normAngle(c.beams[0].off - a1)) > 1e-9) a2 = c.beams[0].off;
+  }
+  ok(a2 !== null && Math.abs(normAngle(a2 - a1) - normAngle((LL[0].rot * t) / 60)) < 1e-6,
+    `29.7 laser: orbit never stopped across dur+cd — 2nd volley at reached angle (Δ=${a2 === null ? 'no refire' : normAngle(a2 - a1).toFixed(3)} rad over ${t} ticks)`);
+
+  // Beam geometry per level: L3 exactly opposite (180°), L5 three at 120° — one
+  // shared cycle (same dur), every beam searing along its own ray.
+  for (const lvl of [3, 5]) {
+    const p3 = mkPl(); p3.weapons.laser = lvl;
+    const c3 = new Combat();
+    const S = LL[lvl - 1];
+    p3.update(1 / 60, { x: 0, y: 0 }, c3, stub([mk(p3.x + 150, p3._spawnY())]), world);
+    const offs = c3.beams.map((b) => b.off);
+    ok(offs.length === S.count, `29.7 laser L${lvl}: ${S.count} beams emitted by ONE cycle`);
+    const rel = offs.map((o) => normAngle(o - offs[0])).sort((a, b) => a - b);
+    const want = Array.from({ length: S.count }, (_, i) => normAngle((i * TAU) / S.count)).sort((a, b) => a - b);
+    ok(rel.every((v, i) => Math.abs(v - want[i]) < 1e-9), `29.7 laser L${lvl}: beams equidistant (${S.count === 2 ? 'exactly opposite, 180°' : '120° apart'})`);
+    ok(c3.beams.every((b) => b.dur === S.dur && b.len === S.len), `29.7 laser L${lvl}: identical active timings/geometry on every beam`);
+    const foes = offs.map((o) => mk(p3.x + Math.cos(o) * 150, p3._spawnY() + Math.sin(o) * 150));
+    for (let i = 0; i < 30; i++) { c3.update(1 / 60, [p3], stub(foes)); }
+    ok(foes.every((f) => f.hp < 300), `29.7 laser L${lvl}: every beam damages along its own ray`);
+  }
+}
+
+// --- 29.9 Wolfpack: rename (config key / name / card copy / code ids — grep-proven)
+// + pack level rules: L2 stat-up, L3 2nd wolf no stat-up, L4 stat-up ALL wolves,
+// L5 3rd wolf no stat-up. Targeting keeps the existing pounce pick (NOT the grid). ---
+{
+  const stub = (list) => ({ list, grid: { near: () => list, range: () => list } });
+  const mkPl = () => { const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(400, 400); return p; };
+  const WK = CFG.weapons.wolfpack;
+  ok(!!WK && CFG.weapons.wolf === undefined, '29.9: weapon key renamed wolf → wolfpack');
+  ok(WK.name === 'Wolfpack', '29.9: display name = Wolfpack');
+
+  // Zero user-visible "Wolf" strings remain (only "Wolfpack"/"Werewolf" may contain it).
+  const visible = [...Object.values(CFG.weapons), ...Object.values(CFG.synergies),
+    ...Object.values(CFG.passives), ...Object.values(CFG.characters)]
+    .flatMap((d) => [d.name || '', d.desc || '']);
+  ok(visible.every((s) => !s.replace(/Wolfpack/g, '').replace(/Werewolf/g, '').includes('Wolf')),
+    '29.9 grep-proof: no user-visible "Wolf" string left in config copy');
+  const csrc = readFileSync(new URL('../js/entities/combat.js', import.meta.url), 'utf8');
+  const psrc = readFileSync(new URL('../js/entities/player.js', import.meta.url), 'utf8');
+  ok(!/weapons\.wolf\b/.test(csrc) && !/weapons\.wolf\b/.test(psrc) && !/W\.wolf\b/.test(psrc),
+    '29.9: code ids renamed (no weapons.wolf references in combat/player)');
+
+  // Level rules (config side): L3/L5 rows are pure spawn levels.
+  const LV = WK.levels;
+  ok(JSON.stringify(LV.map((s) => s.count)) === '[1,1,2,2,3]', '29.9 wolfpack: count table 1/1/2/2/3');
+  ok(LV[1].dmg > LV[0].dmg && LV[3].dmg > LV[2].dmg, '29.9 wolfpack: stat-up at L2 and L4');
+  ok(LV[2].dmg === LV[1].dmg && LV[2].bleed === LV[1].bleed && LV[2].bleedDur === LV[1].bleedDur,
+    '29.9 wolfpack: L3 NO stat-up (dmg/bleed rows identical to L2)');
+  ok(LV[4].dmg === LV[3].dmg && LV[4].bleed === LV[3].bleed && LV[4].bleedDur === LV[3].bleedDur,
+    '29.9 wolfpack: L5 NO stat-up (dmg/bleed rows identical to L4)');
+
+  // Sim side — wolf count per level (fresh owner at each level):
+  for (const [lvl, want] of [[1, 1], [2, 1], [3, 2], [4, 2], [5, 3]]) {
+    const p = mkPl(); p.weapons.wolfpack = lvl;
+    const c = new Combat();
+    c.update(1 / 60, [p], stub([]));
+    const ws = p._wolves || [];
+    ok(ws.length === want, `29.9 wolfpack L${lvl}: exactly ${want} live wolves`);
+    ok(!!p._companion && p._companion === ws[0], `29.9 wolfpack L${lvl}: _companion stays the leader ref (4-slot co-op tail unchanged)`);
+  }
+  // Mid-run level-up grows the EXISTING pack (no replacement, no stat snapshots).
+  const pg = mkPl(); pg.weapons.wolfpack = 2;
+  const cg = new Combat();
+  cg.update(1 / 60, [pg], stub([]));
+  const leader0 = pg._wolves[0];
+  pg.weapons.wolfpack = 5;
+  cg.update(1 / 60, [pg], stub([]));
+  ok(pg._wolves.length === 3 && pg._wolves[0] === leader0, '29.9 wolfpack: L2→L5 mid-run spawns wolves 2+3 alongside the original');
+
+  // L4 stat-up applies to ALL wolves: start at L3 (2 wolves), upgrade mid-fight —
+  // after the upgrade BOTH wolves must land L4-value bites (60 dmg each), never
+  // their old L3 value (38). Wolves trail at formation slots, so bites are counted
+  // per event (single-tick instant-damage drops; bleed DoT ≈0.2/tick never counts).
+  const p4 = mkPl(); p4.weapons.wolfpack = 3; // dmgMul stays 1 (reset default) — exact bite math
+  const c4 = new Combat();
+  const prey = { x: 500, y: 400, vx: 0, vy: 0, r: 13, hp: 1e6, maxHp: 1e6, flash: 0, dead: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0 };
+  let t = 0, l3Bites = 0, l4Bites = 0, last = prey.hp, upgraded = false;
+  while (t < 900 && !(l3Bites >= 2 && l4Bites >= 2)) {
+    t++;
+    c4.update(1 / 60, [p4], stub([prey]));
+    const drop = last - prey.hp; last = prey.hp;
+    if (t === 120) { p4.weapons.wolfpack = 4; upgraded = true; }
+    if (drop >= 30) { if (drop < 59.5) l3Bites++; else if (upgraded) l4Bites++; }
+  }
+  ok(l3Bites >= 2 && l4Bites >= 2,
+    `29.9 wolfpack: every wolf bites at CURRENT stats — L3 bites (38) before upgrade, L4 bites (60) after both land (t=${t} l3=${l3Bites} l4=${l4Bites})`);
+
+  // User directive: targeting stays the existing pick — the pack sim must NOT use the spatial grid.
+  const wfn = csrc.match(/_wolfpack\(dt, p, enemies\) \{[\s\S]*?\n  \}/);
+  ok(!!wfn && /_nearestTo\(p, enemies, C\.companionLeash\)/.test(wfn[0]) && !/\.grid\./.test(wfn[0]),
+    '29.9 wolfpack: target-pick unchanged (_nearestTo scan, not the spatial grid)');
+
+  // Card copy: spawn-only levels state the wolf count, nothing else.
+  ok(cardEffectText('weapon', 'wolfpack', 3).includes('wolves 1→2') && !cardEffectText('weapon', 'wolfpack', 3).includes('dmg'),
+    `29.9 wolfpack: L3 card states 2nd wolf with no stat-up (${cardEffectText('weapon', 'wolfpack', 3)})`);
+  ok(!cardEffectText('synergy', 'staticPelt', 1).includes('Wolf'),
+    `29.9: synergy card copy carries no "Wolf" string (${cardEffectText('synergy', 'staticPelt', 1)})`);
+}
+
+// --- 29.14 Coffee: new passive — cooldowns of ALL equipped weapons reduced by one
+// additive per-level multiplier (cdMul), registered through the existing pool/lock ---
+{
+  const mk = (x, y, o = {}) => ({ x, y, vx: 0, vy: 0, r: 13, hp: 300, maxHp: 300, flash: 0, dead: false, boss: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0, ...o });
+  const stub = (list) => ({ list, grid: { near: () => list, range: () => list } });
+  const world = { collidersNear: () => [] };
+  const nearF = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
+
+  // D91 registration: offered from the pool like every passive; locked out when
+  // another player owns it (first picker owns).
+  let seen = 0, locked = 0;
+  for (let s = 0; s < 24; s++) {
+    if (cardOffers({}, {}, {}, mulberry32(s), 99).some((cd) => cd.kind === 'passive' && cd.key === 'coffee')) seen++;
+    if (cardOffers({}, {}, {}, mulberry32(s), 99, new Set(['coffee'])).some((cd) => cd.key === 'coffee')) locked++;
+  }
+  ok(seen > 0, '29.14 Coffee: surfaces in the level-up pool (control — the assert can fire)');
+  ok(locked === 0, '29.14 D91: Coffee owned by another player is never offered (24 seeds)');
+  ok(CFG.passives.coffee.max === 5, '29.14 Coffee: 5 levels, capped by the existing pool machinery');
+
+  // Exact multiplier: additive like speed/dmg (no clamping surprises at max).
+  const pl = new Player({ h: 64 }); pl.reset(0, 0);
+  for (let i = 0; i < 3; i++) applyCard(pl, { kind: 'passive', key: 'coffee', level: i + 1 });
+  ok(pl.passives.coffee === 3 && nearF(pl.cdMul, 1 - CFG.passives.coffee.val * 3),
+    `29.14 Coffee: cdMul = 1 − val×levels exactly (got ${pl.cdMul})`);
+  for (let i = 0; i < 9; i++) applyCard(pl, { kind: 'passive', key: 'coffee', level: 1 });
+  ok(pl.passives.coffee === 5 && nearF(pl.cdMul, 1 - CFG.passives.coffee.val * 5),
+    '29.14 Coffee: pool caps at 5 → cdMul floors at 0.40 (−60% cooldowns)');
+  ok(cardEffectText('passive', 'coffee', 3) === '−12% weapon cooldowns → total −36%',
+    `29.14 Coffee: card states the additive per-level cut + total (${cardEffectText('passive', 'coffee', 3)})`);
+
+  // Cooldown reduction across MULTIPLE weapon types: each arms its downtime × cdMul
+  // exactly on the fire tick (probe style per the 29.6 established pattern).
+  const COFFEE = 3;
+  const cdProbe = (key, field, expected) => {
+    const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(400, 400);
+    p.weapons[key] = 1; p.passives = { coffee: COFFEE }; recomputeStats(p);
+    const foe = mk(500, p._spawnY());
+    p.update(1 / 60, { x: 0, y: 0 }, new Combat(), stub([foe]), world);
+    ok(nearF(p[field], expected, 1e-9), `29.14 Coffee: ${key} arms its cooldown × cdMul (${p[field]} vs expected ${expected})`);
+  };
+  const k = 1 - CFG.passives.coffee.val * COFFEE;
+  cdProbe('wand', '_wandCd', CFG.weapons.wand.levels[0].rate * k);
+  cdProbe('axe', '_axeCd', CFG.weapons.axe.levels[0].cd * k);
+  cdProbe('ringLightning', '_ringCd', CFG.combat.ringCd * k);
+  cdProbe('gatling', '_gatCd', CFG.weapons.gatling.levels[0].cd * k);
+  cdProbe('boulder', '_boulderCd', CFG.weapons.boulder.levels[0].cd * k);
+  cdProbe('ball', '_ballCd', CFG.weapons.ball.cd * k);
+
+  // Laser downtime (29.7 interaction): armed when the active window ends, also × cdMul.
+  {
+    const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(400, 400);
+    p.weapons.laser = 1; p.passives = { coffee: COFFEE }; recomputeStats(p);
+    const foe = mk(500, p._spawnY());
+    const c = new Combat();
+    p.update(1 / 60, { x: 0, y: 0 }, c, stub([foe]), world); // fires
+    let t = 0;
+    while (p._laserT > 0 && t < 200) { p.update(1 / 60, { x: 0, y: 0 }, c, stub([foe]), world); t++; }
+    ok(nearF(p._laserCd, CFG.weapons.laser.levels[0].cd * k, 1e-9),
+      `29.14 Coffee: laser downtime armed × cdMul (${p._laserCd} vs ${CFG.weapons.laser.levels[0].cd * k})`);
+  }
+
+  // Functional proof: more shots in the same window with Coffee maxed.
+  const countShots = (coffee) => {
+    const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(400, 400);
+    p.weapons.wand = 1;
+    if (coffee) { p.passives = { coffee: 5 }; recomputeStats(p); }
+    const c = new Combat();
+    const foe = mk(500, p._spawnY(), { hp: 1e6, maxHp: 1e6 });
+    let fired = 0;
+    for (let i = 0; i < 600; i++) {
+      const before = c.bolts.length;
+      p.update(1 / 60, { x: 0, y: 0 }, c, stub([foe]), world);
+      if (c.bolts.length > before) fired++;
+    }
+    return fired;
+  };
+  const bare = countShots(0), caffeinated = countShots(5);
+  ok(caffeinated > bare + 5, `29.14 Coffee: real fire-rate gain across a window (${caffeinated} shots vs bare ${bare} in 10 s)`);
+}
+
 // D91 (user law 2026-10-20): ZERO shared/duplicate items in co-op — weapons, synergies AND passives.
 {
   const excl = new Set(['dmg', 'speed', 'blades']);
@@ -2714,6 +3093,106 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   }
   ok(hitsExcl === 0, 'D91: other-owned passive/weapon keys never appear in offers (48 seeds)');
   ok(hitsCtrl > 0, 'D91: control — the unowned passive DOES appear when not excluded (assert can fire)');
+}
+
+// --- 29.1 early-run lag: star-band crop + Loop frame counter + ?fps gate ---
+{
+  // Star-band crop (world.js): band height must cover the whole star field
+  // (top 90% of the horizon + star radius) yet stay well under the viewport.
+  // Pre-fix, four full-viewport alpha blits cost 8.3 of 20.1 Mpx/frame at
+  // 1080p (real-browser profile, docs/lag-research-2026-10-22.md).
+  const { starBandH } = await import('../js/world/world.js');
+  for (const vh of [569, 874, 1080, 2160]) {
+    const horizon = vh * 0.3 + 8; // world.js horizon incl. max camera-drift term
+    const h = starBandH(horizon, 3);
+    ok(h >= horizon * 0.9 + 3 && h < vh * 0.5,
+      `29.1: star band covers the full star field at vh=${vh} (${h}px, < half viewport)`);
+  }
+  const wsrc1 = readFileSync(new URL('../js/world/world.js', import.meta.url), 'utf8');
+  ok(/makeCanvas\(vw, bandH\)/.test(wsrc1) && /sky\._bandH = bandH/.test(wsrc1),
+    '29.1: band bake + rebake key use the cropped height (no full-screen star blits)');
+  ok(/ctx\.drawImage\(band, 0, 0\)/.test(wsrc1),
+    '29.1: band blit keeps implicit size, so the crop also cuts the drawn fill area');
+
+  // Loop.frames counts rAF ticks — the ?fps=1 readout's only data source.
+  const fq = [];
+  globalThis.requestAnimationFrame = (cb) => { fq.push(cb); return fq.length; };
+  globalThis.cancelAnimationFrame = () => { fq.length = 0; };
+  const { Loop: Loop291 } = await import('../js/core/loop.js');
+  const fl = new Loop291({ update: () => {}, render: () => {} });
+  fl.start();
+  const ft = performance.now();
+  for (let i = 1; i <= 4; i++) fq.shift()(ft + i * (1000 / 60));
+  ok(fl.frames === 4, `29.1: Loop.frames increments once per rAF tick (${fl.frames}/4)`);
+  fl.hitStop(0.2); // what the user perceives is displayed frames, not sim steps → hit-stop frames count too
+  fq.shift()(ft + 5 * (1000 / 60));
+  ok(fl.frames === 5, '29.1: hit-stop frames still counted (readout = displayed frame rate)');
+  fl.stop();
+
+  const msrc1 = readFileSync(new URL('../js/main.js', import.meta.url), 'utf8');
+  ok(/URLSearchParams\(location\.search\)\.get\('fps'\) === '1'/.test(msrc1) && /loop\.frames/.test(msrc1),
+    '29.1: ?fps=1 readout is URL-gated and reads Loop.frames (render pipeline untouched)');
+}
+
+// --- Phase 29 art half (29.9/29.10/29.11/29.12/29.14): visual wiring, no mechanics ---
+{
+  const isrc = readFileSync(new URL('../js/art/items.js', import.meta.url), 'utf8');
+  const chsrc = readFileSync(new URL('../js/art/characters.js', import.meta.url), 'utf8');
+  const csrc = readFileSync(new URL('../js/entities/combat.js', import.meta.url), 'utf8');
+  const mk = (x, y, o = {}) => ({ x, y, vx: 0, vy: 0, r: 13, hp: 300, maxHp: 300, flash: 0, dead: false, boss: false, slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0, ...o });
+  const stub = (list, extra = {}) => ({ list, grid: { near: () => list, range: () => list }, ...extra });
+
+  // 29.14 Coffee icon: a dedicated mug slot shipped and config points at it.
+  // (The 12.2 icon-registration invariant above now covers CFG.passives.coffee.icon
+  // automatically — this pins the switch itself + the mug's passive-plate category.)
+  ok(CFG.passives.coffee.icon === 'coffee', '29.14: Coffee points at the new mug icon (not the borrowed sigil)');
+  ok(/icons\.coffee = make\('passive'/.test(isrc), '29.14: icons.coffee registered on the passive plate');
+
+  // 29.10: the reflect event spawns a mirror-burst; the reflect MATH is unchanged.
+  const c = new Combat();
+  const pl = new Player({ h: 64 }); pl.reset(300, 300); pl.passives.shield = 1;
+  const o0 = { x: 330, y: 270, vx: -60, vy: 0, r: 6, dmg: 12, life: 4 };
+  c.update(1 / 60, [pl], stub([], { orbs: [o0] }));
+  ok(o0.reflected === true && o0.vx === 60 && pl._shieldBank.n === 2,
+    '29.10: reflect math unchanged (orb reverses outward, charge spent 3 → 2)');
+  ok(c.reflectFx.length === 1 && c.reflectFx[0].x === o0.x && c.reflectFx[0].y === o0.y,
+    '29.10: reflect event spawns a mirror-burst flash at the reflect point');
+  for (let i = 0; i < 30; i++) c.update(1 / 60, [pl], stub([], { orbs: [] }));
+  ok(c.reflectFx.length === 0, '29.10: reflect flash self-expires (purely cosmetic lifecycle)');
+  // ACTIVE-state indicator hooks in combat.draw: ring at the true reflect radius, pips from the bank.
+  ok(/passives && pl\.passives\.shield[\s\S]{0,700}?arc\(pl\.x, oy, row\.r, 0, TAU\)/.test(csrc),
+    '29.10: combat.draw paints the ACTIVE mirror ring at the shield radius (torso-centered like _shieldStep)');
+  ok(/i < C\.shieldCharges[\s\S]{0,300}?i < bank\.n/.test(csrc),
+    '29.10: banked-charge pips draw from the live bank (active-state read)');
+
+  // 29.12: terminal blast tagged for its distinct sprite/rhythm; base 23.2 line intact.
+  const c2 = new Combat();
+  const owner = { x: 0, y: 0, dmgMul: 1, dead: false };
+  const e1 = mk(100, 100), e2 = mk(120, 100);
+  c2.fireShell(0, 100, 0, 100, 70, null, owner);
+  for (let i = 0; i < 120 && c2.shells.length; i++) c2.update(1 / 60, [], stub([e1, e2]));
+  ok(c2.explosions.some((x) => x.tank === true), '29.12: shell terminal blast tagged for its own sprite + rhythm');
+  ok(/const s = x\.r \* 2 \* \(1 \+ 0\.25 \* k\);/.test(csrc),
+    '29.12: the 23.2 base blast-scale line is intact for non-tank explosions');
+  ok(/export function tankBlastSprite\(\)/.test(isrc) && /this\._fx\.tank/.test(csrc),
+    '29.12: hard-edged shock star baked in art + drawn for tank-tagged blasts only');
+  ok(/function shellSprite\(\)[\s\S]{0,600}makeCanvas\(36, 14\)/.test(isrc) && /const tr = g\.createLinearGradient\(1, 7, 20, 7\)/.test(isrc),
+    '29.12: shell sprite reworked — larger body + baked fading tracer tail');
+
+  // 29.9: the pack draws its OWN sheet, coats keyed by wolf index, never the enemy skin.
+  ok(/export function buildPackWolves\(\)/.test(chsrc), '29.9: pack-wolf sheet builder exported from art');
+  ok(((chsrc.match(/export const PACK_PALS = \[[\s\S]*?\];/) || [''])[0].match(/\{ body: '#/g) || []).length === 3,
+    '29.9: three distinct per-wolf coats (light brown / dark grey / dark brown)');
+  ok(/this\._fx\.wolves[\s\S]{0,400}?frames\[Math\.min\(wi, sh\.frames\.length - 1\)\]/.test(csrc),
+    '29.9: companion draw keyed by wolf index (1st/2nd/3rd colors)');
+  ok(!/enemies\.defs\.wolf/.test(csrc),
+    '29.9: pack no longer reuses the enemy wolf sheet (host AND client draw the pack art)');
+  ok(/icons\.wolf = make\('weapon'/.test(isrc) && /icons\.axe = make\('weapon'/.test(isrc),
+    '29.9/29.11: reworked Wolfpack (three-pack) and Spectral Axe card icons registered');
+
+  // 29.10: the reflect flash art is pre-rendered — draw only ever blits it.
+  ok(/export function reflectFlashSprite\(\)/.test(isrc) && /this\._fx\.flash/.test(csrc),
+    '29.10: baked mirror-burst sprite drawn at reflect points');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

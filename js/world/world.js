@@ -31,6 +31,17 @@ function getEmptyImg() {
 
 const CELL = 256;
 
+// 29.1 (perf): star bands are baked full-viewport today — four vw×vh alpha blits
+// per frame for dots that only ever live above the horizon. Real-browser profile
+// (docs/lag-research-2026-10-22.md): bands = 8.3 of 20.1 Mpx/frame at 1080p,
+// ~90% of drawBackground's raster cost, constant from t=0 (matches the user's
+// "heavy even early, equipment-independent" report). Stars are placed at
+// s.y * horizon * 0.9 with s.y < 1, so cropping the band to horizon*0.9 + the
+// largest star radius is pixel-identical while removing ~4/5 of the blit area.
+export function starBandH(horizon, maxR) {
+  return Math.max(1, Math.ceil(horizon * 0.9 + maxR));
+}
+
 export class World {
   constructor() {
     this.data = null;
@@ -100,11 +111,14 @@ export class World {
     // one fillRect + alpha set per star per frame.
     const SKY = CFG.world.starBands;
     if (sky.stars.length) { // m03 has no stars — skip the bands entirely
-      if (!sky._bands || sky._bandW !== vw || sky._bandH !== vh || Math.abs(sky._bandHz - horizon) > 1) {
-        sky._bandW = vw; sky._bandH = vh; sky._bandHz = horizon;
+      let maxR = 0;
+      for (const s of sky.stars) if (s.r > maxR) maxR = s.r;
+      const bandH = starBandH(horizon, maxR);
+      if (!sky._bands || sky._bandW !== vw || sky._bandH !== bandH || Math.abs(sky._bandHz - horizon) > 1) {
+        sky._bandW = vw; sky._bandH = bandH; sky._bandHz = horizon;
         sky._bands = [];
         for (let b = 0; b < SKY; b++) {
-          const c = makeCanvas(vw, vh);
+          const c = makeCanvas(vw, bandH);
           const g = c.getContext('2d');
           g.fillStyle = sky.star;
           for (let i = 0; i < sky.stars.length; i++) {

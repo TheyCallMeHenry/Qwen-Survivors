@@ -42,6 +42,27 @@ export function scoreKeyFor(levelKey) {
   return levelKey === LEVEL_ORDER[0] ? CFG.scores.storageKey : `qsurv.hiscores.${levelKey}.v1`;
 }
 
+// --- level-up card display (29.3, Node-tested) ---
+
+// True when a level-up offer is a card the player does not already own (a "NEW" card):
+// any un-owned weapon/passive, or any synergy. Single source of truth for both the card's
+// `.new` class + badge and its level-display suppression (task 29.3).
+export function isNewOffer(c, player) {
+  if (c.kind === 'synergy') return true;
+  if (c.kind === 'weapon') return !player.weapons[c.key];
+  return !player.passives[c.key];
+}
+
+// Title text + level-pip count for a single card. Un-owned offers (and every synergy)
+// present as NEW: name only, zero pips. Owned weapons/passives keep their "· Lv …" label
+// and pips (task 29.3: no stray "Lodestone · Lv 1/3" on a card the player never picked).
+export function cardTitleFor(kind, def, level, owned) {
+  const name = def.name;
+  if (kind === 'synergy' || !owned) return { title: name, pips: 0 };
+  if (kind === 'weapon') return { title: `${name} · Lv ${level}`, pips: def.max || 5 };
+  return { title: `${name} · Lv ${level}/${def.max}`, pips: def.max };
+}
+
 // --- browser ---
 
 export function initScreens(game, { icons }) {
@@ -375,7 +396,8 @@ export function initScreens(game, { icons }) {
       const def = c.kind === 'weapon' ? CFG.weapons[c.key]
         : c.kind === 'synergy' ? CFG.synergies[c.key]
         : CFG.passives[c.key];
-      const isNew = c.kind === 'synergy' || (c.kind === 'weapon' && !game.player.weapons[c.key]);
+      const isNew = isNewOffer(c, game.player);
+      const owned = !isNew;
       // 26.2: kind accent class drives the whole card color language (border/glow/plaque/pips)
       const card = document.createElement('div');
       card.className = `card ${c.kind}${isNew ? ' new' : ''}`;
@@ -392,21 +414,11 @@ export function initScreens(game, { icons }) {
       cv.width = 72; cv.height = 72;
       cv.getContext('2d').drawImage(icons[def.icon], 0, 0);
       plaque.append(cv);
-      // title row: name + level pips (weapons have no cap → pip shows the current level)
+      // Title row: owned upgrades show "· Lv …" + pips; un-owned offers present as NEW
+      // (name only, no level label, no pips) — cardTitleFor is the single source (29.3).
       const h = document.createElement('h3');
-      h.textContent = c.kind === 'synergy' ? def.name
-        : c.kind === 'weapon' ? `${def.name} · Lv ${c.level}`
-        : `${def.name} · Lv ${c.level}/${def.max}`;
-      const pips = document.createElement('div');
-      pips.className = 'card-pips';
-      if (c.kind !== 'synergy') {
-        const cap = def.max || 5;
-        for (let i2 = 0; i2 < cap; i2++) {
-          const dot = document.createElement('span');
-          dot.className = i2 < c.level ? 'pip on' : 'pip';
-          pips.append(dot);
-        }
-      }
+      const { title, pips: pipCount } = cardTitleFor(c.kind, def, c.level, owned);
+      h.textContent = title;
       // exact effect of selecting this card is MANDATORY (user rule); flavour desc stays only as secondary
       const pe = document.createElement('p');
       pe.className = 'card-effect';
@@ -417,7 +429,20 @@ export function initScreens(game, { icons }) {
       const k = document.createElement('span');
       k.className = 'card-key';
       k.textContent = String(i + 1);
-      card.append(badge, plaque, h, pips, pe, p, k);
+      // Pips sit between the title and the effect line, and only for owned upgrades.
+      const parts = [badge, plaque, h];
+      if (pipCount > 0) {
+        const pips = document.createElement('div');
+        pips.className = 'card-pips';
+        for (let i2 = 0; i2 < pipCount; i2++) {
+          const dot = document.createElement('span');
+          dot.className = i2 < c.level ? 'pip on' : 'pip';
+          pips.append(dot);
+        }
+        parts.push(pips);
+      }
+      parts.push(pe, p, k);
+      card.append(...parts);
       const pick = () => (banishMode ? game.levelupBanish(i) : game.pickCard(i));
       card.addEventListener('click', pick);
       card.addEventListener('keydown', (e) => {

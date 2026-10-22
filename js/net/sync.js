@@ -4,11 +4,11 @@
 // only sim outputs (D53). Keys follow CFG order (stable across clients).
 import { CFG } from '../config.js';
 
-export const SNAP_V = 7; // v7 (P21/D96): roster expansion re-layout (19 weapons + 7 passives + 15 synergies) + a 4-slot companion tail per player (wolf sim rides the wire — companions never cross any other way); actLeft counts unchanged (D53 holds — counts are sim state, meta levels never sync)
+export const SNAP_V = 8; // v8 (29.14): Coffee passive joins the pool → passive-key re-layout (19 weapons + 8 passives + 15 synergies, 58 slots); bump follows the D96/18.3 precedent that any key-count change re-vints the wire. v7 (P21/D96) added the 4-slot companion tail per player (wolf sim rides the wire — companions never cross any other way); actLeft counts unchanged (D53 holds — counts are sim state, meta levels never sync)
 
-export const WEAPON_KEYS = Object.keys(CFG.weapons);    // 10
-export const PASSIVE_KEYS = Object.keys(CFG.passives);  // 5
-export const SYNERGY_KEYS = Object.keys(CFG.synergies); // 10
+export const WEAPON_KEYS = Object.keys(CFG.weapons);    // 19
+export const PASSIVE_KEYS = Object.keys(CFG.passives);  // 8
+export const SYNERGY_KEYS = Object.keys(CFG.synergies); // 15
 export const ENEMY_KEYS = Object.keys(CFG.enemies);     // 9
 
 export const E_FLAG_FLASH = 1, E_FLAG_BURN = 2, E_FLAG_BLIGHT = 4, E_FLAG_BOSS = 8, E_FLAG_FLIP = 16;

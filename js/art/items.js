@@ -324,22 +324,106 @@ function explosionSprite() {
 // Phase 21 (D96) projectile sprites — shell (rotates, faces +x), boulder
 // (rotates, centered), web knot (no rotation).
 function shellSprite() {
-  const c = makeCanvas(20, 12);
+  // 29.12 (visual half): the Tank Cannon shell must READ in flight — the old 20×12
+  // dark-grey dash vanished against any tile, leaving the blast as the only cue.
+  // Now: bigger steel body with a hot nose, copper band, tail fins, and a baked
+  // fading tracer tail (same language as the bolt/bullet/arrow trails — the eye
+  // follows the shell all the way to its 840 px terminal detonation).
+  const c = makeCanvas(36, 14);
   const g = c.getContext('2d');
-  const st = g.createLinearGradient(0, 0, 20, 0);
-  st.addColorStop(0, '#232a33'); st.addColorStop(0.6, '#59646f'); st.addColorStop(1, '#39424b');
+  // tracer tail: transparent at the back, amber heat where the body starts
+  const tr = g.createLinearGradient(1, 7, 20, 7);
+  tr.addColorStop(0, 'rgba(255,170,70,0)');
+  tr.addColorStop(0.55, 'rgba(255,170,70,0.3)');
+  tr.addColorStop(1, 'rgba(255,214,130,0.75)');
+  g.strokeStyle = tr; g.lineWidth = 5.5; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(2, 7); g.lineTo(19, 7); g.stroke();
+  // tail fins above/below the body's aft end
+  g.fillStyle = '#39424b';
+  poly(g, [[17, 4], [13, 0.5], [17, 6.5]]); g.fill();
+  poly(g, [[17, 10], [13, 13.5], [17, 7.5]]); g.fill();
+  // body: steel gradient, pointed nose toward +x (rotation anchor is the centre)
+  const st = g.createLinearGradient(0, 2, 0, 12);
+  st.addColorStop(0, '#b7c2cf'); st.addColorStop(0.45, '#788491'); st.addColorStop(1, '#333b45');
   g.fillStyle = st;
   g.beginPath();
-  g.moveTo(2, 4);
-  g.lineTo(10, 3);
-  g.quadraticCurveTo(19, 6, 10, 9);
-  g.lineTo(2, 8);
+  g.moveTo(16, 4);
+  g.lineTo(26, 3.6);
+  g.quadraticCurveTo(34.5, 7, 26, 10.4);
+  g.lineTo(16, 10);
   g.closePath();
   g.fill();
-  g.fillStyle = '#c8863f'; g.fillRect(5, 3, 3, 6); // copper driving band
-  g.fillStyle = '#39424b';
-  g.fillRect(0, 3, 3, 2); g.fillRect(0, 7, 3, 2); // tail fins
-  g.fillStyle = 'rgba(220,235,250,0.5)'; g.fillRect(10, 4, 5, 1.2); // specular
+  g.strokeStyle = 'rgba(10,14,20,0.85)'; g.lineWidth = 1.2; g.stroke();
+  // copper driving band
+  g.fillStyle = '#c8863f'; g.fillRect(19, 3.8, 3.6, 6.4);
+  g.fillStyle = '#8f5c26'; g.fillRect(19, 8.6, 3.6, 1.6);
+  // specular along the top deck + a white-hot nose
+  g.strokeStyle = 'rgba(235,244,255,0.7)'; g.lineWidth = 1.2; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(18, 4.6); g.quadraticCurveTo(26, 4.2, 30.5, 6); g.stroke();
+  g.fillStyle = 'rgba(255,240,200,0.95)';
+  g.beginPath(); g.arc(32.5, 7, 1.8, 0, TAU); g.fill();
+  return c;
+}
+
+// 29.12: Tank Cannon terminal blast — a HARD-EDGED eight-spike shock star over a
+// gunmetal smoke ring, vs the Sunder bomb's soft round fireball. Shape (spikes +
+// ring vs smooth orb) and palette (steel-white core over ember) differ; combat.draw
+// gives it a snap-out-then-slam timing rhythm. Build-time only; consumed by combat's
+// lazy fx cache (game.js does not wire it — the visual hookup lives in combat.js).
+export function tankBlastSprite() {
+  const c = makeCanvas(128, 128);
+  const g = c.getContext('2d');
+  // smoke ring: desaturated gunmetal (the tank identity — no bomb ever has this)
+  g.strokeStyle = 'rgba(146,158,174,0.42)'; g.lineWidth = 11;
+  g.beginPath(); g.arc(64, 64, 54, 0, TAU); g.stroke();
+  g.strokeStyle = 'rgba(58,68,82,0.4)'; g.lineWidth = 4;
+  g.beginPath(); g.arc(64, 64, 47, 0, TAU); g.stroke();
+  // shock star: 8 straight hard spikes, steel-white core → ember tips
+  const grad = g.createRadialGradient(64, 64, 4, 64, 64, 58);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.3, 'rgba(226,238,252,0.95)');
+  grad.addColorStop(0.62, 'rgba(255,158,72,0.8)');
+  grad.addColorStop(1, 'rgba(196,74,32,0.12)');
+  g.fillStyle = grad;
+  g.beginPath();
+  for (let k = 0; k < 16; k++) {
+    const a = (k / 16) * TAU + 0.1;
+    const rr = k % 2 ? 22 : 58;
+    const x = 64 + Math.cos(a) * rr, y = 64 + Math.sin(a) * rr;
+    k ? g.lineTo(x, y) : g.moveTo(x, y);
+  }
+  g.closePath();
+  g.fill();
+  // steel hub
+  g.fillStyle = 'rgba(255,255,255,0.9)';
+  g.beginPath(); g.arc(64, 64, 9, 0, TAU); g.fill();
+  return c;
+}
+
+// 29.10: Mirror Shield reflect-hit moment — a bright mirror ring + specular cross +
+// a pair of outward chevrons reading "orb bounced back". Baked once; combat.draw
+// blits it additively, scaling up and fading out at the reflect point.
+export function reflectFlashSprite() {
+  const c = makeCanvas(48, 48);
+  const g = c.getContext('2d');
+  const halo = g.createRadialGradient(24, 24, 1, 24, 24, 20);
+  halo.addColorStop(0, 'rgba(230,246,255,0.85)');
+  halo.addColorStop(0.5, 'rgba(150,205,255,0.35)');
+  halo.addColorStop(1, 'rgba(120,180,255,0)');
+  g.fillStyle = halo;
+  g.beginPath(); g.arc(24, 24, 20, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(220,242,255,0.9)'; g.lineWidth = 2;
+  g.beginPath(); g.arc(24, 24, 15, 0, TAU); g.stroke();
+  // specular glint cross
+  g.lineWidth = 1.4;
+  g.beginPath();
+  g.moveTo(24, 7); g.lineTo(24, 41);
+  g.moveTo(7, 24); g.lineTo(41, 24);
+  g.stroke();
+  // outward bounce chevrons at opposite corners
+  g.lineWidth = 2.2; g.lineCap = 'round';
+  poly(g, [[7, 14], [13, 8], [19, 14]], false); g.stroke();
+  poly(g, [[29, 34], [35, 40], [41, 34]], false); g.stroke();
   return c;
 }
 function boulderSprite() {
@@ -744,32 +828,59 @@ export function buildIcons() {
   });
 
   icons.axe = make('weapon', (g) => {
-    // Double-bit battle axe planted on a swept motion arc
-    g.strokeStyle = 'rgba(185,198,232,0.38)'; g.lineWidth = 4; g.lineCap = 'round';
-    g.beginPath(); g.arc(46, 44, 27, Math.PI * 0.92, Math.PI * 1.62); g.stroke();
-    g.strokeStyle = 'rgba(185,198,232,0.18)'; g.lineWidth = 2;
-    g.beginPath(); g.arc(46, 44, 31, Math.PI * 0.97, Math.PI * 1.55); g.stroke();
-    // haft with wedge bindings
-    const haft = g.createLinearGradient(28, 60, 42, 34);
-    haft.addColorStop(0, '#3d2e1c'); haft.addColorStop(1, '#856a47');
-    g.strokeStyle = haft; g.lineWidth = 6.5; g.lineCap = 'round';
-    seg(g, [[28, 60], [41, 35]]);
-    g.strokeStyle = 'rgba(23,16,8,0.6)'; g.lineWidth = 1.4;
-    seg(g, [[31.5, 51], [35.5, 52.5]]); seg(g, [[35, 44], [39, 45.5]]);
-    // double-bit head: left bit, right bit, central spike
-    const steel = g.createLinearGradient(24, 10, 56, 34);
-    steel.addColorStop(0, '#eef4ff'); steel.addColorStop(0.5, '#9db0d8'); steel.addColorStop(1, '#5a6c96');
+    // 29.11 complete rework (user: the old one was unrecognizable as an axe):
+    // an upright textbook axe — vertical haft, big flared wedge head with a
+    // STRAIGHT bright cutting edge and a flat poll opposite it — canted ~11° for
+    // action. The T-silhouette is the whole card read; ghost-teal glow + return
+    // arcs say Spectral (this axe flies out AND comes back).
+    // return arcs behind everything: the boomerang path
+    g.strokeStyle = 'rgba(150,240,222,0.22)'; g.lineWidth = 3.4; g.lineCap = 'round';
+    g.beginPath(); g.arc(40, 36, 31, Math.PI * 0.62, Math.PI * 0.98); g.stroke();
+    g.beginPath(); g.arc(40, 36, 31, Math.PI * 1.62, Math.PI * 1.98); g.stroke();
+    g.save();
+    g.translate(36, 38); g.rotate(0.19); g.translate(-36, -36);
+    // ghost glow behind the head
+    g.drawImage(glowSprite(19, '120,230,210', 0.32), 32, 4);
+    // haft + pommel (vertical in local space; the whole frame is canted by the rotate)
+    const haft = g.createLinearGradient(32.5, 0, 39.5, 0);
+    haft.addColorStop(0, '#8a6a48'); haft.addColorStop(0.5, '#6e5137'); haft.addColorStop(1, '#3a2b1b');
+    g.strokeStyle = haft; g.lineWidth = 7; g.lineCap = 'round';
+    seg(g, [[36, 64], [36, 26]]);
+    g.strokeStyle = 'rgba(18,12,6,0.55)'; g.lineWidth = 1.4; // grip wraps
+    seg(g, [[32.5, 56], [39.5, 57.5]]); seg(g, [[32.5, 49], [39.5, 50.5]]);
+    dot(g, 36, 65.5, 3.2, '#241a10');
+    // head: strong FLARE is the axe signature — narrow eye (12 px) opening into a
+    // 35 px-tall fan with a sharp top horn and a dropped beard tip; a flat
+    // head-to-eye ratio is what made earlier attempts read as a mallet.
+    const steel = g.createLinearGradient(24, 0, 62, 0);
+    steel.addColorStop(0, '#5f7ba0'); steel.addColorStop(0.55, '#c6d8ee'); steel.addColorStop(1, '#eef6ff');
     g.fillStyle = steel;
-    poly(g, [[41, 32], [25, 24], [17, 12], [30, 8], [41, 16]]); g.fill();
-    poly(g, [[41, 32], [57, 24], [65, 12], [52, 8], [41, 16]]); g.fill();
-    poly(g, [[36, 16], [46, 16], [41, 4]]); g.fill();
-    formShade(g, 17, 4, 48, 28, { shade: 0.26 });
-    // edge bevels + socket wedge
-    g.strokeStyle = 'rgba(240,248,255,0.85)'; g.lineWidth = 1.4;
-    g.beginPath(); g.moveTo(17, 12); g.quadraticCurveTo(24, 17, 25, 24); g.stroke();
-    g.beginPath(); g.moveTo(65, 12); g.quadraticCurveTo(58, 17, 57, 24); g.stroke();
-    g.fillStyle = '#c9a35c';
-    poly(g, [[37.5, 30], [44.5, 30], [43, 36], [39, 36]]); g.fill();
+    g.beginPath();
+    g.moveTo(33, 16);              // top of the eye (narrow)
+    g.lineTo(55, 5);               // top horn — long sharp flare
+    g.lineTo(59, 12);              // cutting edge top
+    g.lineTo(57, 28);              // straight cutting edge
+    g.lineTo(45, 40);              // beard tip — dropped sharp flare
+    g.lineTo(33, 28);              // bottom of the eye
+    g.closePath();
+    g.fill();
+    // short dark poll stub behind the eye (blade dwarfs it = axe, never a hammer)
+    g.fillStyle = '#46587a';
+    poly(g, [[26, 17], [33, 16], [33, 28], [26, 27]]); g.fill();
+    // one dark outline around the whole head keeps the silhouette crisp
+    g.strokeStyle = 'rgba(10,18,30,0.85)'; g.lineWidth = 1.6; g.lineJoin = 'miter';
+    g.beginPath();
+    g.moveTo(26, 17); g.lineTo(33, 16); g.lineTo(55, 5); g.lineTo(59, 12); g.lineTo(57, 28);
+    g.lineTo(45, 40); g.lineTo(33, 28); g.lineTo(26, 27);
+    g.closePath(); g.stroke();
+    // bright cutting-edge bevel on the straight edge (the definitive axe cue)
+    g.strokeStyle = 'rgba(210,255,242,0.95)'; g.lineWidth = 3; g.lineCap = 'butt';
+    g.beginPath(); g.moveTo(58.4, 13); g.lineTo(56.4, 26.5); g.stroke();
+    // shine along the top flare
+    g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(35, 14.5); g.lineTo(52, 7.5); g.stroke();
+    formShade(g, 26, 5, 33, 35, { shade: 0.22 });
+    g.restore();
   });
 
   icons.blades = make('weapon', (g) => {
@@ -1665,19 +1776,44 @@ export function buildIcons() {
   });
 
   icons.wolf = make('weapon', (g) => {
-    // Wolf head profile, facing left: ears, snout, moonlit fur, amber eye
-    g.fillStyle = '#7c8798';
-    poly(g, [[24, 18], [30, 30], [44, 26], [56, 34], [52, 44], [58, 50], [46, 52], [40, 60], [26, 56], [16, 40], [18, 26]]);
-    g.fill();
-    g.fillStyle = '#5a6472'; // ear shading + jaw plane
-    poly(g, [[18, 26], [24, 18], [30, 30], [22, 34]]); g.fill();
-    poly(g, [[40, 60], [46, 52], [52, 44], [58, 50], [48, 56]]); g.fill();
-    g.strokeStyle = 'rgba(20,26,36,0.6)'; g.lineWidth = 1.4; // fur notch line
-    seg(g, [[30, 30], [38, 40]]); seg(g, [[44, 26], [46, 36]]);
-    dot(g, 36, 36, 2.6, '#ffb648'); // eye
-    dot(g, 56, 47, 1.8, '#20262f'); // nose
-    // moon glint behind the ear
-    glint(g, 21, 22, 3, 'rgba(200,220,255,0.75)');
+    // 29.9 complete rework: THE PACK — three snarling wolf heads in the exact
+    // in-game coat identities (dark grey + dark brown back row, light brown alpha
+    // front), amber eyes (the enemy wolf's are red), bared fangs, heavy outlines
+    // so the three silhouettes never merge; a violet crescent ties them to the
+    // Werewolf hero (pack bond).
+    const head = (cx, cy, s, fur, shade) => {
+      // angular snarling head, facing left (base art at (16,18)-(58,60), centre (37,39))
+      g.save();
+      g.translate(cx, cy); g.scale(s, s); g.translate(-37, -39);
+      g.fillStyle = fur;
+      poly(g, [[24, 18], [30, 30], [44, 26], [56, 34], [52, 44], [58, 50], [46, 52], [40, 60], [26, 56], [16, 40], [18, 26]]);
+      g.fill();
+      g.fillStyle = shade; // ear + jaw plane
+      poly(g, [[18, 26], [24, 18], [30, 30], [22, 34]]); g.fill();
+      poly(g, [[40, 60], [46, 52], [52, 44], [58, 50], [48, 56]]); g.fill();
+      // bared fangs off the snarl line
+      g.fillStyle = '#f4f7fa';
+      poly(g, [[48.5, 51], [50.5, 55.5], [52, 50.8]]); g.fill();
+      poly(g, [[43.5, 52.5], [45, 56], [46.4, 52.3]]); g.fill();
+      // amber eye + nose
+      dot(g, 36, 36, 2.4, '#ffb648'); dot(g, 36, 36, 1, '#20160a');
+      dot(g, 56.5, 47, 1.7, '#141a22');
+      // heavy silhouette outline (three distinct heads at 1×)
+      g.strokeStyle = 'rgba(8,12,18,0.9)'; g.lineWidth = 3.4; g.lineJoin = 'round';
+      poly(g, [[24, 18], [30, 30], [44, 26], [56, 34], [52, 44], [58, 50], [46, 52], [40, 60], [26, 56], [16, 40], [18, 26]]);
+      g.closePath(); g.stroke();
+      g.restore();
+    };
+    // violet crescent between the back-row heads (Werewolf pack bond)
+    g.fillStyle = 'rgba(192,132,252,0.6)';
+    g.beginPath(); g.arc(36, 17, 6.5, 0, TAU); g.fill();
+    g.fillStyle = PLATE.weapon.bgA;
+    g.beginPath(); g.arc(39, 15.5, 5.5, 0, TAU); g.fill();
+    glint(g, 29, 12, 2.4, 'rgba(220,180,255,0.8)');
+    // back row (smaller, darker), then the alpha wolf front and largest
+    head(21, 27, 0.55, '#4a505a', '#31363e');   // 2nd wolf — dark grey
+    head(51, 27, 0.55, '#5b3d24', '#3c2714');   // 3rd wolf — dark brown
+    head(36, 48, 0.72, '#b08256', '#7c5a36');   // 1st wolf — light brown
   });
 
   icons.boulder = make('weapon', (g) => {
@@ -1852,6 +1988,45 @@ export function buildIcons() {
     dot(g, 10, 50, 1.8, 'rgba(200,235,255,0.8)');
     dot(g, 16, 58, 1.6, 'rgba(200,235,255,0.7)');
     g.restore();
+  });
+
+  icons.coffee = make('passive', (g) => {
+    // 29.14 (user spec): plain white mug with STEAMING BROWN COFFEE — the card the
+    // player recognises instantly; no rune/plate gimmicks, just mug + steam.
+    // steam trails rising off the surface
+    g.strokeStyle = 'rgba(238,224,204,0.34)'; g.lineWidth = 1.8; g.lineCap = 'round';
+    for (const x of [29, 37, 45]) {
+      g.beginPath();
+      g.moveTo(x, 30);
+      g.bezierCurveTo(x - 3, 25.5, x + 3, 21, x - 1, 15);
+      g.stroke();
+    }
+    // handle (right side, drawn before the body so the join reads clean)
+    g.strokeStyle = '#e6ebf2'; g.lineWidth = 4.4;
+    g.beginPath(); g.arc(49, 45, 8.5, -1.25, 1.25); g.stroke();
+    g.strokeStyle = 'rgba(40,48,58,0.45)'; g.lineWidth = 1.2;
+    g.beginPath(); g.arc(49, 45, 10.4, -1.2, 1.2); g.stroke();
+    // mug body: plain white ceramic, slight cylinder shading
+    const mg = g.createLinearGradient(20, 0, 50, 0);
+    mg.addColorStop(0, '#f6f8fb'); mg.addColorStop(0.55, '#e2e7ee'); mg.addColorStop(1, '#aeb8c4');
+    g.fillStyle = mg;
+    g.beginPath();
+    g.moveTo(21, 34); g.lineTo(49, 34);
+    g.lineTo(47, 57); g.quadraticCurveTo(46.5, 60, 43, 60);
+    g.lineTo(27, 60); g.quadraticCurveTo(23.5, 60, 23, 57);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = 'rgba(40,50,62,0.55)'; g.lineWidth = 1.5; g.stroke();
+    // brown coffee surface + rim
+    g.fillStyle = '#3a2412';
+    g.beginPath(); g.ellipse(35, 34.5, 13.2, 4.4, 0, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(140,92,52,0.55)';
+    g.beginPath(); g.ellipse(33, 34, 8, 2.6, 0, 0, TAU); g.fill();
+    g.strokeStyle = '#f8fafc'; g.lineWidth = 2;
+    g.beginPath(); g.ellipse(35, 34.5, 13.6, 4.8, 0, 0, TAU); g.stroke();
+    // soft ceramic highlight
+    g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(25.5, 39); g.lineTo(25, 54); g.stroke();
   });
 
   // ================= PHASE 21 — SYNERGIES (5) ============================
