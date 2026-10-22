@@ -13,6 +13,17 @@
 
 ## Entries (newest first)
 
+### 2026-10-22 — Record sync request + playtest notes file received
+- **Received:** 2026-10-22 (no time; date only)
+- **Verbatim (chat):** "Sync the record so a cold session could resume without asking me anything: decisions, findings, research, tests run and their real results, troubleshooting attempts and resolutions, and the exact next step. Keep it lean — no transcripts and no line references; the code is the implementation record."
+- **Playtest input (file):** `docs/user-playtest-notes/2026-10-22_Qwen-Survivors_Playtesting-Notes.md` — user-authored notes from live playtest of the published Phase-21 build (17 directives: boulder cadence, laser rotation + 2nd/3rd beams, Gatling reload UX, Wolfpack rename/leveling/colors/icon rework, Mirror Shield active/reflect visuals, Spectral Axe icon rework, Tank Cannon card text + visible projectile + distinct explosion + 1.5× range, Ice Skates slipperier slide, new Coffee passive (fire-rate), view-zoom zero-effect = **22.8 confirmed on device, research-first directive**, offer-card "Lv 1/3" shown on unpicked cards, per-level description accuracy audit, equipment icons split into category rows, significant early-run lag). The file itself is the verbatim record.
+- **Handling:** notes file untracked + open in LibreOffice (lock file present) — do not modify or commit without user direction.
+
+### 2026-10-22 — Post-cliff orders + explicit publish authorization
+- **Received:** 2026-10-22 (no time; date only)
+- **Verbatim:** "The last session ended at the context limit and documentation may be stale. Reconstruct state from primary sources first: git status, the last 10 commits, then docs/PROGRESS.md. Identify the last verified completed step. Repair the docs to match reality BEFORE any development work. Where docs and reality disagree, reality wins — tell me where they diverged. Run the E2E, and make all noticed fixes, and additionally keep an eye out for areas where further optimizations could be made. Commit, push, merge, update GH Pages build"
+- **Context:** session-40 directive; publish authorization executed as `ff372a1` (publish-sync + stale-line repair, ff-merge, both pushes, Pages markers verified).
+
 ### 2026-10-20 — Post-cliff orders: reconstruct from primary sources, repair docs first, then run the E2E + fix everything noticed
 - **Received:** 2026-10-20 (no time in message; date only)
 - **Verbatim:** "The last session ended at the context limit and documentation may be stale. Reconstruct state from primary sources first: git status, the last 10 commits, then docs/PROGRESS.md. Identify the last verified completed step. Repair the docs to match reality BEFORE any development work. Where docs and reality disagree, reality wins — tell me where they diverged. Run the E2E, and make all noticed fixes, and additionally keep an eye out for areas where further optimizations could be made."
