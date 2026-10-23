@@ -414,11 +414,13 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 
 // --- Phase 10.2: exact-effect card text (pure, player.js) ---
 {
-  // 23.1 rebaseline: wand rate raised very slightly (pistols < wand < bow at every level)
-  ok(cardEffectText('weapon', 'wand', 1) === '1 bolt · every 0.64 s · 12 dmg · no pierce',
-    'cardEffectText: wand L1 = full stat line');
-  ok(cardEffectText('weapon', 'wand', 2) === 'rate 0.64→0.54 s · dmg 12→16 · pierce 0→1',
-    'cardEffectText: wand L2 = changed-field deltas only (count 1→1 skipped)');
+  // 30.4/30.5 rebaseline: cards now open with the offered level's stats block (range ·
+  // cadence · damage); per-level deltas follow. Values pinned here are literals because
+  // this block pins the FORMAT — the 30.4 battery below pins the CFG-derived VALUES.
+  ok(cardEffectText('weapon', 'wand', 1) === 'range 560 px · every 0.64 s · 12 dmg · no pierce',
+    'cardEffectText: wand L1 = stats block + remaining fields');
+  ok(cardEffectText('weapon', 'wand', 2) === 'range 560 px · every 0.54 s · 16 dmg · rate 0.64→0.54 s · dmg 12→16 · pierce 0→1',
+    'cardEffectText: wand L2 = stats block + changed-field deltas (count 1→1 skipped)');
   ok(cardEffectText('passive', 'hp', 1) === '+25 max HP + heal 25 now → total +25 max HP',
     'cardEffectText: hp passive L1 increment + total');
   ok(cardEffectText('passive', 'speed', 2) === '+10% movement speed → total +20%',
@@ -448,14 +450,72 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
       ok(cardEffectText('meta', key, L).length > 0, `cardEffectText coverage: meta ${key} L${L}`);
 }
 
+// --- 30.4/30.5 (user mandate): every weapon card states the offered level's exact
+// range + cadence + damage; every expected fragment is derived FROM CFG (never a
+// re-hardcoded gameplay number), for ALL 19 weapons at every level, plus the 3 items. ---
+{
+  const C = CFG.combat;
+  // mirrors fmtS in player.js (formatting, not a gameplay value)
+  const f2 = (v) => { let s = v.toFixed(2); if (s.endsWith('0')) s = s.slice(0, -1); return s; };
+  const pc = (f) => `${Math.round(f * 1000) / 10}%`;
+  const REQ = {
+    wand: [() => `range ${C.wandRange} px`, (d, s) => `every ${f2(s.rate)} s`, (d, s) => `${s.dmg} dmg`],
+    garlic: [(d, s) => `aura radius ${s.r} px`, () => `ticks every ${f2(C.garlicTick)} s`, (d, s) => `${s.dmg} dmg per tick`],
+    axe: [() => `boomerang throw ${Math.round(C.axeSpeed * C.axeLife * (1 - C.axeTurnFrac))} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per hit`],
+    blades: [(d, s) => `orbit radius ${s.rad} px`, () => `shears every ${f2(C.orbitTick)} s`, (d, s) => `${s.dmg} dmg per hit`],
+    pistols: [() => `range ${C.pistolRange} px`, (d, s) => `every ${f2(s.rate)} s`, (d, s) => `${s.dmg} dmg × 2 rounds`],
+    bombs: [() => `throw ${C.bombDist} px, blast radius `, (d, s) => `blast radius ${s.r} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per blast`],
+    flame: [(d, s) => `stream reach ${s.range} px`, (d, s) => `fuel ${f2(s.fuel)} s, recharge ${f2(s.recharge)} s`, (d, s) => `${s.tick} dmg per contact`],
+    snowball: [(d, s) => `range ${C.wandRange} px, blast radius ${s.r} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per burst`],
+    ringLightning: [() => `range ${C.wandRange} px`, () => `every ${C.ringCd} s`, (d, s) => `${s.dmg} dmg per bolt`],
+    bow: [() => `arrow range ${Math.round(C.arrowSpeed * C.arrowLife)} px`, (d, s) => `every ${f2(s.rate)} s`, (d, s) => `${s.dmg} dmg per arrow`],
+    cannon: [(d, s) => `range ${C.cannonRange} px, blast radius ${s.blastR} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per shell`],
+    laser: [(d, s) => `beam length ${s.len} px`, (d, s) => `sweeps ${f2(s.dur)} s`, (d, s) => `${s.dps} dmg/s`],
+    wolfpack: [() => `pounce range ${C.companionLeash} px`, () => `pounces every ${f2(C.companionPounceCd)} s`, (d, s) => `pounce ${s.dmg} dmg`],
+    boulder: [() => `range ${C.wandRange} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg first hit`],
+    webs: [(d, s) => `range ${C.wandRange} px, burst radius ${s.r} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per burst`],
+    gatling: [() => `bullet range ${Math.round(C.bulletSpeed * C.bulletLife)} px`, (d, s) => `one shot every ${f2(s.cd)} s`, (d) => `mag ${d.burst} → reload ${f2(d.reload)} s`, (d, s) => `${s.dmg} dmg per round`],
+    bat: [() => `swing reach ${C.batRange} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per swing`],
+    tongue: [() => `tongue reach ${C.tongueRange} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per bite`],
+    ball: [() => `dash range ${C.ballSearchR} px`, (d) => `every ${f2(d.cd)} s`, (d, s) => `${s.dmg} dmg first hit`],
+  };
+  for (const key of Object.keys(CFG.weapons)) {
+    ok(!!REQ[key], `30.4 battery: ${key} has an expected-stats table`);
+    const def = CFG.weapons[key];
+    for (let L = 1; L <= def.levels.length; L++) {
+      const txt = cardEffectText('weapon', key, L);
+      for (const frag of REQ[key])
+        ok(txt.includes(frag(def, def.levels[L - 1])), `30.4/30.5: ${key} L${L} card states its CFG-derived stat (${txt})`);
+    }
+  }
+  for (let L = 1; L <= CFG.passives.shield.max; L++) {
+    const s = CFG.passives.shield.levels[L - 1];
+    const t = cardEffectText('passive', 'shield', L);
+    ok(t.includes(`radius ${s.r} px`) && t.includes(`every ${f2(s.window)} s`) && t.includes(`Reflects ${C.shieldCharges} enemy projectiles`),
+      `30.5: Mirror Shield L${L} states radius/charges/window (${t})`);
+  }
+  for (let L = 1; L <= CFG.passives.skates.max; L++) {
+    const s = CFG.passives.skates.levels[L - 1];
+    const t = cardEffectText('passive', 'skates', L);
+    ok(t.includes(`+${pc(s.spd)} movement speed`) && t.includes(`glide friction ×${s.glideK}`) && t.includes(`(≥${C.skateSlideMin} px/s) deal ${s.slideDmg} to both`),
+      `30.5: Ice Skates L${L} states speed/glide/slide (${t})`);
+  }
+  for (let L = 1; L <= CFG.passives.coffee.max; L++) {
+    const t = cardEffectText('passive', 'coffee', L);
+    ok(t.includes(`−${pc(CFG.passives.coffee.val)} weapon cooldowns`) && t.includes(`total −${pc(CFG.passives.coffee.val * L)}`),
+      `30.5: Coffee L${L} states the per-level cut + the offered level's total (${t})`);
+  }
+}
+
 // --- 12.2: Bow & Arrow — fast single-target arrow (Combat, Node-safe) ---
 {
   const C = CFG.combat;
   ok(CFG.weapons.bow.levels.length === 5, '12.2: bow has a 5-level table');
-  // 23.1 rebaseline: bow rate table raised (charge-up added); old rates were identical to pistols
-  ok(cardEffectText('weapon', 'bow', 1) === 'every 0.68 s · draw 0.25 s · 16 dmg', '23.1: bow L1 exact-effect line');
+  // 30.4/30.5 rebaseline: bow card now opens with its stats block (arrow range =
+  // arrowSpeed×arrowLife, draw cadence, per-arrow damage); deltas follow.
+  ok(cardEffectText('weapon', 'bow', 1) === 'arrow range 896 px · every 0.68 s, draw 0.25 s · 16 dmg per arrow', '30.4: bow L1 stats-block line');
   // fmtS pads to two decimals then strips ONE trailing zero → 0.6 renders "0.6" (never "0.60").
-  ok(cardEffectText('weapon', 'bow', 2) === 'rate 0.68→0.6 s · dmg 16→21', `23.1: bow L2 delta line (charge flat — never a delta) (${cardEffectText('weapon', 'bow', 2)})`);
+  ok(cardEffectText('weapon', 'bow', 2) === 'arrow range 896 px · every 0.6 s, draw 0.25 s · 21 dmg per arrow · rate 0.68→0.6 s · dmg 16→21', `30.4: bow L2 stats block + delta line (charge flat — never a delta) (${cardEffectText('weapon', 'bow', 2)})`);
   const c = new Combat();
   const owner = { x: 0, y: 0, vx: 0, vy: 0 };
   const mkEnemy = (x) => ({ x, y: 100, r: 12, hp: 100, maxHp: 100, flash: 0, vx: 0, vy: 0, dead: false });
@@ -627,19 +687,21 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   const C = CFG.combat;
   const RL = CFG.weapons.ringLightning;
   ok(RL.levels.length === 5, '12.4: ringLightning has a 5-level table');
-  // Scaling shape: cd↓ dmg↑ jumps↑ (levels increase the chain count — the spec's core growth).
+  // Scaling shape: dmg↑ jumps↑ (levels increase the chain count — the spec's core growth).
+  // The per-level cd column was dead config (ring fires at flat CFG.combat.ringCd) — removed.
   const L = RL.levels;
   let mono = true;
   for (let i = 1; i < L.length; i++) {
-    if (!(L[i].cd < L[i - 1].cd && L[i].dmg > L[i - 1].dmg && L[i].jumps > L[i - 1].jumps)) mono = false;
+    if (!(L[i].dmg > L[i - 1].dmg && L[i].jumps > L[i - 1].jumps)) mono = false;
   }
-  ok(mono, '12.4: ringLightning per-level scaling shape cd↓ dmg↑ jumps↑ holds');
-  // Exact-effect card lines (10.2 rule): L1 full-stat, L2 delta.
+  ok(mono, '12.4: ringLightning per-level scaling shape dmg↑ jumps↑ holds');
+  // Exact-effect card lines (10.2 rule): L1 full-stat, L2 delta. 30.4: the cd row was
+  // DEAD config — the fire site reuses CFG.combat.ringCd — so the card now states ringCd.
   const l1 = cardEffectText('weapon', 'ringLightning', 1);
-  ok(l1.includes(`every ${L[0].cd}`) && l1.includes(`${L[0].dmg} dmg`) && l1.includes(`chain ${L[0].jumps} foes`),
-    `12.4: ringLightning L1 line names cd/dmg/chain (${l1})`);
+  ok(l1.includes(`every ${CFG.combat.ringCd} s`) && l1.includes(`${L[0].dmg} dmg`) && l1.includes(`chain ${L[0].jumps} foes`),
+    `30.4: ringLightning L1 line names real cd/dmg/chain (${l1})`);
   const l2 = cardEffectText('weapon', 'ringLightning', 2);
-  ok(l2.includes(`${L[0].cd}→${L[1].cd}`) && l2.includes(`dmg ${L[0].dmg}→${L[1].dmg}`) && l2.includes(`chain ${L[0].jumps}→${L[1].jumps} foes`),
+  ok(l2.includes(`dmg ${L[0].dmg}→${L[1].dmg}`) && l2.includes(`chain ${L[0].jumps}→${L[1].jumps} foes`),
     `12.4: ringLightning L2 delta line shows cd/dmg/chain deltas (${l2})`);
 
   // Shock pipeline (12.5): stacks accumulate; the Nth consumes them → stun + chain burst.
@@ -2990,11 +3052,12 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
 
   // User directive: targeting stays the existing pick — the pack sim must NOT use the spatial grid.
   const wfn = csrc.match(/_wolfpack\(dt, p, enemies\) \{[\s\S]*?\n  \}/);
-  ok(!!wfn && /_nearestTo\(p, enemies, C\.companionLeash\)/.test(wfn[0]) && !/\.grid\./.test(wfn[0]),
-    '29.9 wolfpack: target-pick unchanged (_nearestTo scan, not the spatial grid)');
+  ok(!!wfn && /_nearestTo\(p, enemies, C\.companionLeash/.test(wfn[0]) && !/\.grid\./.test(wfn[0]),
+    '29.9 wolfpack: target-pick still _nearestTo scan (not the spatial grid); 30.1 adds the taken-args exclusion');
 
-  // Card copy: spawn-only levels state the wolf count, nothing else.
-  ok(cardEffectText('weapon', 'wolfpack', 3).includes('wolves 1→2') && !cardEffectText('weapon', 'wolfpack', 3).includes('dmg'),
+  // Card copy: spawn-only levels state the wolf count delta; 30.4 adds the (unchanged)
+  // stats block, so "no stat-up" now means: no dmg/bleed PREV→NEXT delta anywhere.
+  ok(cardEffectText('weapon', 'wolfpack', 3).includes('wolves 1→2') && !cardEffectText('weapon', 'wolfpack', 3).includes('30→') && !cardEffectText('weapon', 'wolfpack', 3).includes('8→'),
     `29.9 wolfpack: L3 card states 2nd wolf with no stat-up (${cardEffectText('weapon', 'wolfpack', 3)})`);
   ok(!cardEffectText('synergy', 'staticPelt', 1).includes('Wolf'),
     `29.9: synergy card copy carries no "Wolf" string (${cardEffectText('synergy', 'staticPelt', 1)})`);
@@ -3193,6 +3256,251 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   // 29.10: the reflect flash art is pre-rendered — draw only ever blits it.
   ok(/export function reflectFlashSprite\(\)/.test(isrc) && /this\._fx\.flash/.test(csrc),
     '29.10: baked mirror-burst sprite drawn at reflect points');
+}
+
+// --- 30.1 Wolfpack targeting: pack-uniqueness (no two wolves ever share a live
+// target across a pounce), wait-if-claimed (a ready wolf with every in-leash foe
+// owned holds ready — no steal, no stack), and per-wolf independent timers (a ready
+// wolf bites a foe that entered the leash while another is still mid-pounce). The
+// pick still scans enemies.list via _nearestTo (never the spatial grid, user directive). ---
+{
+  const mk = (x, y, o = {}) => ({ x, y, vx: 0, vy: 0, r: 13, hp: 300, maxHp: 300, flash: 0, dead: false, boss: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0, bleedT: 0, bleedDps: 0, ...o });
+  const stub = (list) => ({ list, grid: { near: () => list, range: () => list } });
+  const mkPl = (lvl) => { const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(400, 400); p.weapons.wolfpack = lvl; return p; };
+
+  // (A) Same-target overlap is impossible: 3 wolves + 3 in-leash foes claim 3 distinct targets.
+  {
+    const p = mkPl(5); // count 3
+    const c = new Combat();
+    const fA = mk(460, 400, { hp: 1e6, maxHp: 1e6 }); // nearest
+    const fB = mk(520, 400, { hp: 1e6, maxHp: 1e6 });
+    const fC = mk(570, 400, { hp: 1e6, maxHp: 1e6 }); // 170 px, inside the 192 leash
+    const foes = [fA, fB, fC];
+    c.update(1 / 60, [p], stub(foes)); // tick 1: spawn + assign
+    const ws = p._wolves;
+    const pouncers = ws.filter((w) => w.state === 'pounce' && w.target);
+    ok(pouncers.length === 3, `30.1: all 3 wolves enter pounce once a foe is claimable (${pouncers.length})`);
+    ok(new Set(pouncers.map((w) => w.target)).size === 3, '30.1: the 3 claims are pairwise distinct (no same-target pile-on)');
+    let overlap = false, sawMulti = false;
+    for (let t = 0; t < 15; t++) {
+      c.update(1 / 60, [p], stub(foes));
+      const live = ws.filter((w) => w.state === 'pounce' && w.target).map((w) => w.target);
+      if (new Set(live).size !== live.length) overlap = true;
+      if (live.length >= 2) sawMulti = true;
+    }
+    ok(!overlap, '30.1: no two wolves share a live target on any tick');
+    ok(sawMulti, '30.1 control: ≥2 claims do coexist at some tick (the overlap check can actually fire)');
+  }
+
+  // (B) Wait-if-claimed: 3 wolves + 1 far in-leash foe → exactly one claims it; the
+  // other two stay ready and never steal it while that claim holds (pounce still travelling).
+  {
+    const p = mkPl(5); // count 3
+    const c = new Combat();
+    const foe = mk(588, 400, { hp: 1e6, maxHp: 1e6 }); // ~188 px → long pounce (never lands in the window)
+    let maxHolders = 0, holders = 0, waiting = 0, claimAlive = false;
+    for (let t = 0; t < 14; t++) {
+      c.update(1 / 60, [p], stub([foe]));
+      holders = p._wolves.filter((w) => w.state === 'pounce' && w.target === foe).length;
+      waiting = p._wolves.filter((w) => w.state === 'follow' && w.target === null).length;
+      maxHolders = Math.max(maxHolders, holders);
+      claimAlive = holders === 1;
+    }
+    ok(maxHolders === 1, `30.1: only one wolf ever claims a lone foe (${maxHolders})`);
+    ok(claimAlive && waiting === 2, `30.1: the other 2 hold ready/waiting, never re-claim (holders=${holders} waiting=${waiting})`);
+  }
+
+  // (C) Independent timers: wolf A is still mid-pounce on a far foe when a second foe
+  // enters the leash — wolf B (cd already complete) claims and bites it on its own.
+  {
+    const p = mkPl(3); // count 2
+    const c = new Combat();
+    const fA = mk(590, 400, { hp: 1e6, maxHp: 1e6 }); // far → A keeps travelling for ~30 ticks
+    for (let t = 0; t < 12; t++) c.update(1 / 60, [p], stub([fA])); // only fA exists
+    const wA = p._wolves.find((w) => w.state === 'pounce' && w.target === fA);
+    const wB = p._wolves.find((w) => w !== wA);
+    ok(!!wA && !!wB, '30.1(C): one wolf locked the far foe while the other stayed ready');
+    ok(wB.state === 'follow' && wB.cd <= 0 && fA.hp === 1e6, '30.1(C): the 2nd wolf holds a COMPLETED timer, far foe still untouched (mid-pounce)');
+    const fB = mk(450, 400, { hp: 1e6, maxHp: 1e6 }); // a new foe enters the leash at 50 px
+    let bBite = 0, aStillMidPounce = false;
+    for (let t = 1; t <= 20; t++) {
+      c.update(1 / 60, [p], stub([fA, fB]));
+      if (!bBite && fB.hp < 1e6) { bBite = t; aStillMidPounce = wA.state === 'pounce' && fA.hp === 1e6; }
+    }
+    ok(bBite > 0, `30.1(C): wolf B landed an independent hit on the newly-leashed foe (tick ${bBite})`);
+    ok(aStillMidPounce, '30.1(C): wolf A was still mid-pounce on the far foe when B landed (cds/targets independent)');
+  }
+}
+
+// --- 30.3 Frog Tongue range: CFG.combat.tongueRange 240 → 660 (user-approved 2.75×).
+// The fire gate reads the config value (player._weapons); the pull is a distance-normalised
+// linear schedule with NO travel-time or max-range cap, so a 650-px latch drags fully home. ---
+{
+  const mk = (x, y, o = {}) => ({ x, y, vx: 0, vy: 0, r: 13, hp: 300, maxHp: 300, flash: 0, dead: false, boss: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0, bleedT: 0, bleedDps: 0, poisonT: 0, poisonDps: 0, holdT: 0, ...o });
+  const stub = (list) => ({ list, grid: { near: () => list, range: () => list } });
+  const world = { collidersNear: () => [] };
+  ok(CFG.combat.tongueRange === 660, '30.3: CFG.combat.tongueRange = 660 (was 240)');
+
+  // Fires at 650 (inside the new reach) and the full-distance pull lands the foe on the toad.
+  {
+    const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(400, 400); p.weapons.tongue = 1;
+    const c = new Combat();
+    const foe = mk(1050, 400, { hp: 1e6, maxHp: 1e6 }); // 650 px from the player centre
+    p.update(1 / 60, { x: 0, y: 0 }, c, stub([foe]), world);
+    ok(foe.drag !== null && foe.hp < 1e6, `30.3: tongue fires at 650 (latched, hp=${foe.hp})`);
+    for (let i = 0; i < 30; i++) c.update(1 / 60, [p], stub([foe]));
+    ok(foe.drag === null && near(foe.x, p.x, 0.5) && near(foe.y, p.y, 0.5),
+      `30.3: the 650-px pull completes over tonguePullDur and lands on the owner (${foe.x.toFixed(1)},${foe.y.toFixed(1)})`);
+  }
+  // No fire at 700 (past the new reach) — the gate follows the new value, not the old 240.
+  {
+    const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(400, 400); p.weapons.tongue = 1;
+    const c = new Combat();
+    const foe = mk(1100, 400, { hp: 1e6, maxHp: 1e6 }); // 700 px — out of range
+    p.update(1 / 60, { x: 0, y: 0 }, c, stub([foe]), world);
+    ok(!foe.drag && foe.hp === 1e6, '30.3: tongue does NOT fire at 700 (past the 660 reach)');
+  }
+}
+
+// --- 30.2 Continuous Laser: damage lands along the whole beam (probe-as-asserts), the orbit
+// angle is no longer double-counted (29.7 defect), and the sear's feedback is scorch sparks
+// only — rate-limited per foe, hard-capped, never a hit-flash (D21 stands, dps unchanged). ---
+{
+  const mk = (x, y, o = {}) => ({ x, y, vx: 0, vy: 0, r: 13, hp: 300, maxHp: 300, flash: 0, dead: false, boss: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0, ...o });
+  const stub = (list) => ({ list, grid: { near: () => list, range: () => list } });
+  const world = { collidersNear: () => [] };
+  const mkPl = () => { const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(500, 400); return p; };
+  const L = CFG.weapons.laser.levels[0];
+
+  // (1) Damage ticks at every point along the segment: near-origin / mid / near-tip each
+  // receive dps × 1.0 s exactly; a foe 6 px past the (r + w) boundary receives none.
+  {
+    const c = new Combat();
+    const pl = mkPl();
+    const sy = pl._spawnY();
+    const ds = [30, Math.round(L.len / 2), L.len - 10];
+    const foes = ds.map((d) => mk(pl.x + d, sy, { hp: 1e6, maxHp: 1e6 }));
+    const edge = mk(pl.x + ds[1], sy + (L.w + 13 + 6), { hp: 1e6, maxHp: 1e6 });
+    foes.push(edge);
+    c.fireBeam(pl, { ...L, dur: 1.2 }); // off = 0, _laserAng = 0 → the beam rides +x
+    for (let i = 0; i < 60; i++) c.update(1 / 60, [pl], stub(foes));
+    ok(ds.every((d, i) => near(1e6 - foes[i].hp, L.dps, 1e-9)),
+      `30.2: damage lands at 30/${ds[1]}/${ds[2]} px along the beam = dps×1 s exactly (${ds.map((d, i) => `${d}px:${(1e6 - foes[i].hp).toFixed(3)}`).join(' ')})`);
+    ok(edge.hp === 1e6, `30.2: a foe 6 px past (r + w) is NOT seared (${edge.hp})`);
+    ok(foes.every((f) => f.flash === 0 && f.vx === 0 && f.vy === 0), '30.2: the sear stays flash-free and knockback-free (D21 unchanged)');
+  }
+
+  // (2) DEFECT TEST (29.7 double-count): the fire site passes the ABSOLUTE reached angle as
+  // `off`; _beams must not add the owner's live orbit on top of it again. Pin: the beam points
+  // at the reached angle, sweeps at exactly S.rot, and a foe sitting on that ray is seared.
+  {
+    const c = new Combat();
+    const pl = mkPl();
+    pl.weapons.laser = 1;
+    for (let i = 0; i < 120; i++) pl.update(1 / 60, { x: 0, y: 0 }, c, stub([mk(4000, 4000)]), world); // idle: orbit runs, nothing fires
+    const sy = pl._spawnY();
+    const aim = pl._laserAng;
+    const bait = mk(pl.x + Math.cos(aim) * 150, sy + Math.sin(aim) * 150, { hp: 1e6, maxHp: 1e6 });
+    pl.update(1 / 60, { x: 0, y: 0 }, c, stub([bait]), world); // this tick is the one that fires
+    ok(c.beams.length === 1, '30.2: reactivation fires one beam');
+    const b = c.beams[0];
+    const reached = pl._laserAng;
+    ok(near(c.beamAngle(b), reached, 1e-12),
+      `30.2: the beam starts AT the reached orbit angle, not twice it (beamAngle=${c.beamAngle(b).toFixed(4)} want ${reached.toFixed(4)} — pre-fix: ${(2 * reached).toFixed(4)})`);
+    const a0 = c.beamAngle(b);
+    for (let i = 0; i < 30; i++) { pl.update(1 / 60, { x: 0, y: 0 }, c, stub([bait]), world); c.update(1 / 60, [pl], stub([bait])); }
+    const swept = c.beamAngle(b) - a0;
+    ok(near(swept, L.rot * 0.5, 1e-9), `30.2: the beam sweeps at the configured rot (Δ=${swept.toFixed(4)} rad over 0.5 s, want ${(L.rot * 0.5).toFixed(4)} — pre-fix 2×)`);
+    ok(1e6 - bait.hp > 0, `30.2: a foe on the ray the orbit points at IS seared (${(1e6 - bait.hp).toFixed(2)} HP — pre-fix: 0)`);
+  }
+
+  // (3) Multi-beam geometry is what the card states: every rendered ray sears. At L5 the three
+  // beams sit 120° apart and each damages along its own ray from the first tick.
+  {
+    const c = new Combat();
+    const pl = mkPl();
+    const S5 = CFG.weapons.laser.levels[4];
+    pl.weapons.laser = 5;
+    const sy = pl._spawnY();
+    pl.update(1 / 60, { x: 0, y: 0 }, c, stub([mk(pl.x + 100, sy)]), world);
+    const rays = c.beams.map((b) => c.beamAngle(b));
+    ok(rays.length === S5.count, `30.2 L5: ${S5.count} beams`);
+    const rel = rays.map((a) => (((a - rays[0]) % TAU) + TAU) % TAU).sort((x, y) => x - y);
+    const want = [0, 1, 2].map((i) => (i * TAU) / S5.count);
+    ok(rel.every((v, i) => near(v, want[i], 1e-9)), `30.2 L5: the RENDERED rays are 120° apart (${rel.map((v) => v.toFixed(3))})`);
+    const onRays = rays.map((a) => mk(pl.x + Math.cos(a) * 150, sy + Math.sin(a) * 150, { hp: 1e6, maxHp: 1e6 }));
+    c.update(1 / 60, [pl], stub(onRays));
+    ok(onRays.every((f) => f.hp < 1e6), '30.2 L5: every drawn ray sears from the first tick');
+  }
+
+  // (4) Scorch sparks exist for beam contacts ONLY — no other damage source emits them — and
+  // they sit at the contact point (within the beam's half-width of the foe's centre).
+  {
+    const c = new Combat();
+    const pl = mkPl();
+    const sy = pl._spawnY();
+    const hitByBolt = mk(pl.x + 120, sy, { hp: 1e6, maxHp: 1e6 });
+    const hitByBurn = mk(pl.x + 200, sy, { hp: 1e6, maxHp: 1e6 });
+    hitByBurn.burnT = 3; hitByBurn.burnDps = 12;
+    c.fireBolt(pl.x, sy, 0, 40, 4, null, pl);
+    for (let i = 0; i < 20; i++) c.update(1 / 60, [], stub([hitByBolt, hitByBurn]));
+    ok(hitByBolt.hp < 1e6 && hitByBurn.hp < 1e6 && c.scorchFx.length === 0,
+      `30.2: a bolt hit and a burn DoT emit NO scorch sparks (${c.scorchFx.length})`);
+    c.fireBeam(pl, { ...L, dur: 0.4 });
+    const seared = mk(pl.x + 120, sy + 4, { hp: 1e6, maxHp: 1e6 });
+    c.update(1 / 60, [pl], stub([seared]));
+    ok(c.scorchFx.length === 1, `30.2: a beam contact emits exactly one scorch spark (${c.scorchFx.length})`);
+    const f = c.scorchFx[0];
+    ok(near(f.x, pl.x + 120, 1e-9) && near(f.y, sy, 1e-9),
+      `30.2: the spark spawns on the beam at the foe's side (contact point), not at its centre (${f.x.toFixed(2)},${f.y.toFixed(2)})`);
+    ok(seared.flash === 0, '30.2: sparks never bring a hit-flash with them');
+  }
+
+  // (5) Rate limit + cap: one foe held on the beam for 1.2 s gets ≈1 spark per scorchTick
+  // (never one per frame), a crowd stays at or below CFG.perf.scorchCap, and every spark is
+  // gone scorchLife after the beam dies.
+  {
+    const c = new Combat();
+    const pl = mkPl();
+    const sy = pl._spawnY();
+    const one = mk(pl.x + 120, sy, { hp: 1e5, maxHp: 1e5 });
+    c.fireBeam(pl, { ...L, dur: 1.2 });
+    const seen = new Set(); // identity-counted: expiries can mask a length change in the same tick
+    let maxLive = 0;
+    for (let i = 0; i < 72; i++) {
+      c.update(1 / 60, [pl], stub([one]));
+      for (const f of c.scorchFx) seen.add(f);
+      maxLive = Math.max(maxLive, c.scorchFx.length);
+    }
+    const wantMax = Math.ceil(1.2 / CFG.combat.scorchTick);
+    ok(seen.size > 0 && seen.size <= wantMax, `30.2: one foe over 1.2 s gets ≤${wantMax} sparks, not one per frame (got ${seen.size})`);
+    ok(maxLive <= Math.ceil(CFG.combat.scorchLife / CFG.combat.scorchTick) + 1,
+      `30.2: concurrent sparks on a single foe stay bounded (maxLive=${maxLive})`);
+    // dps integral over exactly the ticks the beam was live (removed on the tick where
+    // t reaches dur → 71 damaging ticks), proving the feedback path changed no mechanics.
+    ok(near(1e5 - one.hp, L.dps * (71 / 60), 1e-7),
+      `30.2: the sparks changed nothing — dps integral intact (${(1e5 - one.hp).toFixed(4)} = ${L.dps}×71 ticks)`);
+    const crowd = Array.from({ length: 120 }, (_, i) => mk(pl.x + 20 + i * 1.5, sy, { hp: 1e9, maxHp: 1e9 }));
+    const c2 = new Combat();
+    c2.fireBeam(pl, { ...L, dur: 1.2 });
+    let cap = 0;
+    for (let i = 0; i < 72; i++) { c2.update(1 / 60, [pl], stub(crowd)); cap = Math.max(cap, c2.scorchFx.length); }
+    ok(cap <= CFG.perf.scorchCap && cap === CFG.perf.scorchCap, `30.2: 120 foes on one beam stay capped at CFG.perf.scorchCap (peak=${cap})`);
+    ok(crowd.every((f) => f.flash === 0), '30.2: no foe in a capped crowd flashed');
+    c.beams.length = 0;
+    for (let i = 0; i < Math.ceil(CFG.combat.scorchLife * 60) + 2; i++) c.update(1 / 60, [pl], stub([one]));
+    ok(c.scorchFx.length === 0, `30.2: scorch sparks expire within scorchLife (${c.scorchFx.length} left)`);
+  }
+
+  // (6) Config law (rule 5): the feedback knobs live in config; the 29.5-era dead laser keys
+  // are gone (the orbit is CFG.weapons.laser.rot; the damage is per-frame, never a 0.1 s tick).
+  ok(CFG.combat.scorchTick > 0 && CFG.combat.scorchLife > 0 && CFG.combat.scorchSize > 0 && CFG.perf.scorchCap > 0,
+    `30.2: scorch knobs in config (tick=${CFG.combat.scorchTick} life=${CFG.combat.scorchLife} size=${CFG.combat.scorchSize} cap=${CFG.perf.scorchCap})`);
+  ok(CFG.combat.laserSpeed === undefined && CFG.combat.laserTick === undefined,
+    '30.2: dead 29.5 keys laserSpeed/laserTick removed (grep-proven unread by any code)');
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);

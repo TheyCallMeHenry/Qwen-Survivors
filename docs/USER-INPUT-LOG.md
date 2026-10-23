@@ -13,6 +13,39 @@
 
 ## Entries (newest first)
 
+### 2026-10-22 — Phase 30 approval: order by best practice, 2.75× tongue, spark VFX — NO flashing
+- **Received:** 2026-10-22
+- **Classification:** answer/approval
+- **Context:** answered the Phase-30 plan + its three decision questions. (This entry was found pre-written with a wrong verbatim rendering — "spark + faint hit-flash approved" — and corrected to the user's actual words; the no-flash ruling is binding.)
+- **Verbatim:**
+```
+1. Perform all tasks in an order based on development best practices.
+2. I approve the 2.75x length update for frog tongue weapon.
+3. Spark VFX approved; no flashing effects.
+```
+- **Effect:** B1→B2→B3 authorized (defects → evidence/feedback → card presentation = best-practice order); tongueRange 240→660 (2.75×); laser feedback = contact sparks ONLY, no hit-flash of any kind (D21 no-flash design for dpsTick stays intact).
+
+### 2026-10-22 — Phase 30 directives: Wolfpack targeting/CDs, laser damage doubt, Frog Tongue range, card stats mandate
+- **Received:** 2026-10-22
+- **Classification:** bug report + feature request + design decision
+- **Context:** first feedback on the published Phase-29 build (device playtest segment 1).
+- **Verbatim:**
+```
+**Regarding Wolfpack:**
+- Ensure each individual wolf companion targets different/unique targets - no real-time same-target overlap/duplication.
+- Ensure each has its own independent attack cooldown timer so that enemies entering range during mid-attack and/or cooldown of 1 wolf can still be attacked by another wolf whose attack timer's cooldown has completed.
+
+**Regarding Continuous Laser:**
+- It seems as though damage may not be triggering/ticking upon contact between any point along the continuous laser's beam(s). It appears to sweep over enemies with no noticeable damage occuring to the passed-over enemies.
+
+**Regarding Frog Tongue:**
+- Attack range of tongue should be at least 2.5x - 3x the current distance.
+
+**Regarding *ALL* Weapons:**
+- The exact attack range of each weapon should also be clearly/plainly stated within each weapon's card description.
+- Each weapon's and item's current stats (range, cooldown time/attack speed, reload speed *when applicable*, DPS/damage-per-tick/-hit *whichever makes the most sense on a per-weapon basis*).
+```
+
 ### 2026-10-22 — Branch-label concern + research mandate; later 45-day freshness restriction; then APPROVAL (D100)
 - **Received:** 2026-10-22
 - **Classification:** design decision + process rule + approval

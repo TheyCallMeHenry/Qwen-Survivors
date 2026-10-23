@@ -426,6 +426,39 @@ export function reflectFlashSprite() {
   poly(g, [[29, 34], [35, 40], [41, 34]], false); g.stroke();
   return c;
 }
+
+// 30.2: Continuous-Laser scorch spark — the ONLY feedback a D21 sear gets (the foe never
+// flashes by design). A small hot fleck burst: white-amber core, five unequal rays, and
+// three flung micro-sparks, tinted toward the beam's pink identity so it reads as the
+// laser's own contact point. Baked once; combat.draw blits it additively, popping small
+// and flaring out over CFG.combat.scorchLife.
+export function scorchSparkSprite() {
+  const c = makeCanvas(24, 24);
+  const g = c.getContext('2d');
+  const core = g.createRadialGradient(12, 12, 0.5, 12, 12, 6);
+  core.addColorStop(0, 'rgba(255,250,240,0.95)');
+  core.addColorStop(0.45, 'rgba(255,176,120,0.55)');
+  core.addColorStop(1, 'rgba(255,120,150,0)');
+  g.fillStyle = core;
+  g.beginPath(); g.arc(12, 12, 6, 0, TAU); g.fill();
+  // rays: unequal lengths + slightly unequal angles = a fleck, not a symmetric star
+  g.lineCap = 'round';
+  const rays = [[0.35, 9.5], [1.42, 6.5], [2.4, 8.5], [3.6, 5.5], [4.7, 7.5], [5.6, 4.5]];
+  for (const [a, len] of rays) {
+    g.strokeStyle = len > 7 ? 'rgba(255,222,170,0.9)' : 'rgba(255,140,160,0.8)';
+    g.lineWidth = len > 7 ? 1.6 : 1.1;
+    g.beginPath();
+    g.moveTo(12 + Math.cos(a) * 2, 12 + Math.sin(a) * 2);
+    g.lineTo(12 + Math.cos(a) * len, 12 + Math.sin(a) * len);
+    g.stroke();
+  }
+  // flung micro-sparks (the bits that read as motion)
+  g.fillStyle = 'rgba(255,236,200,0.9)';
+  g.beginPath(); g.arc(19.5, 8.5, 1.1, 0, TAU); g.fill();
+  g.beginPath(); g.arc(6.5, 16.5, 0.9, 0, TAU); g.fill();
+  g.beginPath(); g.arc(15.5, 19.5, 0.8, 0, TAU); g.fill();
+  return c;
+}
 function boulderSprite() {
   const c = makeCanvas(68, 68);
   const g = c.getContext('2d');

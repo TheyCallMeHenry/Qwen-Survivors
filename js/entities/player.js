@@ -710,7 +710,8 @@ export class Player {
 
 // --- Exact-effect card text (user rule: every card states the EXACT effect of
 // selecting it). `level` = the level the pick/buy grants. Pure + Node-tested.
-//   weapons:  per-stat deltas prev→next from the level table (Lv 1 = full stats)
+//   weapons:  the offered level's stats block (range · cadence · damage — 30.4/30.5
+//             user mandate) + per-stat deltas prev→next (Lv 1 = the block + extras)
 //   passives: this level's increment + running total
 //   synergies: full single-level effect with numbers
 //   meta:     this level's increment + running total
@@ -735,6 +736,8 @@ const round3 = (x) => Math.round(x * 1000) / 1000; // float totals (0.8*3 = 2.40
 const pct = (f) => `${Math.round(f * 1000) / 10}%`; // 0.1 → "10%", 0.30000000000000004 → "30%"
 
 // per-weapon ordered stat fields: [field, abs(v) → string, delta(a, b) → string]
+// (30.4: ringLightning's table `cd` row is dead config — the fire site reuses
+// CFG.combat.ringCd (player.js L432), so the card states ringCd, never the table.)
 const WEAPON_FIELDS = {
   wand: [
     ['count', (v) => `${v} bolt${v > 1 ? 's' : ''}`, (a, b) => `bolts ${a}→${b}`],
@@ -781,7 +784,6 @@ const WEAPON_FIELDS = {
     ['r', (v) => `blast radius ${v}`, (a, b) => `radius ${a}→${b}`],
   ],
   ringLightning: [
-    ['cd', (v) => `every ${fmtS(v)} s`, (a, b) => `every ${fmtS(a)}→${fmtS(b)} s`],
     ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
     ['jumps', (v) => `chain ${v} foe${v > 1 ? 's' : ''}`, (a, b) => `chain ${a}→${b} foes`],
   ],
@@ -853,22 +855,159 @@ const WEAPON_FIELDS = {
   ],
 };
 
+// 30.4/30.5 (user mandate): every weapon card states the OFFERED LEVEL's exact
+// attack range, cadence, and damage. Each entry is a function of (def, level-row) —
+// every number is read from CFG at render time, so cards can never drift from the
+// real behaviour (this is why e.g. ring's card now says CFG.combat.ringCd, which is
+// what the fire site actually uses, not the unused table `cd`). Range is stated in
+// plain px using the weapon's honest reach metric: the config range key where one
+// exists (wand/pistols/cannon/tongue/bat/ball-search/wolf-leash), speed×life where
+// the projectile itself is the reach (bow arrow, gatling — its bullets ride the
+// shared bullet constants; axe outbound turn-back point), and the radius/length
+// fields for auras, orbits, beams, throws, and blasts. `skip` = WEAPON_FIELDS rows
+// already covered by the stats block (they still render as L>1 deltas).
+const WEAPON_STATS = {
+  wand: {
+    range: () => `range ${CFG.combat.wandRange} px`,
+    cadence: (d, s) => `every ${fmtS(s.rate)} s`,
+    damage: (d, s) => (s.count > 1 ? `${s.dmg} dmg × ${s.count} bolts` : `${s.dmg} dmg`),
+    skip: ['count', 'rate', 'dmg'],
+  },
+  garlic: {
+    range: (d, s) => `aura radius ${s.r} px`,
+    cadence: () => `ticks every ${fmtS(CFG.combat.garlicTick)} s`,
+    damage: (d, s) => `${s.dmg} dmg per tick`,
+    skip: ['dmg', 'r'],
+  },
+  axe: {
+    // outbound leg = speed × the life kept before the turn-back (combat._axes uses axeTurnFrac)
+    range: () => `boomerang throw ${Math.round(CFG.combat.axeSpeed * CFG.combat.axeLife * (1 - CFG.combat.axeTurnFrac))} px`,
+    cadence: (d, s) => `every ${fmtS(s.cd)} s`,
+    damage: (d, s) => (s.count > 1 ? `${s.dmg} dmg per hit × ${s.count} axes` : `${s.dmg} dmg per hit`),
+    skip: ['cd', 'count', 'dmg'],
+  },
+  blades: {
+    range: (d, s) => `orbit radius ${s.rad} px`,
+    cadence: () => `shears every ${fmtS(CFG.combat.orbitTick)} s`,
+    damage: (d, s) => (s.n > 1 ? `${s.dmg} dmg per hit × ${s.n} blades` : `${s.dmg} dmg per hit`),
+    skip: ['n', 'dmg', 'rad'],
+  },
+  pistols: {
+    range: () => `range ${CFG.combat.pistolRange} px`,
+    cadence: (d, s) => `every ${fmtS(s.rate)} s`,
+    damage: (d, s) => `${s.dmg} dmg × 2 rounds`,
+    skip: ['rate', 'dmg'],
+  },
+  bombs: {
+    // the bomb LOBS at most bombDist px (targets closer land nearer); the blast is the kill zone
+    range: (d, s) => `throw ${CFG.combat.bombDist} px, blast radius ${s.r} px`,
+    cadence: (d, s) => `every ${fmtS(s.cd)} s, fuse ${fmtS(s.fuse)} s`,
+    damage: (d, s) => `${s.dmg} dmg per blast`,
+    skip: ['cd', 'dmg', 'r', 'fuse'],
+  },
+  flame: {
+    range: (d, s) => `stream reach ${s.range} px`,
+    cadence: (d, s) => `fuel ${fmtS(s.fuel)} s, recharge ${fmtS(s.recharge)} s`,
+    damage: (d, s) => `${s.tick} dmg per contact, burn ${s.dot} dmg/s for ${fmtS(s.dotDur)} s`,
+    skip: ['tick', 'dot', 'dotDur', 'range', 'fuel', 'recharge'],
+  },
+  snowball: {
+    range: (d, s) => `range ${CFG.combat.wandRange} px, blast radius ${s.r} px`,
+    cadence: (d, s) => `every ${fmtS(s.cd)} s`,
+    damage: (d, s) => `${s.dmg} dmg per burst`,
+    skip: ['cd', 'dmg', 'r'],
+  },
+  ringLightning: {
+    range: () => `range ${CFG.combat.wandRange} px, chain leaps ${CFG.combat.ringJumpR} px`,
+    cadence: () => `every ${fmtS(CFG.combat.ringCd)} s`,
+    damage: (d, s) => `${s.dmg} dmg per bolt`,
+    skip: ['dmg'],
+  },
+  bow: {
+    // no bow-specific range key: the arrow ITSELF is the reach (speed × life)
+    range: () => `arrow range ${Math.round(CFG.combat.arrowSpeed * CFG.combat.arrowLife)} px`,
+    cadence: (d, s) => `every ${fmtS(s.rate)} s, draw ${fmtS(d.charge)} s`,
+    damage: (d, s) => `${s.dmg} dmg per arrow`,
+    skip: ['rate', 'charge', 'dmg'],
+  },
+  cannon: {
+    range: (d, s) => `range ${CFG.combat.cannonRange} px, blast radius ${s.blastR} px`,
+    cadence: (d, s) => `every ${fmtS(s.cd)} s`,
+    damage: (d, s) => `${s.dmg} dmg per shell, ${Math.round(s.dmg * CFG.combat.shellBlastK)} dmg blast`,
+    skip: ['cd', 'dmg', 'blastR'],
+  },
+  laser: {
+    range: (d, s) => `beam length ${s.len} px`,
+    cadence: (d, s) => `sweeps ${fmtS(s.dur)} s, ${fmtS(s.cd)} s downtime, orbits ${Math.round((s.rot * 180) / Math.PI)}°/s`,
+    damage: (d, s) => (s.count > 1 ? `${s.dps} dmg/s × ${s.count} beams` : `${s.dps} dmg/s`),
+    skip: ['cd', 'dur', 'dps', 'len', 'count', 'rot'],
+  },
+  wolfpack: {
+    range: () => `pounce range ${CFG.combat.companionLeash} px`,
+    cadence: () => `pounces every ${fmtS(CFG.combat.companionPounceCd)} s`,
+    damage: (d, s) => `pounce ${s.dmg} dmg, bleed ${s.bleed} dmg/s for ${fmtS(s.bleedDur)} s`,
+    skip: ['dmg', 'bleed', 'bleedDur'],
+  },
+  boulder: {
+    // fires only at foes inside wandRange, then rolls until it crumbles at boulderMaxHits
+    range: () => `range ${CFG.combat.wandRange} px, rolls up to ${CFG.combat.boulderMaxHits} foes`,
+    cadence: (d, s) => `every ${fmtS(s.cd)} s, one at a time`,
+    damage: (d, s) => `${s.dmg} dmg first hit, −${Math.round((1 - CFG.combat.boulderDecay) * 100)}% per extra hit`,
+    skip: ['cd', 'dmg'],
+  },
+  webs: {
+    range: (d, s) => `range ${CFG.combat.wandRange} px, burst radius ${s.r} px`,
+    cadence: (d, s) => `every ${fmtS(s.cd)} s`,
+    damage: (d, s) => `${s.dmg} dmg per burst`,
+    skip: ['cd', 'dmg', 'r'],
+  },
+  gatling: {
+    // gatling bullets ride the shared bullet constants (combat.fireBullet)
+    range: () => `bullet range ${Math.round(CFG.combat.bulletSpeed * CFG.combat.bulletLife)} px`,
+    cadence: (d, s) => `one shot every ${fmtS(s.cd)} s, mag ${d.burst} → reload ${fmtS(d.reload)} s`,
+    damage: (d, s) => `${s.dmg} dmg per round`,
+    skip: ['cd', 'dmg', 'burst', 'reload'],
+  },
+  bat: {
+    range: () => `swing reach ${CFG.combat.batRange} px`,
+    cadence: (d, s) => `every ${fmtS(s.cd)} s`,
+    damage: (d, s) => `${s.dmg} dmg per swing, 1-in-${d.homerun} HOMERUN`,
+    skip: ['cd', 'dmg', 'homerun'],
+  },
+  tongue: {
+    range: () => `tongue reach ${CFG.combat.tongueRange} px`,
+    cadence: (d, s) => `every ${fmtS(s.cd)} s`,
+    damage: (d, s) => `${s.dmg} dmg per bite, poison ${s.poison} dmg/s for ${fmtS(s.poisonDur)} s`,
+    skip: ['cd', 'dmg', 'poison', 'poisonDur'],
+  },
+  ball: {
+    range: () => `dash range ${CFG.combat.ballSearchR} px`,
+    cadence: (d) => `every ${fmtS(d.cd)} s`,
+    damage: (d, s) => `${s.dmg} dmg first hit × ${s.hits} hits, −${Math.round((1 - CFG.combat.ballDecay) * 100)}% per bounce`,
+    skip: ['cd', 'dmg', 'hits'],
+  },
+};
+
+// Card copy = the offered level's stats block (range · cadence · damage) first; then
+// L1 renders the remaining WEAPON_FIELDS values, L>1 the per-stat prev→next deltas.
 function _weaponEffect(key, level) {
   const def = CFG.weapons[key];
   const fields = WEAPON_FIELDS[key];
-  if (!def || !fields) return '';
+  const stats = WEAPON_STATS[key];
+  if (!def || !fields || !stats) return '';
   const cur = def.levels[level - 1];
   if (!cur) return '';
-  // 23.1: flat-per-weapon scalars (bow `charge`) live on the def, not the level row —
-  // shown on the L1 full-stat card only, never as a prev→next delta.
+  const parts = [stats.range(def, cur), stats.cadence(def, cur), stats.damage(def, cur)];
   if (level <= 1) {
-    const parts = fields.map(([f, abs]) => abs(f in cur ? cur[f] : def[f]));
-    return parts.filter((s) => s !== null).join(' · ');
+    // 23.1: flat-per-weapon scalars (bow `charge`, gatling `burst`/`reload`, bat
+    // `homerun`, ball `cd`) live on the def, not the level row — reached via the
+    // `f in cur ? cur[f] : def[f]` lookup below, never as prev→next deltas.
+    const extras = fields.filter(([f]) => !stats.skip.includes(f)).map(([f, abs]) => abs(f in cur ? cur[f] : def[f]));
+    return parts.concat(extras.filter((s) => s !== null)).join(' · ');
   }
   const prev = def.levels[level - 2];
-  const parts = [];
   for (const [f, , delta] of fields) if (delta && prev[f] !== cur[f]) parts.push(delta(prev[f], cur[f]));
-  return parts.length ? parts.join(' · ') : fields.map(([f, abs]) => abs(cur[f])).join(' · ');
+  return parts.join(' · ');
 }
 
 const PASSIVE_EFFECT = {
@@ -883,9 +1022,11 @@ const PASSIVE_EFFECT = {
 
 // Phase 21 run-items (D95): `levels`-table passives — the card states the granted
 // level's behavior numbers (there is no scalar increment to total up).
+// 30.5: item cards state the granted level's current stats — shield: radius/window/
+// charges; skates: speed/glide/slide damage (all read from CFG at render time).
 const PASSIVE_ROW_EFFECT = {
-  shield: (s) => `Reflects 3 enemy projectiles every ${fmtS(s.window)} s within radius ${s.r}`,
-  skates: (s) => `+${pct(s.spd)} movement — slide hits deal ${s.slideDmg} to both`,
+  shield: (s) => `Reflects ${CFG.combat.shieldCharges} enemy projectiles every ${fmtS(s.window)} s within radius ${s.r} px`,
+  skates: (s) => `+${pct(s.spd)} movement speed, glide friction ×${s.glideK}, slide hits (≥${CFG.combat.skateSlideMin} px/s) deal ${s.slideDmg} to both`,
 };
 
 function _passiveEffect(key, level) {

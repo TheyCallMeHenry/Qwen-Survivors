@@ -195,11 +195,11 @@ export const CFG = {
       // `jumps` = enemies the chain burst leaps to when shock stacks hit max
       // (12.4: weapon levels increase the chain count).
       levels: [
-        { cd: 1.70, dmg: 30, jumps: 2 },
-        { cd: 1.55, dmg: 38, jumps: 3 },
-        { cd: 1.40, dmg: 50, jumps: 4 },
-        { cd: 1.25, dmg: 64, jumps: 5 },
-        { cd: 1.10, dmg: 82, jumps: 6 },
+        { dmg: 30, jumps: 2 },
+        { dmg: 38, jumps: 3 },
+        { dmg: 50, jumps: 4 },
+        { dmg: 64, jumps: 5 },
+        { dmg: 82, jumps: 6 },
       ],
     },
     bow: {
@@ -577,7 +577,7 @@ export const CFG = {
   combat: {
     boltSpeed: 540, boltLife: 1.5, boltR: 5, boltKb: 170,
     wandRange: 560, wandSpread: 0.16,
-    axeSpeed: 430, axeLife: 1.9, axeR: 10, axeKb: 130, axeTick: 0.30,
+    axeSpeed: 430, axeLife: 1.9, axeR: 10, axeKb: 130, axeTick: 0.30, axeTurnFrac: 0.45, // turn-back when life drops to this fraction (combat._axes; card range derives from 1−it)
     orbitSpeed: 2.4, orbitR: 9, orbitTick: 0.35, orbitKb: 190, orbitSize: 26,
     garlicTick: 0.45,
     spawnOriginFrac: 0.55, // 16.2: shared projectile spawn origin — fraction of the character sprite height above the feet (mid-torso); 1 = feet (legacy), 0 = head
@@ -622,13 +622,19 @@ export const CFG = {
     // 29.12 (2026-10-22): cannonRange = dedicated Tank Cannon acquisition + firing
     // range, 1.5× the old shared wandRange (560 → 840); the shell's life rides it too.
     shellSpeed: 460, shellR: 11, shellBlastK: 0.5, cannonRange: 840,
-    laserSpeed: 720, laserTick: 0.1,                         // Continuous Laser sweep rate + tick
+    // 30.2: Continuous Laser contact feedback (scorch sparks). The beam's damage is per-frame
+    // dpsTick (D21: deliberately no hit-flash, no knockback), so a sweeping beam reads as
+    // "nothing happening" — sparks at the contact point make the sear legible. scorchTick =
+    // minimum interval per foe (the same per-foe cd-Map idiom as orbitTick/flameHit);
+    // scorchLife/scorchSize = the blit's fade window and on-screen size. Rate + dps unchanged.
+    // (29.5-era `laserSpeed`/`laserTick` keys deleted: the orbit is CFG.weapons.laser.rot and
+    // the damage is per-frame, so both were unread by any code — grep-proven 2026-10-22.)
+    scorchTick: 0.1, scorchLife: 0.22, scorchSize: 16,
     companionLeash: 192, companionPounceCd: 2.0, companionSpeed: 380, // Wolfpack (pounce cd spec-fixed)
     boulderSpeed: 300, boulderR: 34, boulderDecay: 0.75, boulderMaxHits: 6, boulderSquishR: 12,
     webSpeed: 430, webR: 9,                                  // Web-slingers
-    gatlingSpeed: 640, gatlingLife: 0.55, gatlingR: 4,       // Gatling Gun
     batRange: 62, batKbImpulse: 520, homerunFx: 1.2,         // Baseball Bat (HOMERUN fx = fx lifetime s)
-    tongueRange: 240, tongueSpeed: 760, tonguePullDur: 0.4, tongueHealK: 0.06, tongueHealCap: 15,
+    tongueRange: 660, tongueSpeed: 760, tonguePullDur: 0.4, tongueHealK: 0.06, tongueHealCap: 15,
     ballSpeed: 620, ballDecay: 0.9, ballMaxHits: 6, ballSearchR: 260, // Cannonball (player ball-state)
     shieldCharges: 3,                                        // Mirror Shield window/r at level lookup
     skateSlideMin: 200, skateSlideLock: 0.5,                 // Ice Skates slide-damage gate
@@ -720,6 +726,7 @@ export const CFG = {
     dprCapMobile: 1.5,
     particleCap: 512,
     snowCount: 90,
+    scorchCap: 48, // 30.2: max live scorch sparks (bounded like particleCap; drops rather than delays)
     petalColor: '#f7b8c8', // sakura petal (m02 foreground)
     bubbleColor: 'rgba(205,240,255,0.8)', // rising bubble rim (m03 foreground, D49)
   },

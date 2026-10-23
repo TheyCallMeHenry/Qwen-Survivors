@@ -8,7 +8,7 @@
 // Node-safe: no canvas at top level.
 import { CFG } from '../config.js';
 import { TAU, approach, clamp, rand } from '../utils/math.js';
-import { tankBlastSprite, reflectFlashSprite } from '../art/items.js';
+import { tankBlastSprite, reflectFlashSprite, scorchSparkSprite } from '../art/items.js';
 import { buildPackWolves } from '../art/characters.js';
 
 // 29.10: lifetime of the reflect-hit flash (purely cosmetic — the reflect itself is
@@ -18,7 +18,7 @@ const REFLECT_FX = 0.32;
 // 29.9/29.10/29.12 visual art for these hooks, built ONCE per Combat instance on first
 // use (pre-rendered offscreen canvases — draw only ever blits). Kept here because
 // game.js is frozen to Phase-21 wiring; nothing gameplay-relevant depends on it.
-const buildCombatFx = () => ({ tank: tankBlastSprite(), flash: reflectFlashSprite(), wolves: buildPackWolves() });
+const buildCombatFx = () => ({ tank: tankBlastSprite(), flash: reflectFlashSprite(), wolves: buildPackWolves(), scorch: scorchSparkSprite() });
 
 export class Combat {
   constructor() {
@@ -39,6 +39,7 @@ export class Combat {
 
     this.explosions = [];
     this.reflectFx = [];  // 29.10: mirror-bursts at reflect points (visual only)
+    this.scorchFx = [];   // 30.2: laser contact sparks (visual only; bounded by CFG.perf.scorchCap)
     this._fx = null;      // 29.9/29.10/29.12: lazy baked art cache (see buildCombatFx)
     this.t = 0;
     this.enemies = null;
@@ -73,6 +74,7 @@ export class Combat {
     this._orbCd = new Map(); // enemy -> last orbiter hit time
     this._axeCd = new Map(); // enemy -> last axe hit time
     this._flameCd = new Map(); // enemy -> last flame tick time
+    this._scorchCd = new Map(); // 30.2: enemy -> last scorch-spark emission (per-foe rate limit)
     this._tempestT = 0; // tempest synergy fire timer
   }
 
@@ -90,10 +92,12 @@ export class Combat {
     this.webs.length = 0;
     this.explosions.length = 0;
     this.reflectFx.length = 0;
+    this.scorchFx.length = 0;
     this.t = 0;
     this._orbCd.clear();
     this._axeCd.clear();
     this._flameCd.clear();
+    this._scorchCd.clear();
     this._tempestT = 0;
   }
 
@@ -234,11 +238,25 @@ export class Combat {
   // first, TAU/count for the equidistant extra beams). The ORIGIN follows the owner
   // while the beam lasts. Damage flows through D21 dpsTick every frame for `dur`
   // (no flash/knockback — a sear, not a hit).
+  // 30.2: `off` arrives as the ABSOLUTE angle the fire site passed (owner._laserAng +
+  // the equidistant step), so `a0` records that moment: the live angle is then
+  // `off` + however far the orbit has moved SINCE firing (see beamAngle). Without a0
+  // the orbit angle was added twice — the beam pointed at 2× the orbit and swept at
+  // 2× the configured rot, halving the dwell any foe actually got (defect test in
+  // tools/test-logic.mjs, 30.2).
   fireBeam(owner, S, off = 0) {
     this.beams.push({
-      owner, off, t: 0, dur: S.dur,
+      owner, off, a0: owner._laserAng || 0, t: 0, dur: S.dur,
       len: S.len, w: S.w, dps: S.dps * owner.dmgMul,
     });
+  }
+
+  // The live angle of a beam, rad. Single source of truth for the damage sweep AND its
+  // visual, so the two can never drift apart again (30.2). The owner keeps _laserAng
+  // wrapped to TAU, so (live - a0) can jump by ±TAU at the wrap; harmless, because every
+  // consumer takes cos/sin of the result.
+  beamAngle(b) {
+    return b.off + (b.owner._laserAng - b.a0);
   }
 
   // Rolling Boulder: cardinal roll at fixed speed, ONE per owner (`owner._boulder`,
@@ -347,6 +365,12 @@ export class Combat {
       f.t += dt;
       if (f.t >= REFLECT_FX) this.reflectFx.splice(i, 1);
     }
+    // 30.2: same treatment for the scorch sparks (cosmetic only — the sear itself already landed)
+    for (let i = this.scorchFx.length - 1; i >= 0; i--) {
+      const f = this.scorchFx[i];
+      f.t += dt;
+      if (f.t >= CFG.combat.scorchLife) this.scorchFx.splice(i, 1);
+    }
     // 12.4: lightning arcs are short-lived visuals living on their owner player
     for (const p of players) {
       if (!p._ringBeams) continue;
@@ -424,7 +448,7 @@ export class Combat {
       if (!a.back) {
         a.x += a.vx * dt;
         a.y += a.vy * dt;
-        if (a.life <= C.axeLife * 0.45 || a.x < 40 || a.x > CFG.world.w - 40 || a.y < 40 || a.y > CFG.world.h - 40) a.back = true;
+        if (a.life <= C.axeLife * C.axeTurnFrac || a.x < 40 || a.x > CFG.world.w - 40 || a.y < 40 || a.y > CFG.world.h - 40) a.back = true;
       } else {
         const oy = player.y - player.def.h * C.spawnOriginFrac; // 16.2: returns to the mid-torso spawn origin
         const dx = player.x - a.x, dy = oy - a.y;
@@ -632,16 +656,18 @@ export class Combat {
     if (this.pulse) this.pulse('boom');
   }
 
-  // P21 laser beam (29.7/D99 orbit): the live angle is owner._laserAng + the
-  // beam's equidistant offset; every live enemy within `w` px of the segment gets
-  // its dps every frame (dpsTick = no flash/knockback, D21 kill-credit via _killer).
+  // P21 laser beam (29.7/D99 orbit): the live angle comes from beamAngle (owner's orbit
+  // delta since firing + this beam's equidistant offset); every live enemy within `w` of
+  // the segment gets its dps every frame (dpsTick = no flash/knockback, D21 kill-credit via
+  // _killer). 30.2: each touched foe also emits a scorch spark at the contact point, at most
+  // once per CFG.combat.scorchTick and never past CFG.perf.scorchCap live sparks.
   _beams(dt, enemies) {
     for (let i = this.beams.length - 1; i >= 0; i--) {
       const b = this.beams[i];
       b.t += dt;
       if (b.t >= b.dur || b.owner.dead) { this.beams.splice(i, 1); continue; }
       const ox = b.owner.x, oy = b.owner._spawnY();
-      const ang = b.owner._laserAng + b.off;
+      const ang = this.beamAngle(b);
       const ex = ox + Math.cos(ang) * b.len, ey = oy + Math.sin(ang) * b.len;
       const segx = ex - ox, segy = ey - oy;
       const l2 = segx * segx + segy * segy || 1;
@@ -655,6 +681,11 @@ export class Combat {
         if (ex2 * ex2 + ey2 * ey2 >= rr * rr) continue;
         e._killer = b.owner;
         this.dpsTick(e, b.dps * dt);
+        if (this.t - (this._scorchCd.get(e) || -10) >= CFG.combat.scorchTick &&
+          this.scorchFx.length < CFG.perf.scorchCap) {
+          this._scorchCd.set(e, this.t);
+          this.scorchFx.push({ x: cx, y: cy, t: 0, seed: rand(0, 1) });
+        }
       }
     }
   }
@@ -800,9 +831,11 @@ export class Combat {
   // grows with the weapon — rows carry `count` (1/1/2/2/3); extra wolves spawn at
   // the owner's CURRENT stats and every wolf BITES FROM THE CURRENT ROW, so an L4
   // stat-up lands on the whole pack (no per-wolf stat snapshots). Wolves never die;
-  // each hovers inside companionLeash and autonomously pounces the nearest foe
-  // (pounce cd 2.0 s spec-fixed). Targeting keeps the existing pick (_nearestTo,
-  // enemies.list scan — deliberately NOT the spatial grid, user directive 29.9).
+  // each hovers inside companionLeash and autonomously pounces the nearest UNOWNED foe
+  // (pounce cd 2.0 s spec-fixed, per-wolf independent timers). Targeting keeps the
+  // existing pick (_nearestTo, enemies.list scan — deliberately NOT the spatial grid,
+  // user directive 29.9); 30.1 adds pack-uniqueness: a ready wolf may never target a
+  // foe another of its own pack is already pouncing, so wolves never share a target.
   // _companion stays a reference to wolves[0] = the leader the 4-slot co-op tail
   // streams (clients render the leader only; extending the tail is future sync work).
   // staticPelt synergy row {jumps}: the bite adds one shock stack + a chain burst.
@@ -851,7 +884,16 @@ export class Combat {
       } else {
         c.cd -= dt;
         if (c.cd <= 0) {
-          const e = this._nearestTo(p, enemies, C.companionLeash);
+          // 30.1: a foe already owned by another of THIS pack's pouncing wolves is
+          // off-limits for the whole pounce, so the pack never piles onto one target.
+          // A ready wolf whose every in-leash foe is claimed stays ready (no steal,
+          // no stack) and grabs the first one that frees up on a later tick.
+          const taken = [];
+          for (let k = 0; k < p._wolves.length; k++) {
+            const w = p._wolves[k];
+            if (k !== wi && w.state === 'pounce' && w.target) taken.push(w.target);
+          }
+          const e = this._nearestTo(p, enemies, C.companionLeash, taken);
           if (e) { c.state = 'pounce'; c.target = e; }
         }
         // hover near the owner: only walk when drifting too far (each wolf trails
@@ -877,11 +919,13 @@ export class Combat {
     }
   }
 
-  // Nearest live enemy to (owner) within `range` (wolf pounce pick).
-  _nearestTo(p, enemies, range) {
+  // Nearest live enemy to (owner) within `range`, skipping any foe in `taken`
+  // (the wolf pounce pick — `taken` = foes another wolf of the same pack already
+  // owns; see _wolfpack 30.1). enemies.list scan, deliberately not the spatial grid.
+  _nearestTo(p, enemies, range, taken = null) {
     let best = null, bd = range * range;
     for (const e of enemies.list) {
-      if (e.dead) continue;
+      if (e.dead || (taken && taken.includes(e))) continue;
       const dx = e.x - p.x, dy = e.y - p.y;
       const d2 = dx * dx + dy * dy;
       if (d2 < bd) { bd = d2; best = e; }
@@ -1253,12 +1297,12 @@ export class Combat {
       ctx.drawImage(this.boulderImg, -this.boulderImg.width / 2, -this.boulderImg.height / 2);
       ctx.restore();
     }
-    // P21 Continuous Laser (29.7/D99): additive beam from the owner's mid-torso
-    // riding the live orbit angle (owner._laserAng + this beam's equidistant offset).
+    // P21 Continuous Laser (29.7/D99): additive beam from the owner's mid-torso riding the
+    // live orbit angle (beamAngle = the same value the damage sweep uses, 30.2).
     for (const b of this.beams) {
       if (b.owner.dead) continue;
       const ox = b.owner.x, oy = b.owner._spawnY();
-      const ang = b.owner._laserAng + b.off;
+      const ang = this.beamAngle(b);
       const ex = ox + Math.cos(ang) * b.len, ey = oy + Math.sin(ang) * b.len;
       const k = Math.min(1, b.t / 0.08); // quick ramp-in, hold, no fade-out (laser feel)
       ctx.save();
@@ -1277,6 +1321,25 @@ export class Combat {
       ctx.moveTo(ox, oy);
       ctx.lineTo(ex, ey);
       ctx.stroke();
+      ctx.restore();
+    }
+    // 30.2: scorch sparks at the laser's contact points — the sear's only visual feedback
+    // (the foe itself never flashes, D21). Pre-baked sprite, additive blit, pops small and
+    // flares out; bounded by CFG.perf.scorchCap so a beam across a crowd stays cheap.
+    if (this.scorchFx.length) {
+      if (!this._fx) this._fx = buildCombatFx();
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const f of this.scorchFx) {
+        const k = f.t / CFG.combat.scorchLife;
+        const s = CFG.combat.scorchSize * (0.55 + 0.75 * k);
+        ctx.globalAlpha = 1 - k;
+        ctx.save();
+        ctx.translate(f.x, f.y);
+        ctx.rotate(f.seed * TAU); // per-spark orientation: one baked sprite, no two pops alike
+        ctx.drawImage(this._fx.scorch, -s / 2, -s / 2, s, s);
+        ctx.restore();
+      }
       ctx.restore();
     }
     // 12.4: Ring of Chain Lightning arcs (jagged bolt from spawn/last-link to target +
