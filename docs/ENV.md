@@ -16,7 +16,8 @@ Owned here; never re-narrated in PROGRESS.md.
 - Branch layout: `main` (Pages source, published) + one permanent work branch `dev` (D100 — renamed from `overnight-2026-08-22` on 2026-10-22; never re-dated); commit/push only on explicit user ask (AGENTS rule 7).
 - **Push from the agent shell works** (harness push succeeded 2026-09-04, session-log entry for `e502417`/`e5e9469`/`68c455e`). No credential workaround needed.
 - **Pages staleness = the standing test-channel trap:** the user's only test channel is the published Pages build, which serves `main` only. Work-branch commits are invisible to the user until an explicit ff-merge + push to `main`. When the user reports "feature X missing," check whether it is unpublished before auditing code (D73 lesson, 2026-08-28).
-- Repo is **public** — never commit user-private content; `human-user-notes_AI-agent-ignore/` is off-limits and gitignored.
+- Repo is **public** — never commit user-private content; `human-user-notes_AI-agent-ignore/` is off-limits and gitignored. User-owned untracked material to leave alone: `docs/user-playtest-notes/`, `docs/videos/` (playtest recordings, e.g. the 2026-10-23 FPS-test mp4).
+- **Canonical Pages URL (the user's test channel): https://theycallmehenry.github.io/Qwen-Survivors/** — `?fps=1` appends the live FPS readout (29.1 device measure). Publish verification recipe (always after pushing `main`): fresh cache-buster per probe, e.g. `curl -s "https://theycallmehenry.github.io/Qwen-Survivors/js/config.js?cb=$(date +%s)" | grep -c <new-build-marker>` — expect ≥1 for a marker unique to the new build; Pages build takes ~1 min, so retry once after a short sleep before concluding stale.
 
 ## Server
 

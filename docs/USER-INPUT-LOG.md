@@ -13,8 +13,8 @@
 
 ## Entries (newest first)
 
-### 2026-10-22 — Phase 30 approval: order by best practice, 2.75× tongue, spark VFX — NO flashing
-- **Received:** 2026-10-22
+### 2026-10-23 — Phase 30 approval: order by best practice, 2.75× tongue, spark VFX — NO flashing
+- **Received:** 2026-10-23 (turn followed the directives entry same day; P30 executed + committed 13:25 on 10-23 per commit %cI)
 - **Classification:** answer/approval
 - **Context:** answered the Phase-30 plan + its three decision questions. (This entry was found pre-written with a wrong verbatim rendering — "spark + faint hit-flash approved" — and corrected to the user's actual words; the no-flash ruling is binding.)
 - **Verbatim:**
@@ -25,8 +25,8 @@
 ```
 - **Effect:** B1→B2→B3 authorized (defects → evidence/feedback → card presentation = best-practice order); tongueRange 240→660 (2.75×); laser feedback = contact sparks ONLY, no hit-flash of any kind (D21 no-flash design for dpsTick stays intact).
 
-### 2026-10-22 — Phase 30 directives: Wolfpack targeting/CDs, laser damage doubt, Frog Tongue range, card stats mandate
-- **Received:** 2026-10-22
+### 2026-10-23 — Phase 30 directives: Wolfpack targeting/CDs, laser damage doubt, Frog Tongue range, card stats mandate
+- **Received:** 2026-10-23 (after the 2026-10-22 18:51 P29 record-sync + the Pages-URL question; exact turn clock not captured, execution same day)
 - **Classification:** bug report + feature request + design decision
 - **Context:** first feedback on the published Phase-29 build (device playtest segment 1).
 - **Verbatim:**
