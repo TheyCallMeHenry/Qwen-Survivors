@@ -13,6 +13,41 @@
 
 ## Entries (newest first)
 
+### 2026-10-23 — Balance directives + publish order (boss HP +30%, Gatling bullet dmg −25%)
+- **Received:** 2026-10-23
+- **Classification:** feature request (balance tuning) + answer/approval (publish ask answered)
+- **Context:** additional adjustments on top of Phase 31, then explicit commit/push/publish order.
+- **Verbatim:**
+```
+More adjustments to make: 
+1. The base max health of all stage bosses should be increased 30% from their current max. 
+2. The per-bullet gatling gun base damage should be decreased by 25%.
+3. After implementing these additional changes proceed to commit, push, and publish to GH pages.
+```
+
+### 2026-10-23 — Missile lock ruling: Option A (HP-first), nearest-first rejected
+- **Received:** 2026-10-23 (after agent-chain results + the HP-table answer to the user's question)
+- **Classification:** design decision
+- **Context:** resolved the flagged ambiguity in "the nearest enemy with the most remaining health" (31.4).
+- **Verbatim:**
+```
+No - I do not want nearest + most remaining health for Hooking Missiles. Do different event types have different HP totals?
+```
+```
+Option A was what I was originally intending / had attempted to describe.
+```
+
+### 2026-10-23 — Phase 31 approval + notes-section confirmation
+- **Received:** 2026-10-23 (after the full-coverage video re-review same day)
+- **Classification:** answer/approval
+- **Context:** answered the two pending questions: the serial-agent plan (D→C→T→M→S) and which notes-file section was meant (the “2026-10-26 NEW NOTES” header, not a 10-23 section).
+- **Verbatim:**
+```
+Proceed based on your recommendations
+
+Correct, I meant 2026-10-26
+```
+
 ### 2026-10-23 — Phase 30 approval: order by best practice, 2.75× tongue, spark VFX — NO flashing
 - **Received:** 2026-10-23 (turn followed the directives entry same day; P30 executed + committed 13:25 on 10-23 per commit %cI)
 - **Classification:** answer/approval

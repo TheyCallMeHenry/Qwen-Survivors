@@ -61,6 +61,7 @@
         <button id="btn-character" class="btn">Character</button>
         <button id="btn-upgrades" class="btn">Upgrades</button>
         <button id="btn-scores" class="btn">High Scores</button>
+        <button id="btn-settings" class="btn">Settings</button>
         <button id="btn-quit" class="btn">Quit</button>
         <button id="btn-coop" class="btn">Co-op: Join</button>
       </div>
@@ -108,6 +109,23 @@
     </div>
   </div>
 
+  <!-- SETTINGS (31.5 — main-menu audio settings; rows built in screens.js via the shared hud.js builders) -->
+  <div id="screen-settings" class="screen hidden">
+    <div class="panel-box">
+      <h2 class="screen-title">Settings</h2>
+      <div class="settings">
+        <button id="mm-set-mute" class="set-row" aria-pressed="false">
+          <span class="set-label">Mute</span>
+          <span class="set-val" id="mm-set-mute-val">Off</span>
+        </button>
+        <div id="mm-vol-rows" class="vol-rows"></div>
+      </div>
+      <div class="menu-buttons menu-row">
+        <button id="btn-settings-back" class="btn btn-primary">Back</button>
+      </div>
+    </div>
+  </div>
+
   <!-- PAUSE -->
   <div id="screen-pause" class="screen hidden">
     <div class="panel-box">
@@ -128,6 +146,7 @@
           <span class="set-label">Mute</span>
           <span class="set-val" id="set-mute-val">Off</span>
         </button>
+        <div id="pause-vol-rows" class="vol-rows"></div>
       </div>
     </div>
   </div>

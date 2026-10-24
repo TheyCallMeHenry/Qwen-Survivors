@@ -76,6 +76,10 @@ export const CFG = {
   // View zoom (13.8): camera-view factor — 0.80 = zoomed out (×1.56 area) / 1.0 = full view.
   // Touch default 0.80 (D13), persisted per-browser; HUD DOM + minimap always stay 1×.
   zoom: { touch: 0.8, full: 1.0, key: 'qsurv.zoom.v1' },
+  // Per-category volumes (31.5, user spec): the settings sliders, 0..1 multipliers applied
+  // on top of the internal mix in CFG.audio (sfxVol/musicVol/ambVol stay the tuning base).
+  // Defaults 1/1/1; persisted at key. Master mute is separate (scores.muteKey) — unchanged.
+  volumes: { key: 'qsurv.volumes.v1', effects: 1, music: 1, background: 1 },
   ui: { bannerMs: 2600 }, // banner hold before the next queued banner shows (CSS bannerIn 2.6 s)
 
   menu: {
@@ -220,18 +224,28 @@ export const CFG = {
     },
     // ---- Phase 21 (D96) — nine new weapons; stat tables verbatim from
     // docs/phase21-resolutions-2026-10-20.md §B (user-approved 2026-10-20) ----
+    // 31.4 (user notes 2026-10-26, lines 85-90): the weapon was renamed and reworked
+    // into the "Homing Missile". KEY → DISPLAY: `cannon` = "Homing Missile" — this is
+    // the single mapping; the key itself (and the combat `shell*` knobs, `cannonRange`,
+    // the `cannon` icon key, the `shell` sprite key, fireShell/shells/`heShell`) stay
+    // STABLE: renaming ids would ripple through synergy `requires`, saved runs, and the
+    // WEAPON_FIELDS/WEAPON_STATS/battery tables for zero behavioral clarity.
     cannon: {
-      name: 'Tank Cannon',
-      // 29.12 (2026-10-22): text corrected to the real behaviour (pierce through the
-      // first foe, terminal detonation on the second) — user-requested wording.
-      desc: 'Fires a heavy shell that punches through one foe, then detonates on the next.',
+      name: 'Homing Missile',
+      // 31.4: card text states the real behaviour (lock → home → detonate); the honest
+      // range/cadence/damage lines are generated from CFG by WEAPON_STATS. Supersedes the
+      // 29.12 punch-through wording — the user retired that mechanic.
+      desc: 'Fires a slow missile that locks onto the toughest foe in range, homes in, and explodes on contact.',
       icon: 'cannon',
       levels: [
-        { cd: 2.6, dmg: 90, blastR: 70 },
-        { cd: 2.4, dmg: 115, blastR: 76 },
-        { cd: 2.2, dmg: 145, blastR: 82 },
-        { cd: 2.0, dmg: 180, blastR: 88 },
-        { cd: 1.8, dmg: 225, blastR: 95 },
+        // 31.4 (user): blast area +25% → blastR ×1.25 per level (task ruling: multiply
+        // the radius). cd/dmg structure UNCHANGED (Phase 23 law: change only what the
+        // user names). Old rows for the diff: 70/76/82/88/95.
+        { cd: 2.6, dmg: 90, blastR: 87.5 },
+        { cd: 2.4, dmg: 115, blastR: 95 },
+        { cd: 2.2, dmg: 145, blastR: 102.5 },
+        { cd: 2.0, dmg: 180, blastR: 110 },
+        { cd: 1.8, dmg: 225, blastR: 118.75 },
       ],
     },
     laser: {
@@ -303,12 +317,14 @@ export const CFG = {
       desc: '40-round buzzsaw bursts — pea-shooter damage, then a 3 s reload.',
       icon: 'gatling',
       burst: 40, reload: 3.0, // spec-fixed (Phase 21 verbatim): growth stays in the table
+      // 31.8 (user directive 2026-10-23): per-round base dmg −25% at every level
+      // (exact ×0.75 kept — the honest card line is generated from these numbers).
       levels: [
-        { cd: 0.075, dmg: 4, spread: 0.16 },
-        { cd: 0.075, dmg: 5, spread: 0.14 },
-        { cd: 0.070, dmg: 6, spread: 0.12 },
-        { cd: 0.065, dmg: 7, spread: 0.11 },
-        { cd: 0.060, dmg: 9, spread: 0.10 },
+        { cd: 0.075, dmg: 3, spread: 0.16 },
+        { cd: 0.075, dmg: 3.75, spread: 0.14 },
+        { cd: 0.070, dmg: 4.5, spread: 0.12 },
+        { cd: 0.065, dmg: 5.25, spread: 0.11 },
+        { cd: 0.060, dmg: 6.75, spread: 0.10 },
       ],
     },
     bat: {
@@ -443,8 +459,12 @@ export const CFG = {
     },
     // ---- Phase 21 (D96) — five new synergies (doc §E, user-approved) ----
     heShell: {
+      // 31.4: only the REFERENCED WEAPON NAME in copy is updated ("Tank Cannon" no
+      // longer exists); the ignite-on-blast mechanic is untouched (user did not name it).
+      // The synergy's name/key ("Shells of Perdition" / `heShell`) awaits the user's
+      // ruling — flagged 31.4, not decided here.
       name: 'Shells of Perdition',
-      desc: 'Tank Cannon blasts now set every caught foe alight.',
+      desc: 'Homing Missile explosions now set every caught foe alight.',
       icon: 'heShell', requires: ['cannon', 'flame'],
       levels: [
         { dps: 12, dur: 2.5 }, { dps: 16, dur: 2.75 }, { dps: 20, dur: 3.0 },
@@ -553,9 +573,10 @@ export const CFG = {
     wolf:    { hp: 65,   speed: [175, 205], dmg: 15, xp: 3,  r: 14, score: 30, fps: 8 },
     brute:   { hp: 280,  speed: [62, 78],   dmg: 25, xp: 5,  r: 22, score: 60, fps: 3 },
     cultist: { hp: 55,   speed: [75, 95],   dmg: 10, xp: 3,  r: 13, score: 30, ranged: true, fps: 4 },
-    wraith:  { hp: 2400, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
-    ryu:     { hp: 2400, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
-    shark:   { hp: 2400, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
+    // 31.7 (user directive 2026-10-23): all stage bosses' base max HP +30% (2400 → 3120).
+    wraith:  { hp: 3120, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
+    ryu:     { hp: 3120, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
+    shark:   { hp: 3120, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
   },
 
   ai: {
@@ -619,9 +640,14 @@ export const CFG = {
     flameWobAmp: 14, flameWobFreq: 9, flameHit: 0.22,
 
     // Phase 21 (D96) — new-weapon mechanics knobs (per-level damage lives in CFG.weapons)
-    // 29.12 (2026-10-22): cannonRange = dedicated Tank Cannon acquisition + firing
-    // range, 1.5× the old shared wandRange (560 → 840); the shell's life rides it too.
-    shellSpeed: 460, shellR: 11, shellBlastK: 0.5, cannonRange: 840,
+    // 29.12 (2026-10-22): cannonRange = dedicated acquisition + re-lock range, 1.5× the
+    // old shared wandRange (560 → 840). 31.4: it now gates ONLY the lock-on search
+    // (the missile itself is bounded by the fuse below, not by range).
+    // 31.4 (user, "~30% slower"): shellSpeed 460 ×0.7 = 322 EXACT (460×0.7, single
+    // source). missileFuse = hard 10 s per-missile auto-detonate (notes line 89: an
+    // expired fuse detonates in place as if it had hit an enemy; a re-lock NEVER resets
+    // it). Keys `shell*` belong to the Homing Missile (see the weapons.cannon mapping).
+    shellSpeed: 322, shellR: 11, shellBlastK: 0.5, cannonRange: 840, missileFuse: 10,
     // 30.2: Continuous Laser contact feedback (scorch sparks). The beam's damage is per-frame
     // dpsTick (D21: deliberately no hit-flash, no knockback), so a sweeping beam reads as
     // "nothing happening" — sparks at the contact point make the sear legible. scorchTick =
@@ -636,6 +662,11 @@ export const CFG = {
     batRange: 62, batKbImpulse: 520, homerunFx: 1.2,         // Baseball Bat (HOMERUN fx = fx lifetime s)
     tongueRange: 660, tongueSpeed: 760, tonguePullDur: 0.4, tongueHealK: 0.06, tongueHealCap: 15,
     ballSpeed: 620, ballDecay: 0.9, ballMaxHits: 6, ballSearchR: 260, // Cannonball (player ball-state)
+    // 31.2 (user spec 2026-10-26): next-bounce input steering — full cone angle in degrees
+    // around the last held movement direction (0 = steering off); ballLosStep = sample spacing
+    // of the straight-line reachability test that stops the ball pinning on a collider and
+    // "bouncing into nothing" for the rest of its arc (31.2 defect).
+    ballSteerCone: 30, ballLosStep: 40,
     shieldCharges: 3,                                        // Mirror Shield window/r at level lookup
     skateSlideMin: 200, skateSlideLock: 0.5,                 // Ice Skates slide-damage gate
   },
@@ -727,6 +758,8 @@ export const CFG = {
     particleCap: 512,
     snowCount: 90,
     scorchCap: 48, // 30.2: max live scorch sparks (bounded like particleCap; drops rather than delays)
+    frameHist: 300, // 31.1: ?fps=1 frame-time ring size (percentile window ≈ last 5 s at 60 Hz)
+    perfWindowMs: 1000, // 31.1: ?fps=1 recompute/display interval (percentiles cost only here)
     petalColor: '#f7b8c8', // sakura petal (m02 foreground)
     bubbleColor: 'rgba(205,240,255,0.8)', // rising bubble rim (m03 foreground, D49)
   },

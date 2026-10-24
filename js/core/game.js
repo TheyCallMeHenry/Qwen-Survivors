@@ -14,7 +14,7 @@ import { Pickups, escapeFromSpots } from '../entities/pickups.js';
 import { Enemies } from '../entities/enemies.js';
 import { Combat } from '../entities/combat.js';
 import { Player, cardOffers, applyCard, recomputeStats, charDef, skipXp } from '../entities/player.js';
-import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, loadSelectedLevel, isUnlocked, loadZoom, saveZoom, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations, buyAction } from './meta.js';
+import { loadMeta, saveMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, loadSelectedLevel, isUnlocked, loadZoom, saveZoom, loadVolumes, saveVolumes, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations, buyAction } from './meta.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint } from '../entities/spawner.js';
 import { getLevel, LEVEL_ORDER } from '../world/levels.js';
 import { buildCharacters } from '../art/characters.js';
@@ -129,6 +129,9 @@ export class Game {
     this._reskinPickups();
     // View zoom (13.8): touch default 0.80 / desktop 1.0, persisted (qsurv.zoom.v1).
     this.zoom = loadZoom(CFG.zoom.key, document.body.classList.contains('touch'));
+    // Per-category volumes (31.5): 0..1 multipliers, persisted (qsurv.volumes.v1);
+    // master mute is separate (CFG.scores.muteKey path — semantics unchanged).
+    this.volumes = loadVolumes(CFG.volumes.key);
     this.cw = 0;
     this.ch = 0;
 
@@ -181,6 +184,15 @@ export class Game {
     this.zoom = z;
     saveZoom(CFG.zoom.key, z);
     this._applyZoom();
+  }
+
+  // Volumes (31.5): the single setter path every settings slider uses — clamp, persist,
+  // then emit 'volumes' so the audio graph re-reads and re-applies live (no restart).
+  setVolume(cat, v) {
+    if (!(cat in this.volumes)) return;
+    this.volumes[cat] = clamp(Number(v) || 0, 0, 1);
+    saveVolumes(CFG.volumes.key, this.volumes);
+    this.bus.emit('volumes');
   }
 
   // Per-level pickup tint (13.10): gem/heart follow the level.

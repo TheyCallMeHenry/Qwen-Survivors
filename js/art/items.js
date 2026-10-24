@@ -321,14 +321,14 @@ function explosionSprite() {
   return c;
 }
 
-// Phase 21 (D96) projectile sprites — shell (rotates, faces +x), boulder
+// Phase 21 (D96) projectile sprites — 31.4: `shell` is the Homing Missile projectile
+// (rotates, faces +x — id kept, see the config weapons.cannon key mapping), boulder
 // (rotates, centered), web knot (no rotation).
-function shellSprite() {
-  // 29.12 (visual half): the Tank Cannon shell must READ in flight — the old 20×12
-  // dark-grey dash vanished against any tile, leaving the blast as the only cue.
-  // Now: bigger steel body with a hot nose, copper band, tail fins, and a baked
-  // fading tracer tail (same language as the bolt/bullet/arrow trails — the eye
-  // follows the shell all the way to its 840 px terminal detonation).
+function missileSprite() {
+  // 31.4 Homing Missile projectile (re-bakes the 29.12 shell): ogive warhead with a
+  // red nose, copper band, swept tail fins, a lit exhaust nozzle, and the SAME baked
+  // fading tracer tail as the bolt/bullet/arrow — the eye follows the missile all the
+  // way to its impact or its 10 s detonation (29.12's read-in-flight lesson unchanged).
   const c = makeCanvas(36, 14);
   const g = c.getContext('2d');
   // tracer tail: transparent at the back, amber heat where the body starts
@@ -338,37 +338,55 @@ function shellSprite() {
   tr.addColorStop(1, 'rgba(255,214,130,0.75)');
   g.strokeStyle = tr; g.lineWidth = 5.5; g.lineCap = 'round';
   g.beginPath(); g.moveTo(2, 7); g.lineTo(19, 7); g.stroke();
-  // tail fins above/below the body's aft end
-  g.fillStyle = '#39424b';
-  poly(g, [[17, 4], [13, 0.5], [17, 6.5]]); g.fill();
-  poly(g, [[17, 10], [13, 13.5], [17, 7.5]]); g.fill();
-  // body: steel gradient, pointed nose toward +x (rotation anchor is the centre)
+  // exhaust flame at the nozzle (aft = −x): small hot plume
+  const ex = g.createLinearGradient(13.5, 7, 19.5, 7);
+  ex.addColorStop(0, 'rgba(255,120,30,0)'); ex.addColorStop(1, 'rgba(255,232,150,0.9)');
+  g.fillStyle = ex;
+  poly(g, [[13.5, 7], [19.5, 4.4], [19.5, 9.6]]);
+  // swept tail fins above/below the aft end (missile cue, vs the shell's straight fins)
+  g.fillStyle = '#8f3226';
+  poly(g, [[19.5, 3.4], [15.5, 0.5], [20.5, 6]]);
+  poly(g, [[19.5, 10.6], [15.5, 13.5], [20.5, 8]]);
+  g.fill();
+  // body: steel tube with an ogive warhead, nose toward +x (rotation anchor is the centre)
   const st = g.createLinearGradient(0, 2, 0, 12);
-  st.addColorStop(0, '#b7c2cf'); st.addColorStop(0.45, '#788491'); st.addColorStop(1, '#333b45');
+  st.addColorStop(0, '#cfd8e3'); st.addColorStop(0.45, '#8794a2'); st.addColorStop(1, '#3a434e');
   g.fillStyle = st;
   g.beginPath();
-  g.moveTo(16, 4);
-  g.lineTo(26, 3.6);
-  g.quadraticCurveTo(34.5, 7, 26, 10.4);
-  g.lineTo(16, 10);
+  g.moveTo(19.5, 3.4);
+  g.lineTo(27, 3.4);
+  g.quadraticCurveTo(35.5, 7, 27, 10.6);
+  g.lineTo(19.5, 10.6);
   g.closePath();
   g.fill();
-  g.strokeStyle = 'rgba(10,14,20,0.85)'; g.lineWidth = 1.2; g.stroke();
-  // copper driving band
-  g.fillStyle = '#c8863f'; g.fillRect(19, 3.8, 3.6, 6.4);
-  g.fillStyle = '#8f5c26'; g.fillRect(19, 8.6, 3.6, 1.6);
-  // specular along the top deck + a white-hot nose
+  // warhead: red nose cap over the ogive
+  g.fillStyle = '#c0492f';
+  g.beginPath();
+  g.moveTo(29, 3.5); g.lineTo(27, 3.4);
+  g.quadraticCurveTo(35.5, 7, 27, 10.6); g.lineTo(29, 10.5);
+  g.quadraticCurveTo(33.5, 7, 29, 3.5);
+  g.closePath();
+  g.fill();
+  // copper band at the warhead base + specular along the top deck
+  g.fillStyle = '#c8863f'; g.fillRect(24.6, 3.5, 2.8, 7);
   g.strokeStyle = 'rgba(235,244,255,0.7)'; g.lineWidth = 1.2; g.lineCap = 'round';
-  g.beginPath(); g.moveTo(18, 4.6); g.quadraticCurveTo(26, 4.2, 30.5, 6); g.stroke();
-  g.fillStyle = 'rgba(255,240,200,0.95)';
-  g.beginPath(); g.arc(32.5, 7, 1.8, 0, TAU); g.fill();
+  g.beginPath(); g.moveTo(21, 4.4); g.quadraticCurveTo(27, 4.1, 30.5, 5.4); g.stroke();
+  g.strokeStyle = 'rgba(10,14,20,0.85)'; g.lineWidth = 1.2;
+  g.beginPath();
+  g.moveTo(19.5, 3.4);
+  g.lineTo(27, 3.4);
+  g.quadraticCurveTo(35.5, 7, 27, 10.6);
+  g.lineTo(19.5, 10.6);
+  g.closePath();
+  g.stroke();
   return c;
 }
 
-// 29.12: Tank Cannon terminal blast — a HARD-EDGED eight-spike shock star over a
-// gunmetal smoke ring, vs the Sunder bomb's soft round fireball. Shape (spikes +
-// ring vs smooth orb) and palette (steel-white core over ember) differ; combat.draw
-// gives it a snap-out-then-slam timing rhythm. Build-time only; consumed by combat's
+// 29.12 (tag kept 31.4): the Homing Missile terminal blast — a HARD-EDGED eight-spike
+// shock star over a gunmetal smoke ring, vs the Sunder bomb's soft round fireball.
+// Shape (spikes + ring vs smooth orb) and palette (steel-white core over ember)
+// differ; combat.draw gives it a snap-out-then-slam timing rhythm. Build-time only;
+// consumed by combat's
 // lazy fx cache (game.js does not wire it — the visual hookup lives in combat.js).
 export function tankBlastSprite() {
   const c = makeCanvas(128, 128);
@@ -1771,21 +1789,36 @@ export function buildIcons() {
 
   // ================= PHASE 21 — WEAPONS (9) ==============================
   icons.cannon = make('weapon', (g) => {
-    // Heavy cannon barrel, muzzle up-right + a copper-banded shell at the breech
-    const st = g.createLinearGradient(16, 56, 50, 22);
-    st.addColorStop(0, '#252b33'); st.addColorStop(0.55, '#4a5560'); st.addColorStop(1, '#6d7a86');
-    g.strokeStyle = st; g.lineWidth = 13; g.lineCap = 'round';
-    seg(g, [[20, 54], [46, 26]]);
-    g.strokeStyle = 'rgba(10,14,20,0.85)'; g.lineWidth = 2; // barrel seam
-    seg(g, [[22, 52], [44, 28]]);
-    g.strokeStyle = '#8b98a5'; g.lineWidth = 4; // muzzle ring
-    seg(g, [[47.5, 24], [52, 28]]);
-    seg(g, [[43, 28.5], [47.5, 33]]);
-    // copper-banded shell beside the breech
-    g.fillStyle = '#c8863f'; g.beginPath(); g.arc(52, 50, 7, 0, TAU); g.fill();
-    g.fillStyle = '#8f5c26'; g.fillRect(45, 48.4, 14, 3.2);
-    g.fillStyle = 'rgba(255,225,170,0.85)'; g.beginPath(); g.arc(49.5, 47.5, 2.2, 0, TAU); g.fill();
-    glint(g, 55, 20, 3.2, 'rgba(180,220,255,0.7)');
+    // 31.4 Homing Missile: an airborne missile in flame trailing a lock-on reticle over
+    // its nose — reads as "tracks and detonates", not a barrel (the old Tank Cannon
+    // barrel is retired; icon key `cannon` kept — see the config weapons.cannon mapping).
+    g.save();
+    g.translate(30, 38); g.rotate(-0.72); // flying up-right
+    // exhaust plume behind the body
+    const fl = g.createLinearGradient(-30, 0, -13, 0);
+    fl.addColorStop(0, 'rgba(255,140,40,0)'); fl.addColorStop(0.6, 'rgba(255,170,70,0.7)'); fl.addColorStop(1, 'rgba(255,235,160,0.95)');
+    g.fillStyle = fl;
+    poly(g, [[-30, 0], [-13, -6.5], [-13, 6.5]]);
+    // swept tail fins
+    g.fillStyle = '#8f3226';
+    poly(g, [[-13, -4], [-20, -11.5], [-7, -4]]);
+    poly(g, [[-13, 4], [-20, 11.5], [-7, 4]]);
+    g.fill();
+    // steel body + copper band + red warhead
+    const st = g.createLinearGradient(0, -7, 0, 7);
+    st.addColorStop(0, '#cfd8e3'); st.addColorStop(0.5, '#778493'); st.addColorStop(1, '#333c47');
+    g.fillStyle = st;
+    roundRectPath(g, -13, -6.5, 28, 13, 4); g.fill();
+    g.fillStyle = '#c8863f'; g.fillRect(9, -6.5, 3, 13);
+    g.fillStyle = '#c0492f';
+    g.beginPath(); g.moveTo(14, -6.5); g.quadraticCurveTo(27, 0, 14, 6.5); g.closePath(); g.fill();
+    g.restore();
+    // lock-on reticle (four corner brackets + pip) around the nose point — the homing cue
+    const bx = 50, by = 20, s = 10, o = 4;
+    g.strokeStyle = '#8fd3ff'; g.lineWidth = 2.4; g.lineCap = 'round';
+    for (const [sx, sy] of [[1, -1], [-1, -1], [1, 1], [-1, 1]])
+      seg(g, [[bx + sx * s, by + sy * (s - o)], [bx + sx * s, by + sy * s], [bx + sx * (s - o), by + sy * s]]);
+    glint(g, bx, by, 2.6, 'rgba(180,220,255,0.85)');
   });
 
   icons.laser = make('weapon', (g) => {
@@ -2176,8 +2209,9 @@ export function buildItems() {
     bomb: bombSprite(),
     flame: flameSprite(),
     explosion: explosionSprite(),
-    // Phase 21 (D96) projectile sprites
-    shell: shellSprite(),
+    // Phase 21 (D96) projectile sprites — 31.4: `shell` = the Homing Missile projectile
+    // (sprite id kept stable; combat reads items.shell — see the config weapons.cannon mapping)
+    shell: missileSprite(),
     boulder: boulderSprite(),
     web: webSprite(),
     burn: burnSprite(),

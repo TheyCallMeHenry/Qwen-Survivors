@@ -771,6 +771,47 @@ assert(byId['touch-ui'].hidden === true, '22.10: #touch-ui visible during MENU')
   assert(localStorage.getItem(CFG.scores.muteKey) === '0', 'settings mute: un-mute did not persist');
 }
 
+// 31.5 — Settings from the main menu + per-category volume sliders in both panels:
+// presence, labels, persistence through the single game.setVolume path, mute stays
+// independent of the category values, and panels re-sync each other on open.
+{
+  // drive a stub range input: set .value, then fire the registered 'input' handlers
+  const drag = (el, v) => { el.value = v; (el._ls.input || []).forEach((f) => f()); };
+  byId['btn-settings'].click(); pump(30);
+  assert(!byId['screen-settings'].classList.contains('hidden'), '31.5: main-menu Settings screen not shown on btn-settings');
+  assert(byId['screen-menu'].classList.contains('hidden'), '31.5: menu not hidden under the Settings overlay');
+  const mmRows = byId['mm-vol-rows'].children;
+  assert(mmRows.length === 3, `31.5: main-menu Settings shows ${mmRows.length} volume rows (want 3)`);
+  assert(mmRows[0].children[0].textContent === 'Effects' && mmRows[1].children[0].textContent === 'Music' && mmRows[2].children[0].textContent === 'Background',
+    '31.5: slider rows not labelled Effects/Music/Background');
+  assert(mmRows[0].children[1].type === 'range', '31.5: slider row not a native range input');
+  const sld = mmRows[0].children[1];
+  drag(sld, '0.5');
+  assert(game.volumes.effects === 0.5, '31.5: effects slider did not reach game.setVolume');
+  assert(JSON.parse(localStorage.getItem(CFG.volumes.key)).effects === 0.5, '31.5: effects volume not persisted to qsurv.volumes.v1');
+  assert(mmRows[0].children[2].textContent === '50%', '31.5: slider row value readout not updated');
+  byId['mm-set-mute'].click(); pump(30);
+  assert(localStorage.getItem(CFG.scores.muteKey) === '1', '31.5: main-menu mute row does not mute');
+  assert(byId['mm-set-mute'].classList.contains('muted'), '31.5: main-menu mute row not marked muted');
+  assert(JSON.parse(localStorage.getItem(CFG.volumes.key)).effects === 0.5, '31.5: mute clobbered the per-category values');
+  byId['mm-set-mute'].click(); pump(30);
+  assert(localStorage.getItem(CFG.scores.muteKey) === '0', '31.5: main-menu un-mute failed');
+  byId['btn-settings-back'].click(); pump(30);
+  assert(!byId['screen-menu'].classList.contains('hidden'), '31.5: Settings Back did not return to the menu');
+  // pause-panel rows exist (built at init) and drive the same setter + cross-panel sync
+  const pRows = byId['pause-vol-rows'].children;
+  assert(pRows.length === 3, `31.5: pause-panel volume rows missing (${pRows.length})`);
+  const psld = pRows[0].children[1];
+  drag(psld, '0.75');
+  assert(game.volumes.effects === 0.75, '31.5: pause slider did not reach game.setVolume');
+  byId['btn-settings'].click(); pump(30);
+  assert(sld.value === '0.75', '31.5: main-menu slider not re-synced to the pause-panel change on reopen');
+  byId['btn-settings-back'].click(); pump(30);
+  // restore defaults so the following run flow is unaffected
+  drag(sld, '1');
+  assert(game.volumes.effects === 1, '31.5: volume reset failed');
+}
+
 // 29.2 — zoom must REACH THE RASTER: root cause of "zero difference between Full view and Zoomed
 // out" is that render() never scaled the enlarged view (visible area was zoom-independent). The
 // composition check: view width × zoom must equal the canvas width exactly (the scale pass maps
@@ -1065,7 +1106,7 @@ assert(pumpUntil(() => game.bossSpawned, 20 * 60 * 60), `m02 run: Ryū never spa
 const ryuBosses = game.enemies.list.filter((e) => e.boss);
 const ryuBoss = ryuBosses[0];
 assert(ryuBosses.length === 1 && ryuBoss && ryuBoss.type === 'ryu', 'm02 boss is not the Ryū (solo = exactly 1, 11.10)');
-assert(ryuBoss.hp === 3000 && ryuBoss.dmg === 35, 'Ryū stats not ×1.25 (3000/35 expected)');
+assert(ryuBoss.hp === 3900 && ryuBoss.dmg === 35, 'Ryū stats not ×1.25 (3900/35 expected — 31.7 base 3120)');
 assert(m02Banners.includes('RYŪ AWAKENS'), 'm02 boss banner did not name Ryū');
 assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
   `m02 run: expected victory, got state=${game.state} t=${game.t.toFixed(1)}s`);
@@ -1102,7 +1143,7 @@ assert(pumpUntil(() => game.bossSpawned, 20 * 60 * 60), `m03 run: Great White ne
 const sharkBosses = game.enemies.list.filter((e) => e.boss);
 const sharkBoss = sharkBosses[0];
 assert(sharkBosses.length === 1 && sharkBoss && sharkBoss.type === 'shark', 'm03 boss is not the Great White (solo = exactly 1, 11.10)');
-assert(sharkBoss.hp === 3744 && sharkBoss.dmg === 43.68, 'Great White stats not ×1.56 (3744/43.68 expected)');
+assert(sharkBoss.hp === 4867.2 && sharkBoss.dmg === 43.68, 'Great White stats not ×1.56 (4867.2/43.68 expected — 31.7 base 3120)');
 assert(m03Banners.includes('THE GREAT WHITE AWAKENS'), 'm03 boss banner did not name the Great White');
 assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
   `m03 run: expected victory, got state=${game.state} t=${game.t.toFixed(1)}s`);
@@ -1980,7 +2021,8 @@ m03RunDone = true;
   };
   const fireP = () => pP.update(1 / 60, { x: 0, y: 0 }, gP.combat, gP.enemies, gP.world);
 
-  // --- Tank Cannon: full punch through the first foe, SECOND terminates in the blast ---
+  // --- Homing Missile (31.4, ex-Tank Cannon): locks the NEAREST foe, homes in, and
+  // explodes on impact — direct hit on the lock; the blast still catches the neighbour ---
   resetP21();
   pP.x = 400; pP.y = 600;
   {
@@ -1990,13 +2032,15 @@ m03RunDone = true;
     pP.weapons.cannon = 1;
     let t = 0;
     while (!gP.combat.shells.length && t < 60) { regridP(); fireP(); t++; }
-    assert(gP.combat.shells.length === 1, 'P21 cannon: shell spawn');
+    assert(gP.combat.shells.length === 1 && gP.combat.shells[0].target === c1,
+      'P31.4 missile: spawns and locks onto the nearest foe');
     t = 0;
     while (gP.combat.shells.length && t < 120) { regridP(); gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
     assert(gP.combat.shells.length === 0 && 1e6 - c1.hp > 0 && 1e6 - c2.hp > 0,
-      `P21 cannon: shell consumed at the second foe; punch + blast both bite (c1=${(1e6 - c1.hp).toFixed(0)} c2=${(1e6 - c2.hp).toFixed(0)})`);
+      `P31.4 missile: consumed by the impact blast; direct hit + blast both bite (c1=${(1e6 - c1.hp).toFixed(0)} c2=${(1e6 - c2.hp).toFixed(0)})`);
   }
-  // --- Shells of Perdition: the blast ignites every caught foe with the row's burn ---
+  // --- Shells of Perdition: the missile's impact blast STILL ignites every caught foe
+  // with the row's burn (31.4 kept the synergy mechanic untouched; only the weapon moved) ---
   resetP21();
   pP.x = 400; pP.y = 600;
   {
@@ -2238,7 +2282,16 @@ m03RunDone = true;
   pP.x = 400; pP.y = 600; pP.hp = pP.maxHp;
   {
     gP.combat.damagePlayer = dmgBakP; // the real i-frame gate is what's under test here
-    const e = mkFoeP('goblin', pP.x + 200, pP.y);
+    // 31.2 LOS gate: a fixed offset can sit behind a seed-placed landmark collider, and the
+    // ball then (correctly) refuses to engage — that was the recurring "cannonball flake".
+    // Place the goblin on the first line-of-sight-clear offset using the game's own oracle;
+    // this block tests engagement/i-frames, not where a goblin happened to be legal.
+    let ePos = null;
+    for (const [ox, oy] of [[200, 0], [0, 200], [-200, 0], [0, -200], [140, 140], [-140, 140], [140, -140], [-140, -140], [300, 0], [0, 300], [-300, 0], [0, -300]]) {
+      if (pP._reachClear(ox, oy, ox * ox + oy * oy, gP.world)) { ePos = [pP.x + ox, pP.y + oy]; break; }
+    }
+    assert(ePos, 'P21 cannonball: an LOS-clear goblin placement exists near the player (harness precondition)');
+    const e = mkFoeP('goblin', ePos[0], ePos[1]);
     pP.weapons.ball = 5;
     let t = 0;
     while (!pP._ball && t < 30) { regridP(); fireP(); t++; }
@@ -3362,5 +3415,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 8 weapons (wand-off kill window) · ` +
   `all 8 weapons observed live (bolts/axes/blades/garlic/bullets/bombs/flames/arrows) · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 12.8 per-synergy E2Es (flamingArrows burn-on-hit · heartPiercer bonus+pierce exactly 1 extra · blueFlame freeze+burn on burst · stormVolley 4th-volley both-rounds strike + chain shock) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · 14 in-run Soulshards counter (live floor(score/400) projection, change-detected) + 14.2 unified co-op earnings (run-level total rides the room close, client accrues in full, meta player-specific)P21 boot battery (9 new weapons + 2 item-passives live: cannon punch→blast + heShell ignite · laser orbit sear no-kb (continuous rotation while idle, 180°/120° multi-beam) · wolfpack pounce/bleed/leash/staticPelt shock + pack growth 1/1/2/2/3 · Coffee cdMul on boulder+laser cds · boulder squish/decay/one-at-a-time/avalanche stacks · web burst hold · gatling mag→reload→full-mag refill · bat knockback + HOMERUN KO branch (rand-pinned) · tongue poison/drag/eat-heal with gutFeast ×mul · cannonball roll self-propelled + i-frame gate open/close; Mirror Shield reflect+bank+spend; Ice Skates glide drift + slide-hits-both with re-hit lock; 5 new chars selectable: pre-owned starter, zero passives, per-char hp/dmg; 5 fused synergies offered across 60 seeds; P21 sprite draw pass) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · 14 in-run Soulshards counter (live floor(score/400) projection, change-detected) + 14.2 unified co-op earnings (run-level total rides the room close, client accrues in full, meta player-specific)P21 boot battery (9 new weapons + 2 item-passives live: cannon lock→home→detonate + heShell ignite · laser orbit sear no-kb (continuous rotation while idle, 180°/120° multi-beam) · wolfpack pounce/bleed/leash/staticPelt shock + pack growth 1/1/2/2/3 · Coffee cdMul on boulder+laser cds · boulder squish/decay/one-at-a-time/avalanche stacks · web burst hold · gatling mag→reload→full-mag refill · bat knockback + HOMERUN KO branch (rand-pinned) · tongue poison/drag/eat-heal with gutFeast ×mul · cannonball roll self-propelled + i-frame gate open/close; Mirror Shield reflect+bank+spend; Ice Skates glide drift + slide-hits-both with re-hit lock; 5 new chars selectable: pre-owned starter, zero passives, per-char hp/dmg; 5 fused synergies offered across 60 seeds; P21 sprite draw pass) · loop alive throughout`,
 );

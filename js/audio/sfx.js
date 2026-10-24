@@ -4,9 +4,13 @@
 // Graph: SFX/music/amb buses -> compressor -> master. Mute state lives in
 // localStorage (CFG.scores.muteKey, owned by hud.js); re-read here at init and
 // on the 'mute' bus event, applied as master gain (zeroed, never persisted).
+// 31.5: each bus carries the CFG.audio internal mix × the persisted user multiplier
+// (CFG.volumes, re-read on 'volumes') — the sliders scale live, mute stays the one
+// authoritative silence on master.
 // Top-level side-effect free (Node-importable via tools/check.mjs).
 
 import { CFG } from '../config.js';
+import { loadVolumes } from '../core/meta.js';
 
 const A = CFG.audio;
 
@@ -23,6 +27,7 @@ export function initSfx(game) {
   let ctx = null;
   let graph = null;
   let muted = readMuted();
+  let vols = loadVolumes(CFG.volumes.key); // effects/music/background multipliers (0..1)
 
   function readMuted() {
     try { return localStorage.getItem(CFG.scores.muteKey) === '1'; } catch { return false; }
@@ -48,8 +53,10 @@ export function initSfx(game) {
     comp.release.value = 0.25;
     const master = ctx.createGain();
     master.gain.value = muted ? 0 : 1;
+    // Bus gain = internal mix (CFG.audio) × user multiplier (31.5). The mix values stay
+    // the tuning record; the sliders only scale each category relative to it.
     const mk = (v) => { const g = ctx.createGain(); g.gain.value = v; g.connect(comp); return g; };
-    graph = { master, sfx: mk(A.sfxVol), music: mk(A.musicVol), amb: mk(A.ambVol), noise: makeNoise(1) };
+    graph = { master, sfx: mk(A.sfxVol * vols.effects), music: mk(A.musicVol * vols.music), amb: mk(A.ambVol * vols.background), noise: makeNoise(1) };
     comp.connect(master);
     master.connect(ctx.destination);
   }
@@ -60,6 +67,17 @@ export function initSfx(game) {
     const t = ctx.currentTime;
     graph.master.gain.cancelScheduledValues(t);
     graph.master.gain.setTargetAtTime(v ? 0 : 1, t, 0.02);
+  }
+
+  // Re-read persisted multipliers and ramp the three buses live (31.5). Same
+  // re-reads-never-writes pattern as mute (D8); master path untouched.
+  function applyVols() {
+    if (!ctx || !graph) return;
+    const t = ctx.currentTime;
+    for (const [node, base, mul] of [[graph.sfx, A.sfxVol, vols.effects], [graph.music, A.musicVol, vols.music], [graph.amb, A.ambVol, vols.background]]) {
+      node.gain.cancelScheduledValues(t);
+      node.gain.setTargetAtTime(base * mul, t, 0.02);
+    }
   }
 
   // --- voice helpers (dest = a bus gain node) ---
@@ -187,6 +205,7 @@ export function initSfx(game) {
   bus.on('gem', () => play('gem'));
   bus.on('denied', () => play('denied'));
   bus.on('mute', () => setMuted(readMuted()));
+  bus.on('volumes', () => { vols = loadVolumes(CFG.volumes.key); applyVols(); });
 
   const update = () => {
     if (ctx) {
@@ -200,5 +219,6 @@ export function initSfx(game) {
     update,
     ctx: () => ctx,
     gain: (n) => (graph ? graph[n] : null),
+    vols: () => ({ ...vols }),
   };
 }

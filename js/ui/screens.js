@@ -4,10 +4,13 @@
 // polling is the reliable source of truth); the bus drives transients
 // ('banner', 'hurt', 'cards', 'gameover').
 // High scores persist in localStorage (CFG.scores).
+// 31.5: main-menu Settings overlay — mute row + per-category volume sliders, built with
+// the same helpers the pause panel uses (imported from hud.js — one wiring path, no twin).
 
 import { CFG } from '../config.js';
 import { fmtTime } from '../utils/math.js';
 import { upgradeCost, actionCost, isUnlocked, saveSelectedLevel, isCharUnlocked } from '../core/meta.js';
+import { buildVolumeRows, bindMuteRow } from './hud.js';
 import { LEVELS, LEVEL_ORDER } from '../world/levels.js';
 import { cardEffectText } from '../entities/player.js';
 import { selChar } from '../net/coop.js';
@@ -76,7 +79,12 @@ export function initScreens(game, { icons }) {
     gameover: $('screen-gameover'),
     quit: $('screen-quit'),
     upgrades: $('screen-upgrades'),
+    settings: $('screen-settings'),
   };
+  // 31.5 — main-menu Settings rows: built once at init (hud's mute-LS toggle is already
+  // registered by then, so this row only reads/syncs); re-synced every time it opens.
+  const mmVolSync = buildVolumeRows(game, $('mm-vol-rows'));
+  bindMuteRow(game, $('mm-set-mute'), $('mm-set-mute-val'));
   const banner = $('banner');
   const hurtFlash = $('hurt-flash');
   const cardsEl = $('cards');
@@ -97,7 +105,7 @@ export function initScreens(game, { icons }) {
   const { max } = CFG.scores;
 
   let cur = '';
-  let overlay = null; // 'scores' | 'select' | 'quit' | 'upgrades' | null — local overlays above the menu
+  let overlay = null; // 'scores' | 'select' | 'quit' | 'upgrades' | 'settings' | null — local overlays above the menu
   let hurtTimer = null;
   let bannerQueue = [];
   let bannerAt = 0;
@@ -610,6 +618,8 @@ export function initScreens(game, { icons }) {
   on('btn-scores', () => { renderScores(); overlay = 'scores'; });
   on('btn-upgrades', () => { renderUpgrades(); overlay = 'upgrades'; });
   on('btn-upgrades-back', () => { overlay = null; });
+  on('btn-settings', () => { mmVolSync(); overlay = 'settings'; }); // re-sync sliders to current values on open
+  on('btn-settings-back', () => { overlay = null; });
   on('btn-quit', attemptClose);
   on('btn-clear-scores', () => { saveScores(scoreKeyFor(game.selectedLevelKey || LEVEL_ORDER[0]), [], max); renderScores(); });
   on('btn-scores-back', () => { overlay = null; });

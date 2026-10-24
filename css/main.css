@@ -538,6 +538,24 @@ body.touch .kbd-only { display: none; }
 .set-row.on .set-val, .set-row.muted .set-val { color: var(--accent2); }
 .meta-row .btn[disabled] { opacity: 0.45; cursor: default; transform: none; }
 
+/* Settings volume sliders (31.5) — rows built by hud.buildVolumeRows into .vol-rows
+   (pause panel + main-menu Settings). 72 px input height = mobile-parity touch target;
+   the visual track/thumb are repainted small so the row stays readable. */
+.vol-rows { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+input.vol-slider {
+  flex: 1; min-width: 130px; height: 72px; margin: -10px 0; /* negative vertical only: keep the 72 px touch height without inflating the row or overlapping the readout */
+  -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer;
+}
+input.vol-slider::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--line); }
+input.vol-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 40px; height: 40px; margin-top: -16px;
+  border-radius: 50%; background: var(--accent2); border: 2px solid var(--panel);
+}
+input.vol-slider::-moz-range-track { height: 8px; border-radius: 4px; background: var(--line); }
+input.vol-slider::-moz-range-thumb {
+  width: 40px; height: 40px; border-radius: 50%; background: var(--accent2); border: 2px solid var(--panel);
+}
+
 /* level up cards (26.2 overhaul: kind accent language weapon=teal · passive=amber · synergy=violet) */
 #screen-levelup { flex-direction: column; gap: 22px; background: rgba(5, 7, 15, 0.6); }
 .levelup-title {

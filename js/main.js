@@ -2,7 +2,7 @@
 // Node-safe: only the final boot() call is guarded so tools/check.mjs can import this module.
 
 import { CFG } from './config.js';
-import { Loop } from './core/loop.js';
+import { Loop, PerfCounters } from './core/loop.js';
 import { Input } from './core/input.js';
 import { Game } from './core/game.js';
 import { buildCharacters } from './art/characters.js';
@@ -56,21 +56,37 @@ function boot() {
   const sfx = initSfx(game);
   const music = initMusic(game, sfx);
 
-  // 29.1 (diagnostic): ?fps=1 shows a live frame-rate readout so the user can
-  // measure on their own phone/desktop (Node-side sim was clean; early-run lag
-  // points to device fill cost). URL-gated, DOM-only, one update/second — the
-  // render pipeline is untouched. (A CFG config entry would live in config.js,
-  // outside this task's write scope; the URL param is the gate.)
+  // 31.1 (diagnostic v2): ?fps=1 reports honest frame pacing and game speed. The 29.1
+  // rAF-count average is replaced — it was proven blind (showed 60.0 through a 15 s
+  // frozen screen; docs/fps-test-video-review-2026-10-23.md §C). Now: frame-time
+  // p50/p95/p99 (ms), the sim/wall ratio decomposed per the loop.js PerfCounters
+  // identity (advanced/intended/lost/idle), and a LoAF summary when the browser
+  // supports it. URL-gated, DOM-only; off-URL the loop path is untouched (loop.perf stays null).
   if (new URLSearchParams(location.search).get('fps') === '1') {
     const el = document.createElement('div');
-    el.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:9999;padding:2px 8px;background:rgba(0,0,0,.55);color:#7CFC00;font:14px monospace;pointer-events:none';
+    el.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:9999;padding:4px 8px;background:rgba(0,0,0,.55);color:#7CFC00;font:12px monospace;white-space:pre;pointer-events:none';
     document.body.appendChild(el);
-    let last = 0, lastT = performance.now();
+    const perf = new PerfCounters({ step: loop.step });
+    loop.perf = perf;
+    const t0 = performance.now();
+    perf.beginWindow(t0, loop.acc);
+    let loaf = false;
+    try { // feature-detect: throws on browsers without LoAF (Firefox/Safari) — histogram + ratio still work
+      const po = new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) perf.longFrame(e.duration);
+      });
+      po.observe({ type: 'long-animation-frame', buffered: true });
+      loaf = true;
+    } catch { /* no LoAF — the readout says so instead of misattributing stalls (research doc §E4) */ }
+    const ms = (v) => Math.round(v * 100) / 100;
     setInterval(() => {
-      const n = loop.frames, t = performance.now();
-      el.textContent = `${Math.round(((n - last) * 10000) / (t - lastT)) / 10} fps · ${canvas.width}×${canvas.height}px`;
-      last = n; lastT = t;
-    }, 1000);
+      const s = perf.sample(performance.now(), loop.acc); // percentiles computed once per window here
+      const lost = s.lostClamp + s.lostCap;
+      el.textContent =
+        `p50 ${ms(s.p50)}ms p95 ${ms(s.p95)}ms p99 ${ms(s.p99)}ms · ${s.frames} frames · ${canvas.width}×${canvas.height}px\n` +
+        `sim/wall ${Math.round(s.ratio * 1000) / 1000}x — adv ${ms(s.advanced)}s + intended ${ms(s.intended)}s + lost ${ms(lost)}s + idle ${ms(s.idle)}s = wall ${ms(s.wall)}s\n` +
+        (loaf ? `LoAF: ${s.loafN} long frames, max ${Math.round(s.loafMax)}ms` : 'LoAF: unsupported here');
+    }, CFG.perf.perfWindowMs);
   }
 
   addEventListener('resize', resize);

@@ -2,6 +2,8 @@
 // Owns #btn-pause / #btn-dash wiring + Pause-menu Settings rows (#set-zoom / #set-mute).
 // Mute state lives in localStorage (CFG.scores.muteKey); the audio modules (Phase 5)
 // re-read it on the 'mute' bus event. (13.8: mute moved from the HUD button to Settings.)
+// 31.5: exports bindMuteRow + buildVolumeRows — the shared settings wiring the main-menu
+// Settings screen reuses; volume state lives in game.volumes via the single setVolume path.
 // 11.7 — Co-op corner panels: #hud-left is ALWAYS the SEAT-0 panel (solo seat 0 = local
 // player, so solo is unchanged); seats 1–3 = generated .seat-panel corners (TR/BL/BR),
 // one per seated player in join order (A5). Display-only — the input controls
@@ -29,6 +31,60 @@ export function loadoutRows(pl) {
     collect(CFG.weapons, pl.weapons, 'weapon'),
     [...collect(CFG.synergies, pl.synergies, 'synergy'), ...collect(CFG.passives, pl.passives, 'passive')],
   ];
+}
+
+// Category slider rows (31.5): config-ordered so both panels render the same order/labels.
+const VOLUME_ROWS = [['effects', 'Effects'], ['music', 'Music'], ['background', 'Background']];
+
+// Build one settings panel's volume slider rows (Effects / Music / Background) into `root`.
+// Both the pause panel and the main-menu Settings screen call it, so every slider shares
+// one wiring path into game.setVolume (the single setter: clamp + persist + 'volumes').
+// Built dynamically like the level-select cards, so the two panels coexist without
+// duplicate DOM ids. Handlers read the slider's .value directly (never the event args),
+// so headless boot stubs can drive them. Returns sync(): re-reads game.volumes into the
+// rows — call it when a panel opens, so panels always show the current values.
+export function buildVolumeRows(game, root) {
+  const rows = [];
+  for (const [cat, label] of VOLUME_ROWS) {
+    const row = document.createElement('div');
+    row.className = 'set-row';
+    const lab = document.createElement('span');
+    lab.className = 'set-label';
+    lab.textContent = label;
+    const slider = document.createElement('input');
+    slider.type = 'range'; slider.min = '0'; slider.max = '1'; slider.step = '0.05';
+    slider.value = String(game.volumes[cat]);
+    slider.className = 'vol-slider';
+    slider.setAttribute('aria-label', `${label} volume`);
+    const val = document.createElement('span');
+    val.className = 'set-val';
+    const showVal = () => { val.textContent = `${Math.round(Number(slider.value) * 100)}%`; };
+    showVal();
+    slider.addEventListener('input', () => { game.setVolume(cat, slider.value); showVal(); });
+    row.append(lab, slider, val);
+    root.append(row);
+    rows.push({ cat, slider, showVal });
+  }
+  const sync = () => { for (const r of rows) { r.slider.value = String(game.volumes[r.cat]); r.showVal(); } };
+  return sync;
+}
+
+// Bind a mute toggle row to the existing toggle path (click → input.queueMute → bus).
+// Shared by the pause row and the main-menu Settings row (31.5): the LS write is owned by
+// the single 'mute' handler in initHud, registered BEFORE any bind, so a bound row never
+// writes LS itself — N bound rows never double-toggle. Re-syncs on every 'mute'.
+export function bindMuteRow(game, row, val) {
+  const muted = () => { try { return localStorage.getItem(CFG.scores.muteKey) === '1'; } catch { return false; } };
+  const sync = () => {
+    const m = muted();
+    val.textContent = m ? 'On' : 'Off';
+    row.classList.toggle('muted', m);
+    row.setAttribute('aria-pressed', m ? 'true' : 'false');
+  };
+  sync();
+  row.addEventListener('click', () => game.input.queueMute());
+  game.bus.on('mute', sync);
+  return sync;
 }
 
 export function initHud(game, { icons } = {}) {
@@ -243,18 +299,16 @@ export function initHud(game, { icons } = {}) {
   syncZoom();
 
   const muted = () => { try { return localStorage.getItem(CFG.scores.muteKey) === '1'; } catch { return false; } };
-  const syncMute = () => {
-    const m = muted();
-    setMuteVal.textContent = m ? 'On' : 'Off';
-    setMute.classList.toggle('muted', m);
-    setMute.setAttribute('aria-pressed', m ? 'true' : 'false');
-  };
-  syncMute();
-  setMute.addEventListener('click', () => input.queueMute());
+  // The one authoritative mute-LS toggle (D8). Registered before every bindMuteRow sync
+  // (hud inits before screens, 31.5) so the write lands first and all rows re-read it.
   game.bus.on('mute', () => {
     try { localStorage.setItem(CFG.scores.muteKey, muted() ? '0' : '1'); } catch { /* private mode */ }
-    syncMute();
   });
+  bindMuteRow(game, setMute, setMuteVal);
+
+  // Per-category volume sliders (31.5): pause panel rows, built through the shared
+  // builder; re-synced whenever a run-state panel (re)opens so values always show truth.
+  const pauseVolSync = buildVolumeRows(game, $('pause-vol-rows'));
 
   // --- per-frame (called from the render hook) ---
   let cdStr = '';
@@ -269,6 +323,7 @@ export function initHud(game, { icons } = {}) {
       hud.setAttribute('aria-hidden', show ? 'false' : 'true');
       // 22.10: the touch dash ring lived on every screen (body.touch alone) — gate it to run states.
       touchUi.hidden = !show;
+      if (show) pauseVolSync(); // 31.5: pause-panel sliders re-read the current values on open
     }
     if (!show) return;
     const coop = !!(game.net && game.netRole !== 'solo');

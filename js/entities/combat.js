@@ -29,7 +29,8 @@ export class Combat {
     this.flames = [];
     this.arrows = [];
     this.snowballs = []; // 12.3: lobbed snowballs (bomb-style flight, burst ON impact)
-    // Phase 21 (D96): Tank Cannon shells, laser beams, Rolling Boulders, web strands.
+    // Phase 21 (D96) / 31.4: Homing Missile projectiles (id `shells` kept — see the
+    // config weapons.cannon key mapping), laser beams, Rolling Boulders, web strands.
     // Wolfpack / Mirror Shield state lives ON the owning player (p._wolves + the
     // p._companion leader ref, p._boulder, p._shieldBank) so the snapshot tail + ownership follow the player.
     this.shells = [];
@@ -53,7 +54,7 @@ export class Combat {
     this.snowballImg = null; // 12.3
     this.frostImg = null;    // 12.3: small frost burst for the snowball impact
     this.sparkImg = null;    // 12.4: lightning spark at a bolt's strike point
-    this.shellImg = null;    // P21: cannon shell
+    this.shellImg = null;    // P21/31.4: Homing Missile projectile (key `shell` kept)
     this.boulderImg = null;  // P21: rolling boulder
     this.webImg = null;      // P21: web strand
     this.explosionImg = null;
@@ -215,21 +216,45 @@ export class Combat {
 
   // ---- Phase 21 weapon primitives (tables in CFG.weapons, mechanics here) ----
 
-  // Tank Cannon shell: pierces the FIRST foe at full damage, terminates in the
-  // SECOND with an AoE blast (dmg × CFG.combat.shellBlastK in blastR). `ignite`
-  // (Shells of Perdition synergy row {dps,dur}) makes the blast set the blast radius
-  // burning; lifetime = CFG.combat.cannonRange at shell speed (29.12: the dedicated
-  // 1.5× Tank Cannon range, no longer the shared wandRange).
-  fireShell(x, y, ang, dmg, blastR, ignite = null, owner = null) {
+  // 31.4 Homing Missile (was the P21 Tank Cannon shell): `target` is the foe the
+  // missile locks onto at launch (pick it with shellTarget); the missile homes, and on
+  // reaching it deals direct dmg + an AoE blast (dmg × CFG.combat.shellBlastK in
+  // blastR — same numbers as the old terminal hit). `ignite` (Shells of Perdition row
+  // {dps,dur}) makes that blast set every caught foe burning. `tried` accumulates every
+  // foe ever locked so a re-lock goes to the NEXT one. Flight time = the hard 10 s
+  // CFG.combat.missileFuse — never reset by a re-lock.
+  fireShell(x, y, ang, dmg, blastR, ignite = null, owner = null, target = null) {
     const C = CFG.combat;
     this.shells.push({
       x, y,
       vx: Math.cos(ang) * C.shellSpeed,
       vy: Math.sin(ang) * C.shellSpeed,
       rot: ang, dmg, blastR, ignite, owner,
-      hit: new Set(),
-      life: C.cannonRange / C.shellSpeed + 0.1,
+      target, tried: new Set(),
+      life: C.missileFuse,
     });
+  }
+
+  // Lock-on rule (31.4, notes lines 87/89). The phrase "the nearest enemy with the most
+  // remaining health" was ambiguous; the user ruled Option A on 2026-10-23 (USER-INPUT-LOG):
+  // MOST REMAINING HP wins; exact-HP ties are broken by nearest (nearest-first was explicitly
+  // rejected). Distance is measured from (x, y): the player at launch, the missile itself on
+  // every re-lock; candidates must sit within CFG.combat.cannonRange and not be in `exclude`
+  // (the missile's `tried` set, so a re-lock goes to the NEXT-highest-HP foe — the notes'
+  // "next nearest enemy with the highest remaining health" read the same way). Consequence
+  // the user accepted (Option pile-on, asked before implementing): several missiles converge
+  // on the same toughest foe until it dies.
+  shellTarget(x, y, enemies, exclude = null) {
+    let best = null, bd = 0;
+    const r2 = CFG.combat.cannonRange * CFG.combat.cannonRange;
+    for (const e of enemies.list) {
+      if (e.dead || (exclude && exclude.has(e))) continue;
+      const dx = e.x - x, dy = e.y - y;
+      const d = dx * dx + dy * dy;
+      if (d > r2) continue;
+      if (!best || e.hp > best.hp || (e.hp === best.hp && d < bd)) { best = e; bd = d; }
+    }
+    return best;
   }
 
   // Continuous Laser (29.7/D99): beams ride the owner's live orbit — the angle is
@@ -606,37 +631,46 @@ export class Combat {
     if (this.pulse) this.pulse('boom');
   }
 
-  // P21 Tank Cannon: straight flight; full damage through the first foe, and the
-  // SECOND terminates it in the blast (explode-style: radial kb + optional ignite).
+  // 31.4 Homing Missile: track the locked foe at fixed speed (velocity is SET toward
+  // it each tick — a pure pursuit, no per-frame allocation beyond the once-at-launch
+  // `tried` set); on reaching it, direct damage + terminal blast (the old second-foe
+  // math, unchanged). A dead lock re-locks to the NEXT nearest (never a foe already
+  // tried); with nothing to lock the missile flies straight until the 10 s fuse (or the
+  // world edge) detonates it IN PLACE, "as if it had hit an enemy" (notes line 89).
   _shells(dt, enemies) {
     const C = CFG.combat;
     for (let i = this.shells.length - 1; i >= 0; i--) {
       const b = this.shells[i];
+      b.life -= dt;
+      if (b.target && b.target.dead) { b.tried.add(b.target); b.target = null; }
+      if (!b.target) b.target = this.shellTarget(b.x, b.y, enemies, b.tried);
+      if (b.target) {
+        const dx = b.target.x - b.x, dy = b.target.y - b.y;
+        const d = Math.hypot(dx, dy) || 1;
+        b.vx = (dx / d) * C.shellSpeed;
+        b.vy = (dy / d) * C.shellSpeed;
+      }
       b.x += b.vx * dt;
       b.y += b.vy * dt;
-      b.life -= dt;
+      b.rot = Math.atan2(b.vy, b.vx);
       let gone = b.life <= 0 || b.x < 0 || b.x > CFG.world.w || b.y < 0 || b.y > CFG.world.h;
-      if (!gone) {
-        for (const e of enemies.grid.near(b.x, b.y)) {
-          if (e.dead || b.hit.has(e)) continue;
-          const rr = e.r + C.shellR;
-          const dx = e.x - b.x, dy = e.y - b.y;
-          if (dx * dx + dy * dy >= rr * rr) continue;
-          b.hit.add(e);
+      let boomed = false;
+      if (!gone && b.target) {
+        const e = b.target, rr = e.r + C.shellR;
+        const dx = e.x - b.x, dy = e.y - b.y;
+        if (dx * dx + dy * dy < rr * rr) {
           this.damageEnemy(e, b.dmg, b.vx / C.shellSpeed, b.vy / C.shellSpeed, 0, b.owner);
-          if (b.hit.size >= 2) {
-            this._shellBlast(b, enemies); // spec: the SECOND foe takes direct dmg + terminates in the blast
-            gone = true;
-            break;
-          }
+          this._shellBlast(b, enemies); // impact = direct hit + the terminal AoE
+          gone = true; boomed = true;
         }
       }
+      if (gone && !boomed) this._shellBlast(b, enemies); // fuse/world-edge: detonate in place (no direct hit — there is no foe)
       if (gone) this.shells.splice(i, 1);
     }
   }
 
-  // Blast at the shell's terminal impact: shellBlastK × direct dmg in blastR, plus
-  // the Shells of Perdition burn when the shooter had it.
+  // Blast at a missile's terminal detonation: shellBlastK × direct dmg in blastR, plus
+  // the Shells of Perdition burn when the shooter had it (mechanics unchanged 31.4).
   _shellBlast(b, enemies) {
     const C = CFG.combat;
     // 29.12: `tank` tags this blast for its own sprite + rhythm in draw (visual only;
@@ -1144,7 +1178,8 @@ export class Combat {
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
       ctx.restore();
     }
-    // P21 Tank Cannon shells (same rotated-sprite pattern as bolts)
+    // 31.4 Homing Missile sprites (same rotated-sprite pattern as bolts; the `shell`
+    // sprite key and the `tank` blast tag are kept as stable ids — config key mapping).
     if (this.shellImg) for (const b of this.shells) {
       ctx.save();
       ctx.translate(b.x, b.y);
@@ -1250,9 +1285,9 @@ export class Combat {
         // so the blast read smaller than what it hurt for its first third. Now the
         // flash starts AT the true radius and only expands while fading out (≥1.0× floor).
         const s = x.r * 2 * (1 + 0.25 * k);
-        // 29.12: the Tank Cannon blast is visually DISTINCT from Sunder bombs —
-        // hard-edged shock-star sprite (above), snap-out expansion, then a SLAM
-        // fade (vs the bomb's slow linear fade). Shape + rhythm differ, not just hue.
+        // 29.12 (tag kept 31.4): the Homing Missile blast is visually DISTINCT from
+        // Sunder bombs — hard-edged shock-star sprite (above), snap-out expansion, then
+        // a SLAM fade (vs the bomb's slow linear fade). Shape + rhythm differ, not just hue.
         if (x.tank) {
           if (!this._fx) this._fx = buildCombatFx();
           const ts = x.r * 2 * (1 + 0.5 * Math.min(1, k * 2.4)); // snap out, then hold

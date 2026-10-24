@@ -139,6 +139,31 @@ export function saveZoom(key, z) {
   try { localStorage.setItem(key, String(z)); } catch { /* private mode */ }
 }
 
+// 31.5 — per-category volume multipliers (settings sliders, 0..1). Same storage pattern as
+// loadZoom/saveZoom: absent/invalid → CFG defaults (all 1), stored numbers clamped to [0,1].
+export function defaultVolumes() {
+  const { effects, music, background } = CFG.volumes;
+  return { effects, music, background };
+}
+
+export function loadVolumes(key) {
+  const d = defaultVolumes();
+  try {
+    const raw = JSON.parse(localStorage.getItem(key));
+    if (raw && typeof raw === 'object') {
+      for (const c of Object.keys(d)) {
+        const v = Number(raw[c]);
+        if (Number.isFinite(v)) d[c] = Math.min(1, Math.max(0, v));
+      }
+    }
+  } catch { /* private mode / garbage */ }
+  return d;
+}
+
+export function saveVolumes(key, vols) {
+  try { localStorage.setItem(key, JSON.stringify(vols)); } catch { /* private mode */ }
+}
+
 // Character unlocks (11.6.2, D58): the starter is always unlocked; the rest are
 // bought with Soulshards (cost in CFG.characters). Distinct from the map 3×-win
 // unlocks (D46) — same Soulshard economy as the Upgrades shop.

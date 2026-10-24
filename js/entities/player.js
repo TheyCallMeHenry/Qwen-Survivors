@@ -4,6 +4,9 @@
 import { CFG } from '../config.js';
 import { approach, clamp, rand, TAU } from '../utils/math.js';
 
+// Read-only empty hit-set: the first Cannonball shot has no prior targets (never mutated).
+const NO_HITS = new Set();
+
 // 11.6: playable-character stat lookup (D57). `key` = character key; falls back to the
 // starter (mage) so plain test objects without charKey behave as the solo default.
 export function charDef(key) {
@@ -48,6 +51,7 @@ export class Player {
     this._gatCd = 0; this._gatMag = CFG.weapons.gatling.burst; this._gatReload = 0; this._gatReloadTotal = 0;
     this._batCd = 0; this._batSwing = 0; this._boulderCd = 0; this._boulder = null;
     this._tongueCd = 0; this._tongueFx = null; this._ballCd = 0; this._ball = null;
+    this._lastInputAng = null; // 31.2: most-recent movement-input direction (Cannonball cone steering); null = none ever
     this._companion = null; this._wolves = null; this._shieldBank = null; this._skateCd = new Map();
     this._bulletShots = 0; // 12.6 Storm Volley: rounds fired since the last strike (every 4th)
     this._garlicT = 0; this._orbitT = 0; this._tempestT = 0;
@@ -94,6 +98,7 @@ export class Player {
     this._gatCd = 0; this._gatMag = CFG.weapons.gatling.burst; this._gatReload = 0; this._gatReloadTotal = 0; // runs/mid-picks start with a full mag
     this._batCd = 0; this._batSwing = 0; this._boulderCd = 0; this._boulder = null;
     this._tongueCd = 0; this._tongueFx = null; this._ballCd = 0; this._ball = null;
+    this._lastInputAng = null; // 31.2 cone-steering memory dies with the run
     this._companion = null; this._wolves = null; this._shieldBank = null; this._skateCd.clear();
     this._bulletShots = 0; // 12.6 Storm Volley shot counter
     this._garlicT = 0; this._orbitT = 0; this._tempestT = 0;
@@ -139,6 +144,13 @@ export class Player {
 
   tryDash(ax, ay) {
     if (this.dead || this.dashT > 0 || this.dashCd > 0) return false;
+    // 31.2 dash-cancel (user spec): a Dash press during an active Cannonball cancels the arc
+    // immediately. What the code does: _endBall clears ball-state, so the ball's per-step
+    // i-frame refresh stops (the dash i-frames set below take over), and the _ballCd already
+    // armed at launch is NOT refunded (cooldown stays consumed). A FAILED press (the early
+    // return above) leaves the ball running — movement input never cancels (update's ball
+    // branch ignores it except for aim/steering).
+    if (this._ball) this._endBall();
     if (Math.hypot(ax, ay) > 0.1) this.dashAng = Math.atan2(ay, ax);
     else if (Math.hypot(this.vx, this.vy) > 30) this.dashAng = Math.atan2(this.vy, this.vx);
     else this.dashAng = this.aimAng;
@@ -157,10 +169,10 @@ export class Player {
     let ax = axes.x, ay = axes.y;
     const am = Math.hypot(ax, ay);
     if (am > 1) { ax /= am; ay /= am; }
-    if (am > 0.1) this.aimAng = Math.atan2(ay, ax);
+    if (am > 0.1) { this.aimAng = Math.atan2(ay, ax); this._lastInputAng = this.aimAng; } // 31.2: remember most-recent input direction (cone steering)
 
     if (this._ball) {
-      this._ballStep(dt, enemies, combat); // Cannonball (D96): player propels itself
+      this._ballStep(dt, enemies, combat, world); // Cannonball (D96): player propels itself
     } else if (this.dashT > 0) {
       this.dashT -= dt;
       this.iframes = Math.max(this.iframes, this.dashT + P.dashIframeExtra);
@@ -208,7 +220,7 @@ export class Player {
     this.frameIdx = ((this.animT * P.animFps) | 0) % setN;
     if (Math.abs(this.vx) > 12) this.flip = this.vx < 0;
 
-    this._weapons(dt, enemies, combat);
+    this._weapons(dt, enemies, combat, world);
   }
 
   // 23.3: the over-health diminishes CFG.synergies.phoenix.decay of max HP per second
@@ -239,14 +251,17 @@ export class Player {
 
   // Cannonball (D96): the character tucks into a ball and rockets at foes. (x, y) ends
   // at each impact point (spec); invulnerable for the whole dash; bounces to fresh foes
-  // until the level's hit budget. Co-op needs no special handling — this runs in the
-  // host sim and _coopLeash clamps afterward (D96 ruling).
-  _ballStep(dt, enemies, combat) {
+  // until the level's hit budget. From 31.2 each next bounce is RE-PICKED straight-line
+  // reachable and, while a movement direction is held/recent, prefers a foe inside the
+  // steering cone (docs/cannonball-steering-options-2026-10-23.md — user verdict pending;
+  // cone 0 or no input = original nearest behavior). Co-op needs no special handling —
+  // this runs in the host sim and _coopLeash clamps afterward (D96 ruling).
+  _ballStep(dt, enemies, combat, world = null) {
     const C = CFG.combat;
     const b = this._ball;
     b.t += dt;
     this.iframes = Math.max(this.iframes, 0.1);
-    if (!b.target || b.target.dead) b.target = this._nearestUntouched(enemies, b.hit, C.ballSearchR);
+    if (!b.target || b.target.dead) b.target = this._nearestUntouched(enemies, b.hit, C.ballSearchR, world, this._lastInputAng, C.ballSteerCone);
     if (!b.target || b.hits >= b.hitsMax || b.t > 3.2) { this._endBall(); return; }
     const dx = b.target.x - this.x, dy = b.target.y - this.y;
     const d = Math.hypot(dx, dy) || 1;
@@ -267,16 +282,54 @@ export class Player {
 
   _endBall() { this._ball = null; this.vx = 0; this.vy = 0; }
 
-  // Nearest live enemy not in `hit` (Cannonball ricochet target pick).
-  _nearestUntouched(enemies, hit, range) {
-    let best = null, bd = range * range;
+  // Cannonball target pick (D96 + 31.2): nearest live enemy not in `hit`, skipping any
+  // whose straight line is blocked by a static collider — an unreachable target pins the
+  // ball against the wall while it burns its remaining time no-damage (the post-level-up
+  // "bounces into NOTHING" report; the level-up flow itself was proven non-causal by the
+  // 8-seed headless bisect). When `coneAng` is set, the nearest CLEAR foe within `coneDeg`
+  // degrees of that direction wins even if farther (input steering, user spec 2026-10-26).
+  // world/cone params are optional: without them this is the original nearest-only pick.
+  _nearestUntouched(enemies, hit, range, world = null, coneAng = null, coneDeg = 0) {
+    const hasWorld = world && typeof world.collidersNear === 'function';
+    const useCone = coneAng !== null && coneDeg > 0;
+    const ux = useCone ? Math.cos(coneAng) : 0, uy = useCone ? Math.sin(coneAng) : 0;
+    const cosHalf = useCone ? Math.cos((coneDeg * Math.PI) / 360) : -1; // half-angle test
+    let best = null, bd = range * range, bestC = null, bcd = bd;
     for (const e of enemies.list) {
       if (e.dead || hit.has(e)) continue;
       const dx = e.x - this.x, dy = e.y - this.y;
       const d = dx * dx + dy * dy;
+      if (d >= bd && d >= bcd) continue; // can improve neither slot
+      if (hasWorld && !this._reachClear(dx, dy, d, world)) continue;
       if (d < bd) { bd = d; best = e; }
+      if (useCone && d < bcd && (dx * ux + dy * uy) >= cosHalf * Math.sqrt(d)) { bcd = d; bestC = e; }
     }
-    return best;
+    return bestC || best;
+  }
+
+  // Straight-line reachability (31.2): sample the ball→target segment against the static
+  // colliders World already uses for push-out, with the same containment tests — "blocked"
+  // means exactly "would pin the ball". Endpoints are not sampled (the ball's own push-out
+  // contact and the foe's body are normal); samples are spaced ballLosStep px (≤ ~7 at
+  // ballSearchR) and this runs only at target picks, never per frame.
+  _reachClear(dx, dy, d2, world) {
+    const d = Math.sqrt(d2) || 1;
+    const n = Math.ceil(d / CFG.combat.ballLosStep);
+    for (let i = 1; i < n; i++) {
+      const f = i / n;
+      const sx = this.x + dx * f, sy = this.y + dy * f;
+      for (const c of world.collidersNear(sx, sy)) {
+        if (c.ellipse) {
+          const qx = (sx - c.x) / c.rx, qy = (sy - c.y) / c.ry;
+          if (qx * qx + qy * qy < 1) return false;
+        } else {
+          const rr = c.r + this.r; // the exact radius the push-out at update() pins on
+          const ox = sx - c.x, oy = sy - c.y;
+          if (ox * ox + oy * oy < rr * rr) return false;
+        }
+      }
+    }
+    return true;
   }
 
   // Ice Skates slide-damage (D95/D96): gliding with no input, brushing a foe hurts
@@ -303,7 +356,7 @@ export class Player {
     if (this._skateCd.size > 256) this._skateCd.clear();
   }
 
-  _weapons(dt, enemies, combat) {
+  _weapons(dt, enemies, combat, world = null) {
     const W = CFG.weapons;
     if (this.weapons.wand) {
       const S = W.wand.levels[this.weapons.wand - 1];
@@ -463,12 +516,14 @@ export class Player {
       const S = W.cannon.levels[this.weapons.cannon - 1];
       this._cannonCd -= dt;
       if (this._cannonCd <= 0) {
-        const e = this._nearest(enemies, CFG.combat.cannonRange);
-        if (e) {
-          const sy = this._spawnY();
+        // 31.4 Homing Missile: launch lock uses combat's single lock rule (nearest,
+        // ties → most remaining HP, within cannonRange) and is handed to the missile.
+        const sy = this._spawnY();
+        const tgt = combat.shellTarget(this.x, sy, enemies);
+        if (tgt) {
           const hs = this.synergies.heShell || 0;
-          combat.fireShell(this.x, sy, Math.atan2(e.y - sy, e.x - this.x), S.dmg * this.dmgMul, S.blastR,
-            hs > 0 ? CFG.synergies.heShell.levels[hs - 1] : null, this);
+          combat.fireShell(this.x, sy, Math.atan2(tgt.y - sy, tgt.x - this.x), S.dmg * this.dmgMul, S.blastR,
+            hs > 0 ? CFG.synergies.heShell.levels[hs - 1] : null, this, tgt);
           this._cannonCd = S.cd * this.cdMul;
         }
       }
@@ -569,9 +624,14 @@ export class Player {
       const S = W.ball.levels[this.weapons.ball - 1];
       this._ballCd -= dt;
       if (this._ballCd <= 0) {
-        const e = this._nearest(enemies, CFG.combat.ballSearchR);
+        // 31.2: the opening rocket also skips straight-line-blocked foes (same pin defect,
+        // see _nearestUntouched); no cone here — the user's steering spec is about NEXT bounces.
+        const e = this._nearestUntouched(enemies, NO_HITS, CFG.combat.ballSearchR, world, null);
         if (e) {
           this._ball = { t: 0, target: e, hits: 0, hitsMax: S.hits, hit: new Set(), dmg: S.dmg };
+          // The ball state propels itself (_ballStep); zero carried movement velocity so the
+          // arc can't drift off the impact-point rule (spec: (x,y) ends AT each impact).
+          this.vx = 0; this.vy = 0;
           this._ballCd = W.ball.cd * this.cdMul; // 10 s at every level (spec); Coffee shortens it
           if (combat.pulse) combat.pulse('ball');
         }
@@ -930,10 +990,13 @@ const WEAPON_STATS = {
     damage: (d, s) => `${s.dmg} dmg per arrow`,
     skip: ['rate', 'charge', 'dmg'],
   },
+  // 31.4 Homing Missile: the honest reach metric is the LOCK range (cannonRange gates
+  // acquisition and every re-lock; the missile itself is bounded by the 10 s fuse, which
+  // the card states too) + the blast radius. Key `cannon` = this card (config mapping).
   cannon: {
-    range: (d, s) => `range ${CFG.combat.cannonRange} px, blast radius ${s.blastR} px`,
+    range: (d, s) => `locks onto the nearest, toughest foe within ${CFG.combat.cannonRange} px, blast radius ${s.blastR} px, detonates after ${fmtS(CFG.combat.missileFuse)} s`,
     cadence: (d, s) => `every ${fmtS(s.cd)} s`,
-    damage: (d, s) => `${s.dmg} dmg per shell, ${Math.round(s.dmg * CFG.combat.shellBlastK)} dmg blast`,
+    damage: (d, s) => `${s.dmg} dmg per missile + ${Math.round(s.dmg * CFG.combat.shellBlastK)} dmg blast`,
     skip: ['cd', 'dmg', 'blastR'],
   },
   laser: {
@@ -1056,7 +1119,7 @@ const SYNERGY_EFFECT = {
   stormVolley: (s) => `Every 4th round strikes for ${s.dmg} lightning damage, arcing to ${s.jumps} nearby foe${s.jumps > 1 ? 's' : ''}`,
   heartMagnet: (s) => `Hearts are pulled toward you from ${pct(s.pull)} of your pickup range`,
   // Phase 21 (D96) — five new synergies
-  heShell: (s) => `Cannon blasts ignite foes — ${s.dps} dmg/s burn for ${fmtS(s.dur)} s`,
+  heShell: (s) => `Homing Missile explosions ignite foes — ${s.dps} dmg/s burn for ${fmtS(s.dur)} s`, // 31.4 copy follows the weapon rename; mechanic untouched
   staticPelt: (s) => `The pack\u2019s pounces add a shock stack + chain burst to ${s.jumps} foe${s.jumps > 1 ? 's' : ''}`,
   homerKing: (s) => `HOMERUN odds improve to 1-in-${s.odds}`,
   gutFeast: (s) => `Eaten foes restore ×${s.mul} more HP`,

@@ -16,9 +16,10 @@ import { Lighting } from '../js/systems/lighting.js';
 import { Camera } from '../js/systems/camera.js';
 import { shadowSprite } from '../js/art/base.js';
 import { SNAP_V, SNAP_PLEN, WEAPON_KEYS, PASSIVE_KEYS, SYNERGY_KEYS, ENEMY_KEYS, E_FLAG_FLASH, E_FLAG_BURN, E_FLAG_BLIGHT, E_FLAG_BOSS, E_FLAG_FLIP, playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState } from '../js/net/sync.js';
-import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom, defaultChars, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations, actionCost, buyAction } from '../js/core/meta.js';
+import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom, defaultVolumes, loadVolumes, saveVolumes, defaultChars, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations, actionCost, buyAction } from '../js/core/meta.js';
 import { rankScore, loadScores, saveScores, scoreKeyFor, isNewOffer, cardTitleFor } from '../js/ui/screens.js';
 import { loadoutRows } from '../js/ui/hud.js';
+import { initSfx } from '../js/audio/sfx.js';
 import { MUSIC, FLAVOR, initMusic } from '../js/audio/music.js';
 import { makeBus } from '../js/utils/bus.js';
 import { MSG, pack, unpack, profileFromMeta, joinProfile, sanitizeChars, allStarterLobby, ghostColor, charAccent, allocateGhostOffers, createRoom, joinRoom, leaveRoom, closeRoom, coopScale, leashClamp, weaponCap, bossCount, selChar, assignChars, resolveChars, sanitizeShards } from '../js/net/coop.js';
@@ -469,7 +470,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     snowball: [(d, s) => `range ${C.wandRange} px, blast radius ${s.r} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per burst`],
     ringLightning: [() => `range ${C.wandRange} px`, () => `every ${C.ringCd} s`, (d, s) => `${s.dmg} dmg per bolt`],
     bow: [() => `arrow range ${Math.round(C.arrowSpeed * C.arrowLife)} px`, (d, s) => `every ${f2(s.rate)} s`, (d, s) => `${s.dmg} dmg per arrow`],
-    cannon: [(d, s) => `range ${C.cannonRange} px, blast radius ${s.blastR} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per shell`],
+    cannon: [(d, s) => `locks onto the nearest, toughest foe within ${C.cannonRange} px, blast radius ${s.blastR} px, detonates after ${f2(C.missileFuse)} s`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per missile + ${Math.round(s.dmg * C.shellBlastK)} dmg blast`],
     laser: [(d, s) => `beam length ${s.len} px`, (d, s) => `sweeps ${f2(s.dur)} s`, (d, s) => `${s.dps} dmg/s`],
     wolfpack: [() => `pounce range ${C.companionLeash} px`, () => `pounces every ${f2(C.companionPounceCd)} s`, (d, s) => `pounce ${s.dmg} dmg`],
     boulder: [() => `range ${C.wandRange} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg first hit`],
@@ -1007,8 +1008,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const brt2 = e2.spawn('brute', 0, 0);
   ok(brt2.hp === 350 && brt2.dmg === 31.25, 'diff 1.25: brute slot (oni) 280→350 hp, 25→31.25 dmg');
   const ryu = e2.spawn('ryu', 0, 0);
-  ok(ryu.boss && ryu.hp === 3000 && ryu.dmg === 35, 'Ryū boss ×1.25 (3000 hp / 35 dmg)');
-  ok(e1.spawn('ryu', 0, 0).hp === 2400, 'Ryū base stats = Wraith base (pre-diff)');
+  ok(ryu.boss && ryu.hp === 3900 && ryu.dmg === 35, 'Ryū boss ×1.25 (3900 hp / 35 dmg — 31.7 base 3120)');
+  ok(e1.spawn('ryu', 0, 0).hp === 3120, 'Ryū base stats = Wraith base (pre-diff; 31.7 +30% boss HP)');
   const m1 = getLevel('m01'), m2 = getLevel('m02');
   ok(m1.boss.name === 'THE WRAITH' && m2.boss.name === 'RYŪ', 'boss banner names per level');
   const w2 = Object.keys(m2.weights(300));
@@ -1086,7 +1087,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
 {
   const lm1 = getLevel('m01'), lm3 = getLevel('m03');
   const eb = new Enemies();
-  ok(eb.spawn('shark', 0, 0).hp === 2400, 'Great White base stats = Wraith base (pre-diff)');
+  ok(eb.spawn('shark', 0, 0).hp === 3120, 'Great White base stats = Wraith base (pre-diff; 31.7 +30% boss HP)');
   const e3 = new Enemies();
   e3.diff = 1.56;
   const rat3 = e3.spawn('rat', 0, 0);
@@ -1094,7 +1095,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const brt3 = e3.spawn('brute', 0, 0);
   ok(brt3.hp === 436.8 && brt3.dmg === 39, 'diff 1.56: orca slot 280→436.8 hp, 25→39 dmg');
   const shark = e3.spawn('shark', 0, 0);
-  ok(shark.boss && shark.hp === 3744 && shark.dmg === 43.68, 'Great White boss ×1.56 (3744 hp / 43.68 dmg)');
+  ok(shark.boss && shark.hp === 4867.2 && shark.dmg === 43.68, 'Great White boss ×1.56 (4867.2 hp / 43.68 dmg — 31.7 base 3120)');
   ok(lm3.boss.name === 'THE GREAT WHITE', 'm03 boss banner name');
   const w3 = Object.keys(lm3.weights(300));
   ok(w3.length === 6 && w3.every((k) => CFG.enemies[k]), 'm03 weights: 6 slot keys ⊆ enemies');
@@ -1178,6 +1179,71 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(loadZoom(CFG.zoom.key, true) === CFG.zoom.full, 'zoom: persisted 1.0 wins over touch default');
   store.set(CFG.zoom.key, 'garbage');
   ok(loadZoom(CFG.zoom.key, true) === CFG.zoom.touch, 'loadZoom: invalid stored value → device default');
+  delete globalThis.localStorage;
+}
+
+// 31.5 — settings volumes: defaults, clamp, persistence round-trip (same storage stub pattern as 13.8)
+{
+  ok(defaultVolumes().effects === 1 && defaultVolumes().music === 1 && defaultVolumes().background === 1, 'volumes: defaults are 1/1/1');
+  ok(loadVolumes('no-such-key').background === 1, 'loadVolumes: defaults without storage');
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, v),
+    removeItem: (k) => store.delete(k),
+  };
+  saveVolumes(CFG.volumes.key, { effects: 0.5, music: 0, background: 0.25 });
+  const rt = loadVolumes(CFG.volumes.key);
+  ok(rt.effects === 0.5 && rt.music === 0 && rt.background === 0.25, 'volumes: save→load round-trip');
+  store.set(CFG.volumes.key, JSON.stringify({ effects: 9, music: -3, background: 'x' }));
+  const cl = loadVolumes(CFG.volumes.key);
+  ok(cl.effects === 1 && cl.music === 0 && cl.background === 1, 'loadVolumes: out-of-range clamped, non-numeric → default');
+  store.set(CFG.volumes.key, 'garbage');
+  ok(loadVolumes(CFG.volumes.key).effects === 1, 'loadVolumes: invalid JSON → defaults');
+  delete globalThis.localStorage;
+}
+
+// 31.5 — audio graph: the three category buses carry CFG mix × user multiplier, and master
+// mute stays the one authoritative silence (categories independent: effects 0 ≠ mute-all,
+// mute never clobbers category values, 'volumes' re-applies live).
+{
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, v),
+    removeItem: (k) => store.delete(k),
+  };
+  // Fake param records setTargetAtTime targets (the live-application path) while keeping
+  // .value at build time — same no-op-param idiom as the music pumps, plus a target tap.
+  const p0 = () => { const p = { value: 0, target: null }; p.cancelScheduledValues = () => {}; p.setTargetAtTime = (v) => { p.target = v; }; return p; };
+  class FakeAC {
+    constructor() { this.sampleRate = 8000; this.currentTime = 0; this.destination = {}; }
+    createGain() { return { gain: p0(), connect() {} }; }
+    createDynamicsCompressor() { return { threshold: {}, knee: {}, ratio: {}, attack: {}, release: {}, connect() {} }; }
+    createBuffer(ch, len) { return { getChannelData: () => new Float32Array(len) }; }
+  }
+  globalThis.window = { AudioContext: FakeAC };
+  saveVolumes(CFG.volumes.key, { effects: 0.5, music: 1, background: 0.25 });
+  const bus = makeBus();
+  const sfx = initSfx({ bus, input: { gesture: true } });
+  sfx.update(); // first tick with a gesture armed builds the graph (ensure)
+  const gSfx = sfx.gain('sfx'), gMus = sfx.gain('music'), gAmb = sfx.gain('amb'), gMaster = sfx.gain('master');
+  ok(gSfx && gMus && gAmb && gMaster, 'audio graph: master + sfx/music/amb gain nodes present');
+  ok(near(gSfx.gain.value, CFG.audio.sfxVol * 0.5) && near(gMus.gain.value, CFG.audio.musicVol) && near(gAmb.gain.value, CFG.audio.ambVol * 0.25),
+    'audio graph: bus gain built as CFG mix × user multiplier');
+  ok(gMaster.gain.value === 1, 'audio graph: master open with no persisted mute');
+  store.set(CFG.scores.muteKey, '1');
+  bus.emit('mute');
+  ok(gMaster.gain.target === 0, 'mute: master path zeroed (unchanged mechanism)');
+  ok(gSfx.gain.target === null && gMus.gain.target === null && gAmb.gain.target === null, 'mute vs categories: mute does not touch category buses');
+  store.set(CFG.scores.muteKey, '0');
+  bus.emit('mute');
+  ok(gMaster.gain.target === 1, 'unmute: master back to 1, per-category values restored by the untouched buses');
+  saveVolumes(CFG.volumes.key, { effects: 0, music: 1, background: 1 });
+  bus.emit('volumes');
+  ok(gSfx.gain.target === 0 && near(gMus.gain.target, CFG.audio.musicVol) && near(gAmb.gain.target, CFG.audio.ambVol), "audio graph: 'volumes' re-applies all three buses live");
+  ok(sfx.vols().effects === 0, 'volumes: live re-read picks up persisted values');
+  delete globalThis.window;
   delete globalThis.localStorage;
 }
 
@@ -2600,18 +2666,21 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const stub = (list, extra = {}) => ({ list, grid: { near: () => list, range: () => list }, ...extra });
   const near2 = (a, b, t = 0.6) => Math.abs(a - b) < t;
 
-  // Tank Cannon: pierce + terminal blast (shellBlastK) + heShell ignite on the blast.
+  // 31.4 Homing Missile (was the P21 Tank Cannon): locks the toughest (HP-first, Option A) foe, homes in,
+  // direct hit + terminal blast (shellBlastK) + heShell ignite on that blast. The
+  // old pierce-one→detonate-on-second behavior is retired (user notes 2026-10-26).
   {
     const c = new Combat();
     const owner = { x: 0, y: 0, dmgMul: 1, dead: false };
     const e1 = mk(100, 100), e2 = mk(120, 100), e3 = mk(300, 100);
     c.fireShell(0, 100, 0, 100, 70, { dps: 12, dur: 2.5 }, owner);
     for (let i = 0; i < 120 && c.shells.length; i++) c.update(1 / 60, [], stub([e1, e2, e3]));
-    ok(c.shells.length === 0, 'P21 cannon: shell consumed by the terminal blast');
-    ok(near2(e1.hp, 150, 0.5) && near2(e2.hp, 150, 0.5),
-      `P21 cannon: direct 100 through the first foe; the second takes 100 + blast (×${C.shellBlastK}=50) — both also caught in the blast (${e1.hp}/${e2.hp})`);
-    ok(e3.hp === 300, 'P21 cannon: blast radius 70 spares the far foe');
-    ok(e1.burnT > 0 && e1.burnDps === 12, 'P21 cannon: heShell ignite rides the blast');
+    ok(c.shells.length === 0, 'P31.4 missile: consumed by the impact blast');
+    ok(near2(e1.hp, 150, 0.5),
+      `P31.4 missile: locked foe takes direct 100 + blast (×${C.shellBlastK}=50) (${e1.hp})`);
+    ok(near2(e2.hp, 250, 0.5), `P31.4 missile: the blast still catches nearby foes (e2 ${e2.hp})`);
+    ok(e3.hp === 300, `P31.4 missile: blast radius 70 spares the far foe (${e3.hp})`);
+    ok(e1.burnT > 0 && e1.burnDps === 12, 'P31.4 missile: heShell ignite rides the blast (mechanic unchanged)');
   }
 
   // Continuous Laser: every frame of `dur`, only foes within `w` of the segment.
@@ -2854,7 +2923,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   }
 }
 
-// --- 29.x (user playtest 2026-10-22): Boulder cd curve, Tank Cannon ×1.5 range, Skate glide ---
+// --- 29.x (user playtest 2026-10-22): Boulder cd curve, Tank Cannon ×1.5 range (lock
+// range through the 31.4 Homing Missile rework), Skate glide ---
 {
   const C = CFG.combat;
   const mk = (x, y, o = {}) => ({ x, y, vx: 0, vy: 0, r: 13, hp: 300, maxHp: 300, flash: 0, dead: false, boss: false,
@@ -2877,11 +2947,12 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
       `29.6 boulder: L${lvl} first shot arms exactly ${bcd[lvl - 1]} s cooldown (${p._boulderCd})`);
   }
 
-  // 29.12 Tank Cannon: dedicated range knob = 1.5× the old shared wandRange (560 → 840),
-  // used by BOTH target acquisition and shell flight; card text states the real behaviour.
+  // 29.12 (kept through 31.4): dedicated LOCK range = 1.5× the old shared wandRange
+  // (560 → 840), now gating the lock-on search only (the missile's FLIGHT is bound by
+  // the 10 s fuse, not range); card text states the real behaviour.
   ok(C.cannonRange === C.wandRange * 1.5, `29.12 cannon: cannonRange = 1.5× the old range (${C.cannonRange})`);
-  ok(CFG.weapons.cannon.desc === 'Fires a heavy shell that punches through one foe, then detonates on the next.',
-    '29.12 cannon: card description = punch-through + terminal detonation (user wording 2026-10-22)');
+  ok(CFG.weapons.cannon.desc === 'Fires a slow missile that locks onto the toughest foe in range, homes in, and explodes on contact.',
+    '31.4 cannon: card description = lock → home → explode (user notes 2026-10-26, supersedes 29.12 wording)');
   const cA = new Combat(); const plA = mkPl(); plA.weapons.cannon = 1;
   plA.update(1 / 60, { x: 0, y: 0 }, cA, stub([mk(1100, 400)]), world); // ~700 px away
   ok(cA.shells.length === 1, '29.12 cannon: a foe ~700 px away (beyond the old 560) is acquired and fired at');
@@ -2890,13 +2961,13 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(cB.shells.length === 0, '29.12 cannon: a foe ~900 px away (beyond 840) is not fired at');
   const cS = new Combat();
   cS.fireShell(400, 400, 0, 10, 70);
-  ok(Math.abs(cS.shells[0].life - (C.cannonRange / C.shellSpeed + 0.1)) < 1e-12,
-    `29.12 cannon: shell life = cannonRange / shellSpeed (${cS.shells[0].life.toFixed(3)} s)`);
+  ok(cS.shells[0].life === C.missileFuse && C.missileFuse === 10,
+    `31.4 missile: fuse = the hard 10 s, replacing the 29.12 range/speed life (${cS.shells[0].life}s)`);
   let ticks = 0;
-  for (; ticks < 600 && cS.shells.length; ticks++) cS.update(1 / 60, [], stub([]));
-  const travel = (ticks * C.shellSpeed) / 60;
-  ok(travel > 840 && travel <= 900,
-    `29.12 cannon: empty-field shell flies the extended range (${travel.toFixed(0)} px, far past the old ~606 px)`);
+  for (; ticks < 700 && cS.shells.length; ticks++) cS.update(1 / 60, [], stub([]));
+  ok(ticks === 600 || ticks === 601,
+    `31.4 missile: an empty field flies straight until the FUSE detonates it (${(ticks / 60).toFixed(3)} s ≈ 10 s, was ~840 px range-bound at 29.12)`);
+  ok(cS.explosions.length === 1, '31.4 missile: fuse expiry detonates in place, "as if it had hit an enemy"');
 
   // 29.13 Ice Skates: glideK cut at every level — after input stops the glide lasts
   // much longer (1 s at 400 px/s: bare player stops dead, L1 skates still slide ≈24 px/s;
@@ -3193,8 +3264,101 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   fl.stop();
 
   const msrc1 = readFileSync(new URL('../js/main.js', import.meta.url), 'utf8');
-  ok(/URLSearchParams\(location\.search\)\.get\('fps'\) === '1'/.test(msrc1) && /loop\.frames/.test(msrc1),
-    '29.1: ?fps=1 readout is URL-gated and reads Loop.frames (render pipeline untouched)');
+  ok(/URLSearchParams\(location\.search\)\.get\('fps'\) === '1'/.test(msrc1) && /loop\.perf = perf/.test(msrc1),
+    '29.1→31.1: ?fps=1 readout stays URL-gated and drives the loop diagnostics (render pipeline untouched)');
+}
+
+// --- 31.1 FPS readout v2: frame-time percentiles + sim/wall decomposition ---
+{
+  // Synthetic frame deltas + synthetic hit-stop/timescale/cap-discard events driven
+  // through the REAL Loop (stub rAF, like the loop-slice audit above), so the pins
+  // exercise the exact instrumentation sites, not a parallel re-implementation.
+  const q311 = [];
+  globalThis.requestAnimationFrame = (cb) => { q311.push(cb); return q311.length; };
+  globalThis.cancelAnimationFrame = () => { q311.length = 0; };
+  const { Loop: L311, PerfCounters: PC311 } = await import('../js/core/loop.js');
+  const STEP = 1 / 60;
+
+  // Rule 5 (config law): the diagnostic windows live in CFG.perf.
+  ok(CFG.perf.frameHist > 0 && CFG.perf.perfWindowMs >= 250,
+    `31.1: frameHist/perfWindowMs knobs live in config (frameHist=${CFG.perf.frameHist} window=${CFG.perf.perfWindowMs}ms)`);
+  const lsrc311 = readFileSync(new URL('../js/core/loop.js', import.meta.url), 'utf8');
+  ok(/this\.perf\.frame\(rawW, dt, ts, n, dropped\)/.test(lsrc311) && /dropped = this\.acc; this\.acc = 0;/.test(lsrc311),
+    '31.1: counters instrument the exact loop sites (clamp delta + the acc=0 cap discard)');
+  const msrc311 = readFileSync(new URL('../js/main.js', import.meta.url), 'utf8');
+  ok(/new PerformanceObserver/.test(msrc311) && /long-animation-frame/.test(msrc311) && /catch \{/.test(msrc311),
+    '31.1: LoAF wired behind a feature-detect that cannot throw where unsupported');
+
+  // (1) Percentile math — nearest-rank (idx = ceil(p/100·n)−1) over a known sequence.
+  {
+    const l = new L311({ update: () => {}, render: () => {} });
+    const pc = new PC311({ step: l.step });
+    l.perf = pc;
+    l.start();
+    const T0 = performance.now();
+    l.last = T0; pc.beginWindow(T0, l.acc);
+    const cum = [5, 11, 18, 26, 35, 45, 56, 68, 81, 95]; // deltas 5..14 ms
+    for (const c of cum) q311.shift()(T0 + c);
+    const s = pc.sample(T0 + 95, l.acc);
+    ok(near(s.p50, 9, 1e-6) && near(s.p95, 14, 1e-6) && near(s.p99, 14, 1e-6),
+      `31.1: nearest-rank p50/p95/p99 on [5..14]ms = 9/14/14 (got ${s.p50}/${s.p95}/${s.p99})`);
+    ok(s.frames === 10 && near(s.wall, 0.095, 1e-9) && near(s.idle, 0, 1e-9),
+      `31.1: window frame count + wall exact, no idle when callbacks are contiguous (frames=${s.frames} wall=${s.wall})`);
+    l.stop();
+  }
+
+  // (2) Decomposition identity: advanced + intended + lostClamp + lostCap + idle + accDrift = wall,
+  // with each component independently known from the fed scenario (2+2+5 = 9 steps, hit-stop 0.02 s,
+  // timescale 0.5 for 0.05 s, a 1.0 s frame clamped to 0.1 with the backlog cap dropping the rest,
+  // and rAF silence inside the window). Deltas chosen so the hit-stop subtraction cannot land on a
+  // float residue that flips the ts branch (hit-stop ends with a clear −0.02 margin).
+  {
+    const l = new L311({ update: () => {}, render: () => {} });
+    const pc = new PC311({ step: l.step });
+    l.perf = pc;
+    l.start();
+    const T0 = performance.now();
+    l.last = T0; pc.beginWindow(T0, l.acc); // acc starts at 0 (fresh loop)
+    q311.shift()(T0 + 50);   // f1: 50ms → 2 steps, sub-step carry into acc
+    l.hitStop(0.05);
+    q311.shift()(T0 + 70);   // f2: hit-stop active (0.03 left) → intended 0.02, no steps
+    l.timescale = 0.5;
+    q311.shift()(T0 + 120);  // f3: 50ms > leftover hit-stop → ts=0.5: intended 0.025, acc +0.025 → 2 steps
+    l.timescale = 1;
+    q311.shift()(T0 + 1120); // f4: 1.0s rawW → clamp loses 0.9; 5 steps then maxSteps drops acc (0.025)
+    const s = pc.sample(T0 + 2200, l.acc);
+    const sum = s.advanced + s.intended + s.lostClamp + s.lostCap + s.idle + s.accDrift;
+    ok(near(sum, s.wall, 1e-9),
+      `31.1: identity advanced+intended+lostClamp+lostCap+idle+accDrift = wall (${sum} vs ${s.wall})`);
+    ok(near(s.advanced, 9 * STEP, 1e-9), `31.1: advanced = the 9 steps actually run (${s.advanced})`);
+    ok(near(s.intended, 0.045, 1e-9), `31.1: intended = hit-stop 0.02 + timescale-shortfall 0.025 (${s.intended})`);
+    ok(near(s.lostClamp, 0.9, 1e-9), `31.1: lostClamp = maxFrameDt discard on the 1.0s frame (${s.lostClamp})`);
+    ok(near(s.lostCap, 0.175 - 9 * STEP, 1e-9), `31.1: lostCap = the acc zeroed at the maxSteps cap (${s.lostCap})`);
+    ok(near(s.idle, 1.08, 1e-9), `31.1: idle = rAF silence the old counter was blind to (${s.idle})`);
+    ok(near(s.accDrift, 0, 1e-9) && Math.abs(s.advanced / s.wall - s.ratio) < 1e-12,
+      `31.1: acc carry cancels across the window + ratio = advanced/wall (${s.ratio})`);
+    // sample() resets the window: a second immediate read is a clean zero window.
+    const s2 = pc.sample(T0 + 2200, l.acc); // same instant: a restarted window must read zero, not re-count
+    ok(s2.frames === 0 && s2.advanced === 0 && s2.wall === 0 && s2.loafN === 0,
+      '31.1: sample() restarts the window (no double-counting between display ticks)');
+    l.stop();
+    // (3) LoAF counters aggregate + reset with the window.
+    pc.longFrame(60); pc.longFrame(80);
+    const s3 = pc.sample(T0 + 3000, l.acc);
+    ok(s3.loafN === 2 && s3.loafMax === 80, `31.1: LoAF summary = count + max over window (${s3.loafN}/${s3.loafMax})`);
+    const s4 = pc.sample(T0 + 4000, l.acc);
+    ok(s4.loafN === 0 && s4.loafMax === 0, '31.1: LoAF counters reset per window');
+  }
+
+  // (4) Zero cost when the gate is off: no collector attached → loop untouched.
+  {
+    const l = new L311({ update: () => {}, render: () => {} });
+    ok(l.perf === null, '31.1: Loop.perf defaults to null (diagnostics pay zero cost without ?fps=1)');
+    l.start();
+    q311.shift()(performance.now() + 1000 / 60);
+    ok(l.frames === 1 && q311.length === 1, '31.1: uncollected loop still runs + chains frames');
+    l.stop();
+  }
 }
 
 // --- Phase 29 art half (29.9/29.10/29.11/29.12/29.14): visual wiring, no mechanics ---
@@ -3234,13 +3398,13 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const e1 = mk(100, 100), e2 = mk(120, 100);
   c2.fireShell(0, 100, 0, 100, 70, null, owner);
   for (let i = 0; i < 120 && c2.shells.length; i++) c2.update(1 / 60, [], stub([e1, e2]));
-  ok(c2.explosions.some((x) => x.tank === true), '29.12: shell terminal blast tagged for its own sprite + rhythm');
+  ok(c2.explosions.some((x) => x.tank === true), '29.12: the terminal blast stays tagged for its own sprite + rhythm (31.4 keeps the visual)');
   ok(/const s = x\.r \* 2 \* \(1 \+ 0\.25 \* k\);/.test(csrc),
     '29.12: the 23.2 base blast-scale line is intact for non-tank explosions');
   ok(/export function tankBlastSprite\(\)/.test(isrc) && /this\._fx\.tank/.test(csrc),
     '29.12: hard-edged shock star baked in art + drawn for tank-tagged blasts only');
-  ok(/function shellSprite\(\)[\s\S]{0,600}makeCanvas\(36, 14\)/.test(isrc) && /const tr = g\.createLinearGradient\(1, 7, 20, 7\)/.test(isrc),
-    '29.12: shell sprite reworked — larger body + baked fading tracer tail');
+  ok(/function missileSprite\(\)[\s\S]{0,700}makeCanvas\(36, 14\)/.test(isrc) && /const tr = g\.createLinearGradient\(1, 7, 20, 7\)/.test(isrc),
+    '31.4: Homing Missile projectile sprite = the pre-rendered 36×14 pattern, baked tracer tail kept');
 
   // 29.9: the pack draws its OWN sheet, coats keyed by wolf index, never the enemy skin.
   ok(/export function buildPackWolves\(\)/.test(chsrc), '29.9: pack-wolf sheet builder exported from art');
@@ -3501,6 +3665,217 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     `30.2: scorch knobs in config (tick=${CFG.combat.scorchTick} life=${CFG.combat.scorchLife} size=${CFG.combat.scorchSize} cap=${CFG.perf.scorchCap})`);
   ok(CFG.combat.laserSpeed === undefined && CFG.combat.laserTick === undefined,
     '30.2: dead 29.5 keys laserSpeed/laserTick removed (grep-proven unread by any code)');
+}
+
+// --- 31.2 (agent C): Cannonball — post-level-up resume (regression pin), collider-pin
+// defect fix, input cone steering (option (a); user verdict on width/approach pending —
+// docs/cannonball-steering-options-2026-10-23.md), and Dash-cancel. ---
+{
+  const C = CFG.combat;
+  const mk = (x, y, o = {}) => ({ x, y, vx: 0, vy: 0, r: 13, hp: 100000, maxHp: 100000, flash: 0, dead: false, boss: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0, ...o });
+  const stub = (list) => ({ list, grid: { near: () => list, range: () => list } });
+  const openWorld = { collidersNear: () => [] };
+  const mkPl = () => { const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(500, 400); return p; };
+
+  ok(C.ballSteerCone === 30 && C.ballLosStep > 0, `31.2: steering/LOS knobs live in config (cone=${C.ballSteerCone}° losStep=${C.ballLosStep}px)`);
+
+  // (1) Regression pin for the user-reported flow: the level-up sequence (pickCard runs
+  // applyCard+recomputeStats; the LEVELUP state = no update call at all) must not cost the
+  // ball its remaining budget — the next foe still takes damage after the freeze.
+  {
+    const c = new Combat();
+    const pl = mkPl();
+    pl.weapons = { ball: 1 }; // 2-hit budget — the low-rank case from the report
+    const e1 = mk(620, 400), e2 = mk(780, 400); // e2 outside launch range, inside post-impact range
+    let engagedAt = -1, pausedAt = -1;
+    for (let i = 0; i < 400; i++) {
+      if (engagedAt >= 0 && !pl._ball) break;
+      if (pl._ball && pausedAt < 0 && pl._ball.hits >= 1) {
+        pausedAt = i;
+        applyCard(pl, { kind: 'passive', key: 'speed', level: 1 });
+        recomputeStats(pl);
+        i += 89; // 1.5 s menu: zero update() calls (the real LEVELUP freeze)
+        continue;
+      }
+      pl.update(1 / 60, { x: 0, y: 0 }, c, stub([e1, e2]), openWorld);
+      if (pl._ball && engagedAt < 0) engagedAt = i;
+    }
+    ok(pausedAt >= 0 && !pl._ball && e1.hp === 100000 - 60 && e2.hp <= 100000 - 54,
+      `31.2: level-up mid-arc then resume — the next bounce still lands, no "bounces into nothing" (${e1.hp}/${e2.hp})`);
+  }
+
+  // (2) Root-cause pin for the visible defect: an only-candidate whose straight line is
+  // blocked by a static collider ENDS the arc instead of pinning the ball against the wall
+  // for its remaining time with zero damage (the stall the 2026-10-26 report watched after
+  // the menu closed; the 8-seed game-level bisect proved the menu itself non-causal —
+  // identical impacts/end reasons with and without it). Control proves the check can fire.
+  {
+    const c = new Combat();
+    const pl = mkPl(); pl.x = 0; pl.y = 0;
+    const behind = mk(200, 0);
+    const wall = { x: 100, y: 0, r: 20 };
+    pl._lastInputAng = null;
+    pl._ball = { t: 0, target: null, hits: 1, hitsMax: 2, hit: new Set(), dmg: 60 };
+    pl._ballStep(1 / 60, stub([behind]), c, { collidersNear: () => [wall] });
+    ok(!pl._ball && behind.hp === 100000, '31.2: blocked-only target ends the arc at once — no zero-damage pin');
+    const c2 = new Combat();
+    const pl2 = mkPl(); pl2.x = 0; pl2.y = 0;
+    pl2._lastInputAng = null;
+    pl2._ball = { t: 0, target: null, hits: 1, hitsMax: 2, hit: new Set(), dmg: 60 };
+    let guard = 0;
+    while (pl2._ball && guard++ < 100) pl2._ballStep(1 / 60, stub([behind]), c2, openWorld);
+    ok(behind.hp === 100000 - 60 * C.ballDecay, `31.2 control: the same target on a clear line IS hit (${behind.hp})`);
+  }
+
+  // (3) Cone steering (user spec option (a), 30° full cone = ±15° about the input
+  // direction): an in-cone foe wins even when a nearer foe sits outside the cone; an empty
+  // cone falls back to plain nearest; no input ever = plain nearest (current behavior).
+  {
+    const aIn = mk(700, 400); // bearing 0° from the ball, 200 px — in a +x cone, farther
+    const aOut = mk(500 + 100 * Math.cos(1.2), 400 + 100 * Math.sin(1.2)); // ~69° off axis, nearer
+    const runPick = (inputAng) => {
+      const c = new Combat();
+      const pl = mkPl();
+      pl._lastInputAng = inputAng;
+      pl._ball = { t: 0, target: null, hits: 1, hitsMax: 3, hit: new Set(), dmg: 60 };
+      pl._ballStep(1 / 60, stub([aIn, aOut]), c, openWorld);
+      return pl._ball ? pl._ball.target : null;
+    };
+    ok(runPick(0) === aIn, '31.2 cone: in-cone target chosen even though a nearer foe sits outside it');
+    ok(runPick(Math.PI) === aOut, '31.2 cone: empty cone falls back to plain nearest (existing behavior)');
+    ok(runPick(null) === aOut, '31.2 cone: no input ever = plain nearest (unchanged)');
+    ok(runPick(1.2) === aOut, '31.2 cone: a nearer foe that IS inside the cone is picked as expected');
+  }
+
+  // (4) Launch pick also skips blocked candidates (same pin defect at t=0); launch zeroes
+  // carried velocity (impact-point rule); held movement never cancels the arc.
+  {
+    const c = new Combat();
+    const pl = mkPl();
+    pl.weapons = { ball: 1 };
+    const wall = { x: 545, y: 400, r: 20 }; // between the player and its nearest foe
+    const eB = mk(560, 400), eC = mk(500, 580);
+    for (let i = 0; i < 10 && !pl._ball; i++) pl.update(1 / 60, { x: 0, y: 0 }, c, stub([eB, eC]), { collidersNear: () => [wall] });
+    ok(pl._ball && pl._ball.target === eC, '31.2: the opening rocket skips a wall-blocked nearer foe and locks the clear one');
+    ok(pl.vx === 0 && pl.vy === 0, '31.2: launch zeroes carried movement velocity (impact-point rule; input drives aiming only)');
+    let steps = 0;
+    while (pl._ball && steps++ < 90) pl.update(1 / 60, { x: 1, y: 0 }, c, stub([eB, eC]), { collidersNear: () => [wall] });
+    ok(eC.hp < 100000, `31.2: held movement input through the arc never cancels it — the ball still hit (${eC.hp})`);
+  }
+
+  // (5) Dash-cancel (user spec): pressing Dash during ball-state cancels it immediately —
+  // ball-state cleared, dash i-frames take over, the launch-consumed _ballCd is not
+  // refunded; movement keys/inputs do not cancel (covered in (4)); a FAILED dash press
+  // (cooldown running) leaves the arc running.
+  {
+    const pl = mkPl();
+    pl._ballCd = 4.2; // "already consumed" mid-arc value
+    pl._ball = { t: 0, target: mk(700, 400), hits: 1, hitsMax: 3, hit: new Set(), dmg: 60 };
+    ok(pl.tryDash(0, 0) === true && !pl._ball && pl.dashT === CFG.player.dashTime && pl._ballCd === 4.2,
+      '31.2: Dash during ball-state cancels the arc at once; _ballCd stays consumed');
+    ok(pl.iframes >= CFG.player.dashTime, '31.2: the cancel hands off to the dash i-frames (never left bare)');
+    const pl2 = mkPl();
+    pl2.dashCd = 5;
+    pl2._ball = { t: 0, target: mk(700, 400), hits: 1, hitsMax: 3, hit: new Set(), dmg: 60 };
+    ok(!pl2.tryDash(0, 0) && !!pl2._ball, '31.2: a failed Dash press (dash on cooldown) leaves the arc running');
+  }
+}
+
+// --- 31.4 (agent M): Tank Cannon → Homing Missile (user notes 2026-10-26, lines 85-90). ---
+// Every knob lives in config (rule 5); these pins prove the spec — including the exact
+// reading of the ambiguous "nearest enemy with the most remaining health": the user ruled
+// OPTION A on 2026-10-23 — HP-FIRST, exact-HP ties resolved by nearest (nearest-first was
+// explicitly rejected; pinned here so a future switch back would be loud).
+{
+  const C = CFG.combat;
+  const mk = (x, y, o = {}) => ({ x, y, vx: 0, vy: 0, r: 13, hp: 300, maxHp: 300, flash: 0, dead: false, boss: false,
+    slowStacks: [], freezeT: 0, shockStacks: [], stunT: 0, ...o });
+  const stub = (list) => ({ list, grid: { near: () => list, range: () => list } });
+  const world = { collidersNear: () => [] };
+  const mkPl = () => { const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(400, 400); return p; };
+  const owner = { x: 0, y: 0, dmgMul: 1, dead: false };
+
+  // Config spec exactly: ×0.7 speed (460→322), per-level blastR ×1.25, cd/dmg untouched.
+  ok(C.shellSpeed === 322, `31.4: projectile speed = 460 ×0.7 = 322 exactly ("~30% slower", notes line 87)`);
+  const oldRows = [[2.6, 90, 70], [2.4, 115, 76], [2.2, 145, 82], [2.0, 180, 88], [1.8, 225, 95]];
+  ok(CFG.weapons.cannon.levels.every((s, i) => s.cd === oldRows[i][0] && s.dmg === oldRows[i][1] &&
+      Math.abs(s.blastR - oldRows[i][2] * 1.25) < 1e-9),
+    '31.4: level table keeps cd/dmg, blastR ×1.25 (70→87.5 … 95→118.75; notes line 88)');
+
+  // (1) Lock rule — Option A pinned where it DIFFERS from nearest-first (user ruling 2026-10-23).
+  {
+    const c = new Combat();
+    const eNear = mk(150, 100, { hp: 40 }), eFar = mk(500, 100, { hp: 100000 });
+    c.fireShell(0, 100, 0, 10, 40, null, owner);
+    c.update(1 / 60, [], stub([eNear, eFar]));
+    ok(c.shells[0].target === eFar, '31.4 lock: the far foe with more HP wins over a near weak one (HP-first, Option A; nearest-first was rejected)');
+    const c2 = new Combat();
+    const eNear2 = mk(150, 200, { hp: 50 }), eFar2 = mk(300, 200, { hp: 50 }); // EXACTLY equal HP
+    c2.fireShell(0, 200, 0, 10, 40, null, owner);
+    c2.update(1 / 60, [], stub([eNear2, eFar2]));
+    ok(c2.shells[0].target === eNear2, '31.4 lock: at an exact-HP tie the nearest wins (the rule\u2019s tiebreak)');
+    ok(c2.shellTarget(400, 200, stub([mk(400 + C.cannonRange + 50, 200, { hp: 1 })])) === null,
+      '31.4 lock: a foe beyond cannonRange is never acquired ("in range", notes line 89)');
+  }
+
+  // (2) Re-lock chain on target death: next-highest-HP, tried foes forever excluded, and
+  // the fuse KEEPS running across the re-lock (notes line 89: acquisition never resets it).
+  {
+    const c = new Combat();
+    const e1 = mk(100, 400, { hp: 100000 }), e2 = mk(100, 1200, { hp: 100000 });
+    c.fireShell(400, 400, Math.PI, 10, 40, null, owner, e1);
+    for (let i = 0; i < 30; i++) c.update(1 / 60, [], stub([e1, e2]));
+    ok(c.shells[0].target === e1 && Math.abs(c.shells[0].life - 9.5) < 1e-6,
+      `31.4 re-lock: a live lock is held and the fuse ticks continuously (${c.shells[0].life}s left at t=0.5s)`);
+    e1.dead = true;
+    c.update(1 / 60, [], stub([e1, e2]));
+    ok(c.shells[0].target === e2 && c.shells[0].tried.has(e1),
+      '31.4 re-lock: dead target → NEXT highest-HP, every ever-locked foe excluded ("this repeats")');
+    const lifeAfter = c.shells[0].life;
+    for (let i = 0; i < 60; i++) c.update(1 / 60, [], stub([e1, e2]));
+    ok(lifeAfter - c.shells[0].life > 0.999 && lifeAfter - c.shells[0].life < 1.001,
+      '31.4 re-lock never RESETS the fuse: exactly 1 s of decay across 1 s of re-locked flight');
+  }
+
+  // (3) Hard 10 s cap: a re-lock at t=9.9 s STILL detonates at t=10.0 s, IN PLACE —
+  // the late target sits 300 px away (re-lockable, outside the blast), so an impact at
+  // the target would leave zero explosions and hit the foe; the in-place one does the
+  // opposite ("as if it had hit an enemy", notes line 89).
+  {
+    const c = new Combat();
+    c.fireShell(400, 400, 0, 10, 40, null, owner);
+    for (let i = 0; i < 594; i++) c.update(1 / 60, [], stub([])); // 9.9 s of straight flight
+    ok(c.shells.length === 1 && c.shells[0].life < 0.101 && c.shells[0].life > 0.099,
+      `31.4 fuse: still alive at t=9.9 s with no lock (${c.shells[0].life.toFixed(3)}s left)`);
+    const late = mk(c.shells[0].x + 300, 400, { hp: 100000 });
+    c.update(1 / 60, [], stub([late])); // t≈9.92 s — the late foe IS re-acquired
+    ok(c.shells.length === 1 && c.shells[0].target === late,
+      '31.4 fuse: re-lock still works at t≈9.9 s (the pin is the DETONATION that follows, not the lock)');
+    let k = 595;
+    for (; k < 610 && c.shells.length; k++) c.update(1 / 60, [], stub([late]));
+    ok(c.shells.length === 0 && c.explosions.length === 1 && k >= 600 && k <= 601,
+      `31.4 fuse: re-locked at t=9.9 s, detonates at t=10.0 s (update ${k}, never later) — the timer was NOT reset`);
+    ok(late.hp === 100000, '31.4 fuse: it detonated AT ITSELF — the blast never reached the new 300 px-away lock');
+  }
+
+  // (4) Multiple missiles on screen at once (notes line 90), firing gated only by cd.
+  // L5 (cd 1.8 s): shot #1 kills its near target and re-locks the far one — still in
+  // flight when the cd arms shot #2 beside it.
+  {
+    const c = new Combat();
+    const pl = mkPl(); pl.weapons.cannon = 5;
+    const e1 = mk(600, 400, { hp: 1 }), e2 = mk(1230, 400, { hp: 100000 });
+    let two = false;
+    for (let i = 0; i < 140 && !two; i++) {
+      pl.update(1 / 60, { x: 0, y: 0 }, c, stub([e1, e2]), world);
+      c.update(1 / 60, [], stub([e1, e2]));
+      if (c.shells.length >= 2) two = true;
+    }
+    ok(two, `31.4: ≥2 missiles co-exist mid-flight (cd ${CFG.weapons.cannon.levels[4].cd} s gates firing only)`);
+    ok(pl._cannonCd > 1.6 && pl._cannonCd <= 1.8 + 1e-9,
+      `31.4: each launch re-arms the level row's cd (${pl._cannonCd.toFixed(2)} s) — no unbounded spam`);
+  }
 }
 
 console.log(`test-logic: ${pass} checks passed, ${fails.length} failed`);
