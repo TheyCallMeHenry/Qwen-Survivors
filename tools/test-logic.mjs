@@ -2379,13 +2379,14 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   loop.stop();
   ok(queue.length === 0, 'loop: stop() leaves no orphan frame queued');
 
-  // Hit-stop freezes the sim but the render pass must keep running.
+  // A frozen timescale (ts=0) must still run the render pass (D104: hit-stop removed;
+  // the generic slow-motion path stays and must behave the same).
   const hs = new Loop({ update: () => { ups++; }, render: () => { ren++; } });
   hs.start();
-  hs.hitStop(0.2);
+  hs.timescale = 0;
   const u0 = ups, r0 = ren;
   queue.shift()(performance.now() + 1000 / 60);
-  ok(ups === u0 && ren === r0 + 1, 'loop: hit-stop freezes update steps, render still runs');
+  ok(ups === u0 && ren === r0 + 1, 'loop: ts=0 freezes update steps, render still runs');
   hs.stop();
 
   // Backlog guardrail: a 1 s gap is clamped to maxFrameDt and never catches up
@@ -3258,9 +3259,9 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const ft = performance.now();
   for (let i = 1; i <= 4; i++) fq.shift()(ft + i * (1000 / 60));
   ok(fl.frames === 4, `29.1: Loop.frames increments once per rAF tick (${fl.frames}/4)`);
-  fl.hitStop(0.2); // what the user perceives is displayed frames, not sim steps → hit-stop frames count too
+  fl.timescale = 0; // what the user perceives is displayed frames, not sim steps → frozen-ts frames count too
   fq.shift()(ft + 5 * (1000 / 60));
-  ok(fl.frames === 5, '29.1: hit-stop frames still counted (readout = displayed frame rate)');
+  ok(fl.frames === 5, '29.1: frozen-timescale frames still counted (readout = displayed frame rate)');
   fl.stop();
 
   const msrc1 = readFileSync(new URL('../js/main.js', import.meta.url), 'utf8');
@@ -3283,8 +3284,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(CFG.perf.frameHist > 0 && CFG.perf.perfWindowMs >= 250,
     `31.1: frameHist/perfWindowMs knobs live in config (frameHist=${CFG.perf.frameHist} window=${CFG.perf.perfWindowMs}ms)`);
   const lsrc311 = readFileSync(new URL('../js/core/loop.js', import.meta.url), 'utf8');
-  ok(/this\.perf\.frame\(rawW, dt, ts, n, dropped\)/.test(lsrc311) && /dropped = this\.acc; this\.acc = 0;/.test(lsrc311),
-    '31.1: counters instrument the exact loop sites (clamp delta + the acc=0 cap discard)');
+  ok(/this\.perf\.frame\(rawW, dt, ts, n, dropped, simN\)/.test(lsrc311) && /dropped = this\.acc; this\.acc = 0;/.test(lsrc311),
+    '31.1→31.18: counters instrument the exact loop sites (clamp delta + the acc=0 cap discard + the simN split)');
   const msrc311 = readFileSync(new URL('../js/main.js', import.meta.url), 'utf8');
   ok(/new PerformanceObserver/.test(msrc311) && /long-animation-frame/.test(msrc311) && /catch \{/.test(msrc311),
     '31.1: LoAF wired behind a feature-detect that cannot throw where unsupported');
@@ -3308,10 +3309,10 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   }
 
   // (2) Decomposition identity: advanced + intended + lostClamp + lostCap + idle + accDrift = wall,
-  // with each component independently known from the fed scenario (2+2+5 = 9 steps, hit-stop 0.02 s,
+  // with each component independently known from the fed scenario (2+2+5 = 9 steps, timescale-0 0.02 s,
   // timescale 0.5 for 0.05 s, a 1.0 s frame clamped to 0.1 with the backlog cap dropping the rest,
-  // and rAF silence inside the window). Deltas chosen so the hit-stop subtraction cannot land on a
-  // float residue that flips the ts branch (hit-stop ends with a clear −0.02 margin).
+  // and rAF silence inside the window). Deltas chosen so no subtraction lands on a float
+  // residue that flips a branch; ts changes only at explicit setup points (D104: no hit-stop).
   {
     const l = new L311({ update: () => {}, render: () => {} });
     const pc = new PC311({ step: l.step });
@@ -3320,10 +3321,10 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     const T0 = performance.now();
     l.last = T0; pc.beginWindow(T0, l.acc); // acc starts at 0 (fresh loop)
     q311.shift()(T0 + 50);   // f1: 50ms → 2 steps, sub-step carry into acc
-    l.hitStop(0.05);
-    q311.shift()(T0 + 70);   // f2: hit-stop active (0.03 left) → intended 0.02, no steps
+    l.timescale = 0;
+    q311.shift()(T0 + 70);   // f2: ts=0 → intended 0.02, no steps
     l.timescale = 0.5;
-    q311.shift()(T0 + 120);  // f3: 50ms > leftover hit-stop → ts=0.5: intended 0.025, acc +0.025 → 2 steps
+    q311.shift()(T0 + 120);  // f3: ts=0.5: intended 0.025, acc +0.025 → 2 steps
     l.timescale = 1;
     q311.shift()(T0 + 1120); // f4: 1.0s rawW → clamp loses 0.9; 5 steps then maxSteps drops acc (0.025)
     const s = pc.sample(T0 + 2200, l.acc);
@@ -3331,7 +3332,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     ok(near(sum, s.wall, 1e-9),
       `31.1: identity advanced+intended+lostClamp+lostCap+idle+accDrift = wall (${sum} vs ${s.wall})`);
     ok(near(s.advanced, 9 * STEP, 1e-9), `31.1: advanced = the 9 steps actually run (${s.advanced})`);
-    ok(near(s.intended, 0.045, 1e-9), `31.1: intended = hit-stop 0.02 + timescale-shortfall 0.025 (${s.intended})`);
+    ok(near(s.intended, 0.045, 1e-9), `31.1: intended = ts-0 shortfall 0.02 + ts-0.5 shortfall 0.025 (${s.intended})`);
     ok(near(s.lostClamp, 0.9, 1e-9), `31.1: lostClamp = maxFrameDt discard on the 1.0s frame (${s.lostClamp})`);
     ok(near(s.lostCap, 0.175 - 9 * STEP, 1e-9), `31.1: lostCap = the acc zeroed at the maxSteps cap (${s.lostCap})`);
     ok(near(s.idle, 1.08, 1e-9), `31.1: idle = rAF silence the old counter was blind to (${s.idle})`);
@@ -3359,6 +3360,75 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     ok(l.frames === 1 && q311.length === 1, '31.1: uncollected loop still runs + chains frames');
     l.stop();
   }
+}
+
+// --- 31.18: menu/pause windows land in `intended`, not `advanced` (video-2 §8 defect) ---
+{
+  // Mechanism (proven in unsloth-tmp/probe-3118.mjs): the loop keeps stepping during menus by
+  // design (menu animation + Esc/keys stay live), so the v2 ratio read 1× on clock-stopped
+  // windows — PerfCounters only saw the loop. Fix contract: game.update returns false for
+  // non-advancing steps, Loop counts simN, and the (n−simN)·step share moves from advanced to
+  // intended. The per-frame advanced+intended total is invariant → the 31.1 identity stays exact.
+  const q318 = [];
+  globalThis.requestAnimationFrame = (cb) => { q318.push(cb); return q318.length; };
+  globalThis.cancelAnimationFrame = () => { q318.length = 0; };
+  const { Loop: L318, PerfCounters: PC318 } = await import('../js/core/loop.js');
+  const identityEXACT = (s) => near(s.advanced + s.intended + s.lostClamp + s.lostCap + s.idle + s.accDrift, s.wall, 1e-9);
+  // One 1 s window of contiguous 60 Hz frames driven through the REAL Loop → the sample shown.
+  const window1s = (update, ts) => {
+    const l = new L318({ update, render: () => {} });
+    if (ts !== undefined) l.timescale = ts;
+    const pc = new PC318({ step: l.step });
+    l.perf = pc;
+    l.start();
+    const T0 = performance.now();
+    l.last = T0; pc.beginWindow(T0, l.acc);
+    for (let i = 1; i <= 60; i++) q318.shift()(T0 + i * (1000 / 60));
+    const s = pc.sample(T0 + 60 * (1000 / 60), l.acc);
+    l.stop();
+    return s;
+  };
+
+  // (a) unit — gated window: steps run (menu animation) but none advance → ratio 0.
+  {
+    const s = window1s(() => false);
+    ok(s.advanced === 0 && s.ratio === 0, `31.18: clock-stopped window → advanced 0, ratio 0 (got ${s.advanced}/${s.ratio})`);
+    ok(near(s.intended, 1, 1e-9) && near(s.wall, 1, 1e-9) && identityEXACT(s),
+      `31.18: clock-stopped seconds land in intended, identity EXACT (int ${s.intended})`);
+  }
+  // (a′) the generic ts=0 path keeps its 31.1 semantics (no steps run → dt shortfall = intended).
+  {
+    const s = window1s(() => {}, 0);
+    ok(s.advanced === 0 && s.ratio === 0 && near(s.intended, 1, 1e-9) && identityEXACT(s),
+      `31.18: ts=0 window unchanged (advanced 0, intended = wall ${s.intended}) — identity EXACT`);
+  }
+  // (a″) mid-window transition → the split is exact across the boundary (no double/under-count).
+  {
+    const l = new L318({ update: () => (l._gated ? false : undefined), render: () => {} });
+    const pc = new PC318({ step: l.step });
+    l.perf = pc;
+    l.start();
+    const T0 = performance.now();
+    l.last = T0; pc.beginWindow(T0, l.acc);
+    l._gated = true;
+    for (let i = 1; i <= 30; i++) q318.shift()(T0 + i * (1000 / 60));
+    l._gated = false;
+    for (let i = 31; i <= 60; i++) q318.shift()(T0 + i * (1000 / 60));
+    const s = pc.sample(T0 + 60 * (1000 / 60), l.acc);
+    ok(near(s.advanced, 0.5, 1e-9) && near(s.intended, 0.5, 1e-9) && near(s.ratio, 0.5, 1e-9) && identityEXACT(s),
+      `31.18: half-frozen window splits exactly (adv ${s.advanced} int ${s.intended} ratio ${s.ratio})`);
+    l.stop();
+  }
+  // (c) guard — the fix is readout-only: the timescale knob must never be touched by it. No
+  // assignment in js/ may set timescale ≠ 1 (a stale/zeroed knob would slow real simulation).
+  const gsrc318 = readFileSync(new URL('../js/core/game.js', import.meta.url), 'utf8');
+  const lsrc318 = readFileSync(new URL('../js/core/loop.js', import.meta.url), 'utf8');
+  const assigns318 = [...gsrc318.matchAll(/timescale\s*=\s*([^;\n]+)/g)].map((m) => m[1].trim());
+  ok(assigns318.length >= 4 && assigns318.every((v) => v === '1'),
+    `31.18 guard: every game.js timescale assignment is 1 (${JSON.stringify(assigns318)}) — PLAYING paths never slow or freeze`);
+  const lassigns318 = [...lsrc318.matchAll(/this\.timescale\s*=\s*([^;\n]+)/g)].map((m) => m[1].trim());
+  ok(lassigns318.length === 1 && lassigns318[0] === '1',
+    `31.18 guard: loop.js only defaults timescale to 1 (${JSON.stringify(lassigns318)}) — no hidden slow-motion path`);
 }
 
 // --- Phase 29 art half (29.9/29.10/29.11/29.12/29.14): visual wiring, no mechanics ---

@@ -13,6 +13,15 @@
 
 ## Entries (newest first)
 
+### 2026-10-24 — Hit-stop removal order (conditional on video-2 evidence — condition met)
+- **Received:** 2026-10-24 (after the video-2 verdict report)
+- **Classification:** design decision (mechanic removal)
+- **Context:** conditions the removal on the measurement; video 2 showed 100% of in-play sim loss = hit-stop, 0% overload, so the condition is satisfied and the mechanic is removed.
+- **Verbatim:**
+```
+If the "issue" I've been experiencing truly has been the hit-stop then completely remove it immediately.
+```
+
 ### 2026-10-23 — a11y implementation must go through the research protocol first
 - **Received:** 2026-10-23 22:44 (user stopped the running test loop to send this)
 - **Classification:** process rule

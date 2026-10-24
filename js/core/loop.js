@@ -1,4 +1,6 @@
-// Fixed-timestep update loop with timescale + hit-stop.
+// Fixed-timestep update loop with timescale. (Hit-stop removed 2026-10-24, D104:
+// measured on the user's device as the sole in-play freeze source — see
+// docs/fps-test-video-2-review-2026-10-24.md; the generic ts<1 slow-motion path stays.)
 // Timing guardrails (frame clamp + backlog cap) live in CFG.loop; the 1/60 step
 // is the architecture invariant and stays here.
 import { CFG } from '../config.js';
@@ -12,9 +14,17 @@ import { CFG } from '../config.js';
 //
 // Window accounting — EXACT identity, every component summed per display window:
 //   wall = advanced + intended + lostClamp + lostCap + idle + accDrift
-//   advanced  = Σ n·step             simulated time actually run (n = steps taken per frame)
-//   intended  = Σ dt·(1−ts)          deliberate non-simulation: ts=0 during hit-stop,
-//                                    ts=timescale<1 slow-motion (never a performance fault)
+//   advanced  = Σ simN·step          simulated time actually run (of the n fixed steps taken per
+//                                    frame, simN = those whose update() did NOT return false)
+//   intended  = Σ dt·(1−ts) + Σ (n−simN)·step
+//                                    deliberate non-simulation, never a performance fault:
+//                                    ts=timescale<1 slow-motion (since D104 nothing in-game sets
+//                                    ts<1) + clock-stopped steps — the game's update() returns
+//                                    false (Game's non-PLAYING branches, 31.18). Before that
+//                                    gate, menu/pause seconds counted as advanced and the ?fps=1
+//                                    ratio read 1× while the game clock stood still (video-2 §8).
+//                                    advanced+intended per frame is invariant under the split, so
+//                                    the identity above stays exact.
 //   lostClamp = Σ (rawW − dt)        wall beyond CFG.loop.maxFrameDt, clamped away (tab switch, stall)
 //   lostCap   = Σ acc at CFG.loop.maxSteps cap — the backlog dropped by the `acc = 0` line
 //   idle      = wall − Σ rawW, SIGNED (positive = NO rAF callback ran in that stretch —
@@ -52,14 +62,16 @@ export class PerfCounters {
   }
   // Per-frame hook, called by Loop._frame when a collector is attached. Positional
   // primitives only: no object/array/string allocation in the hot path.
-  frame(rawW, dt, ts, n, dropped) {
+  // simN = of the n steps, those that actually advanced the simulation (31.18); the rest are
+  // deliberately clock-stopped by the game and land in `intended`, never in `advanced`.
+  frame(rawW, dt, ts, n, dropped, simN) {
     const h = this._hist;
     h[this._histIdx] = rawW * 1000;
     this._histIdx = (this._histIdx + 1) % h.length;
     if (this._histLen < h.length) this._histLen++;
     this.rawSum += rawW;
-    this.advanced += n * this.step;
-    this.intended += dt * (1 - ts);
+    this.advanced += simN * this.step;
+    this.intended += dt * (1 - ts) + (n - simN) * this.step;
     this.lostClamp += rawW - dt; // 0 unless the frame was clamped (rawW > maxFrameDt)
     this.lostCap += dropped;     // acc zeroed by the maxSteps guardrail this frame
     this.frames++;
@@ -105,7 +117,6 @@ export class Loop {
     this.update = update;
     this.render = render;
     this.timescale = 1;
-    this.hitstop = 0;
     this.running = false;
     this.last = 0;
     this.acc = 0;
@@ -123,18 +134,21 @@ export class Loop {
       const rawW = (t - this.last) / 1000; // true wall delta between rAF callbacks
       this.last = t;
       let dt = Math.min(rawW, CFG.loop.maxFrameDt); // clamp huge gaps (tab switch, debugger)
-      if (this.hitstop > 0) this.hitstop -= dt;
-      const ts = this.hitstop > 0 ? 0 : this.timescale;
+      const ts = this.timescale;
       this.acc += dt * ts;
       let n = 0;
+      let simN = 0;
       while (this.acc >= this.step && n < CFG.loop.maxSteps) {
-        this.update(this.step);
+        // update() contract (31.18): returning false declares a clock-stopped step (Game's
+        // non-PLAYING branches). The step still runs — menu animation, Esc/keys and the render
+        // path are behaviour-unchanged; only its time is re-bucketed from advanced to intended.
+        if (this.update(this.step) !== false) simN++;
         this.acc -= this.step;
         n++;
       }
       let dropped = 0;
       if (n >= CFG.loop.maxSteps) { dropped = this.acc; this.acc = 0; }
-      if (this.perf) this.perf.frame(rawW, dt, ts, n, dropped);
+      if (this.perf) this.perf.frame(rawW, dt, ts, n, dropped, simN);
       if (this.render) this.render(dt);
     };
   }
@@ -149,5 +163,4 @@ export class Loop {
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = null;
   }
-  hitStop(s) { this.hitstop = Math.max(this.hitstop, s); }
 }

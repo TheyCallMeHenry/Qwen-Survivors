@@ -46,7 +46,7 @@ Applies to every agent session in this repo. Overrides personal defaults where s
 See `docs/PLAN.md` §3 (module map + frame pipeline). Key invariants:
 
 - Render order: sky/parallax → ground → pickups → Y-sorted (entities+decor) → projectiles → particles → lighting → foreground snow/vignette → HUD.
-- Fixed 60 Hz update step; render every rAF; `timescale` + hit-stop in `core/loop.js`.
+- Fixed 60 Hz update step; render every rAF; `timescale` in `core/loop.js` (hit-stop retired D104, 2026-10-24).
 - Entities drawn via pre-rendered offscreen canvases only (no per-frame path art).
 - Lighting = half-res darkness canvas, `destination-out` holes, additive glow pass.
 - Enemy query structure = spatial hash grid in `entities/combat.js`/`enemies.js`.

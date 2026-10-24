@@ -610,7 +610,8 @@ export const CFG = {
     garlicTick: 0.45,
     spawnOriginFrac: 0.55, // 16.2: shared projectile spawn origin — fraction of the character sprite height above the feet (mid-torso); 1 = feet (legacy), 0 = head
     orbLife: 4.5, orbR: 7,
-    hitStopKill: 0.05, hitStopBoss: 0.18, hitStopHurt: 0.07,
+    // (hitStopKill/Boss/Hurt removed 2026-10-24 by user order — D104 in DECISIONS.md;
+    // evidence: docs/fps-test-video-2-review-2026-10-24.md)
     // Twin Fangs rounds (small, fast, short-lived — distinct from the cyan bolt)
     bulletSpeed: 720, bulletLife: 0.8, bulletR: 4, bulletKb: 120, fangsRange: 520,
     // Sunder Bombs (lob arc + fuse pause before AOE)

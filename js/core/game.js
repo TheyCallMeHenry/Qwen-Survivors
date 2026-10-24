@@ -406,25 +406,30 @@ export class Game {
   }
 
   // --- update (fixed 60Hz dt, called by Loop) ---
-
+  // Return contract (31.18): a step that does NOT advance the game clock returns false, so the
+  // Loop's diagnostics bucket that wall-time as deliberately-frozen (`intended`) instead of
+  // simulated. This switch is the single dispatch seam — every state path is covered and none can
+  // strand a stale verdict — and the step itself still runs (menu drift animates, Esc/digits stay
+  // live), so gameplay behaviour is unchanged. PLAYING and a running co-op client fall through as
+  // "advancing" (a client's displayed clock rides the host sim, so its ratio stays truthful).
   update(dt) {
     if (this.input.consumeMute()) this.bus.emit('mute');
     if (this.netRole === 'client' && this.state === 'PLAYING') { this._clientUpdate(dt); return; } // co-op: render path only
     switch (this.state) {
       case 'MENU':
         this._menuUpdate(dt);
-        break;
+        return false;
       case 'PAUSED':
         if (this.input.consumePause()) this.resume();
         else { this.input.consumeDash(); this.input.takeCardEdges(); }
-        break;
+        return false;
       case 'LEVELUP':
         this._levelUpInput();
-        break;
+        return false;
       case 'GAMEOVER':
         this.input.consumeDash();
         this.input.takeCardEdges();
-        break;
+        return false;
       default:
         this._playingUpdate(dt);
     }
@@ -646,7 +651,8 @@ export class Game {
     const lowHp = p.hp / p.maxHp < CFG.gems.lowHpFrac;
     if (Math.random() < (lowHp ? CFG.gems.heartChanceLowHp : CFG.gems.heartChance)) this.pickups.heart(e.x, e.y);
     this.particles.soul(e.x, e.y, e.boss ? 14 : 5);
-    this.loop.hitStop(e.boss ? CFG.combat.hitStopBoss : CFG.combat.hitStopKill);
+    // D104 (2026-10-24): the per-kill hit-stop was removed by user order — measurements
+    // showed it was the only in-play freeze source on the target device.
     if (e.boss) {
       this.camera.addShake(CFG.camera.shake.bossKill);
       this.bus.emit('banner', { text: `${(this.level && this.level.boss && this.level.boss.name) || 'THE WRAITH'} FALLS` });
@@ -657,7 +663,7 @@ export class Game {
   _onHurt(dmg, pl) {
     if (pl && pl !== this.player) return; // co-op: the local client only shakes for itself
     this.camera.addShake(CFG.camera.shake.hurt);
-    this.loop.hitStop(CFG.combat.hitStopHurt);
+    // D104: hit-stop removed (was hitStopHurt here); hurt feedback stays visual+audio.
     this.bus.emit('hurt');
   }
 

@@ -1169,7 +1169,7 @@ m03RunDone = true;
 {
   const g2 = new Game({
     input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
-    loop: { timescale: 1, hitStop() {} }, ctx: makeCtx(), mctx, characters, items,
+    loop: { timescale: 1 }, ctx: makeCtx(), mctx, characters, items,
   });
   g2.resize(1280, 800);
   g2.startRun('m01');
@@ -1934,7 +1934,7 @@ m03RunDone = true;
 {
   const g3 = new Game({
     input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
-    loop: { timescale: 1, hitStop() {} }, ctx: makeCtx(), mctx, characters, items,
+    loop: { timescale: 1 }, ctx: makeCtx(), mctx, characters, items,
   });
   g3.resize(1280, 800);
   g3.startRun('m01');
@@ -1988,7 +1988,7 @@ m03RunDone = true;
 {
   const gP = new Game({
     input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
-    loop: { timescale: 1, hitStop() {} }, ctx: makeCtx(), mctx, characters, items,
+    loop: { timescale: 1 }, ctx: makeCtx(), mctx, characters, items,
   });
   gP.resize(1280, 800);
   gP.startRun('m01');
@@ -2502,7 +2502,7 @@ m03RunDone = true;
   const rawA = mkRaw(), rawB = mkRaw(), rawC = mkRaw();
   await Promise.all([rawA, rawB, rawC].map((c) => c.opened));
 
-  const dummyLoop = { timescale: 1, hitStop() {} };
+  const dummyLoop = { timescale: 1 };
   const mkGame = () => {
     const g = new Game({
       input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
@@ -2719,7 +2719,7 @@ m03RunDone = true;
     raws.push(c);
     return c;
   };
-  const dummyLoop = { timescale: 1, hitStop() {} };
+  const dummyLoop = { timescale: 1 };
   const mkGame = () => {
     const g = new Game({
       input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
@@ -2890,7 +2890,7 @@ m03RunDone = true;
     raws.push(c);
     return c;
   };
-  const dummyLoop = { timescale: 1, hitStop() {} };
+  const dummyLoop = { timescale: 1 };
   const mkGame = () => {
     const g = new Game({
       input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
@@ -3205,7 +3205,7 @@ m03RunDone = true;
   const mkDurGame = () => {
     const g = new Game({
       input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
-      loop: { timescale: 1, hitStop() {} }, ctx: makeCtx(), mctx, characters, items,
+      loop: { timescale: 1 }, ctx: makeCtx(), mctx, characters, items,
     });
     g.resize(1280, 800);
     return g;
@@ -3365,7 +3365,7 @@ m03RunDone = true;
   };
   const rawA = mkRaw(), rawB = mkRaw();
   await Promise.all([rawA, rawB].map((c) => c.opened));
-  const dummyLoop = { timescale: 1, hitStop() {} };
+  const dummyLoop = { timescale: 1 };
   const mkGame = () => {
     const g = new Game({
       input: new Input(canvas, { joyBase: byId['joy-base'], joyKnob: byId['joy-knob'], dashBtn: byId['btn-dash'] }),
@@ -3422,6 +3422,53 @@ m03RunDone = true;
   assert(c1G.state === 'MENU' && c1G.net === null && c1G.netRole === 'solo', '14.2: client back to menu, solo again');
   rawA.w.close(); rawB.w.close();
   await new Promise((res) => { srv.closeAllConnections?.(); srv.close(res); });
+}
+
+// 31.18 — readout truth through the REAL Game + the real boot Loop: clock-stopped windows
+// (menu/pause) must NOT count as simulation, PLAYING must, and the 31.1 identity stays exact.
+// The gate is Game.update() returning false for non-advancing steps (single dispatch seam — no
+// state path can strand a stale verdict); the Loop re-buckets those steps into `intended`.
+{
+  const { PerfCounters: PC318b } = await import('../js/core/loop.js');
+  const pc318 = new PC318b({ step: loop.step });
+  const perfWindow = (frames) => {
+    pc318.beginWindow(t, loop.acc);
+    pump(frames);
+    const s = pc318.sample(t, loop.acc);
+    const sum = s.advanced + s.intended + s.lostClamp + s.lostCap + s.idle + s.accDrift;
+    assert(Math.abs(sum - s.wall) < 1e-9, `31.18: identity broken (${sum} vs ${s.wall})`);
+    return s;
+  };
+  game.toMenu();
+  loop.perf = pc318;
+  assert(game.state === 'MENU', `31.18: could not reach MENU (state=${game.state})`);
+  const sm = perfWindow(120); // 2 s of menu frames — the exact window the video-2 review misread as 1×
+  assert(game.state === 'MENU', '31.18: menu window left MENU mid-window (a start edge fired?)');
+  assert(sm.advanced === 0 && sm.ratio === 0 && sm.intended > 1.99,
+    `31.18: menu window must read ratio 0 with intended carrying the wall (adv=${sm.advanced} int=${sm.intended} ratio=${sm.ratio})`);
+  // Back to PLAYING through the real UI: steps advance again, intended stays 0, timescale untouched.
+  game.player.gainXp = () => 0; // no level-up churn inside the measured window (same idiom as the synergy E2E)
+  game.player.iframes = 1e9; game.player.hp = game.player.maxHp; // survive the measured stretch
+  byId['btn-start'].click();
+  assert(game.state === 'PLAYING', '31.18: btn-start did not enter PLAYING');
+  assert(loop.timescale === 1, `31.18: startRun left timescale=${loop.timescale} (PLAYING must never slow)`);
+  const sp = perfWindow(120);
+  assert(Math.abs(sp.advanced - 2) < 1e-9 && sp.intended === 0 && Math.abs(sp.ratio - 1) < 1e-9,
+    `31.18: PLAYING window still reads ratio 1 / adv = wall (adv=${sp.advanced} int=${sp.intended} ratio=${sp.ratio})`);
+  // Pause → clock-stopped again; resume → advancing again. State churn never strands a verdict,
+  // and pause must not touch timescale (the fix is readout-only, zero gameplay side-effect).
+  byId['btn-pause'].click();
+  assert(game.state === 'PAUSED', '31.18: btn-pause did not pause');
+  assert(loop.timescale === 1, '31.18: pause changed timescale (readout must not affect the loop)');
+  const spa = perfWindow(120);
+  assert(spa.advanced === 0 && spa.intended > 1.99,
+    `31.18: pause window not clock-stopped (adv=${spa.advanced} int=${spa.intended})`);
+  byId['btn-resume'].click();
+  assert(game.state === 'PLAYING', '31.18: btn-resume did not resume');
+  const sr = perfWindow(60);
+  assert(Math.abs(sr.advanced - 1) < 1e-9 && sr.ratio > 0.999,
+    `31.18: resume did not restore advancing (adv=${sr.advanced} ratio=${sr.ratio})`);
+  loop.perf = null;
 }
 
 // self-verification: every one-shot path above must have actually fired
