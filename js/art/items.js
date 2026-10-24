@@ -321,8 +321,8 @@ function explosionSprite() {
   return c;
 }
 
-// Phase 21 (D96) projectile sprites — 31.4: `shell` is the Homing Missile projectile
-// (rotates, faces +x — id kept, see the config weapons.cannon key mapping), boulder
+// Phase 21 (D96) projectile sprites — 31.4: the Homing Missile projectile (`missile`;
+// 31.15 renamed the old `shell` sprite key with the weapon; rotates, faces +x), boulder
 // (rotates, centered), web knot (no rotation).
 function missileSprite() {
   // 31.4 Homing Missile projectile (re-bakes the 29.12 shell): ogive warhead with a
@@ -388,10 +388,10 @@ function missileSprite() {
 // differ; combat.draw gives it a snap-out-then-slam timing rhythm. Build-time only;
 // consumed by combat's
 // lazy fx cache (game.js does not wire it — the visual hookup lives in combat.js).
-export function tankBlastSprite() {
+export function missileBlastSprite() {
   const c = makeCanvas(128, 128);
   const g = c.getContext('2d');
-  // smoke ring: desaturated gunmetal (the tank identity — no bomb ever has this)
+  // smoke ring: desaturated gunmetal (the missile blast's identity — no bomb ever has this)
   g.strokeStyle = 'rgba(146,158,174,0.42)'; g.lineWidth = 11;
   g.beginPath(); g.arc(64, 64, 54, 0, TAU); g.stroke();
   g.strokeStyle = 'rgba(58,68,82,0.4)'; g.lineWidth = 4;
@@ -953,7 +953,7 @@ export function buildIcons() {
     }
   });
 
-  icons.pistols = make('weapon', (g) => {
+  icons.fangs = make('weapon', (g) => {
     // Twin revolvers crossed in an X: muzzles high-out, wooden grips crossed low-center.
     // Dark outline per gun keeps the two silhouettes legible against each other at 72px.
     const OL = 'rgba(9,13,24,0.9)';
@@ -1027,7 +1027,7 @@ export function buildIcons() {
     dot(g, 26, 56, 1.6, 'rgba(255,190,90,0.85)'); dot(g, 47, 53, 1.3, 'rgba(255,190,90,0.7)');
   });
 
-  icons.flame = make('weapon', (g) => {
+  icons.pyre = make('weapon', (g) => {
     // Pyre Lance: great flame tongue splitting into three licks with a rising ember column
     const glow = g.createRadialGradient(36, 40, 2, 36, 40, 28);
     glow.addColorStop(0, 'rgba(255,214,120,0.5)'); glow.addColorStop(1, 'rgba(255,90,30,0)');
@@ -1788,10 +1788,10 @@ export function buildIcons() {
   });
 
   // ================= PHASE 21 — WEAPONS (9) ==============================
-  icons.cannon = make('weapon', (g) => {
+  icons.missile = make('weapon', (g) => {
     // 31.4 Homing Missile: an airborne missile in flame trailing a lock-on reticle over
     // its nose — reads as "tracks and detonates", not a barrel (the old Tank Cannon
-    // barrel is retired; icon key `cannon` kept — see the config weapons.cannon mapping).
+    // barrel is retired; 31.15: icon key `missile` matches the card name).
     g.save();
     g.translate(30, 38); g.rotate(-0.72); // flying up-right
     // exhaust plume behind the body
@@ -1841,7 +1841,7 @@ export function buildIcons() {
     glint(g, 58, 14, 4.5, 'rgba(255,140,150,0.8)', 1.6);
   });
 
-  icons.wolf = make('weapon', (g) => {
+  icons.wolfpack = make('weapon', (g) => {
     // 29.9 complete rework: THE PACK — three snarling wolf heads in the exact
     // in-game coat identities (dark grey + dark brown back row, light brown alpha
     // front), amber eyes (the enemy wolf's are red), bared fangs, heavy outlines
@@ -1984,7 +1984,7 @@ export function buildIcons() {
     dot(g, 50, 10, 1.4, 'rgba(255,190,200,0.8)');
   });
 
-  icons.ball = make('weapon', (g) => {
+  icons.cannonball = make('weapon', (g) => {
     // Iron cannonball with ricochet trail over the plate
     const tg = g.createLinearGradient(30, 24, 50, 48);
     tg.addColorStop(0, '#5a6472'); tg.addColorStop(0.55, '#2c333d'); tg.addColorStop(1, '#161b22');
@@ -2096,7 +2096,7 @@ export function buildIcons() {
   });
 
   // ================= PHASE 21 — SYNERGIES (5) ============================
-  icons.heShell = make('synergy', (g) => {
+  icons.napalmMissile = make('synergy', (g) => {
     // Cannon shell wreathed in holy flame
     flameShape(g, 38, 8, 26, 0.05);
     g.fillStyle = 'rgba(255,150,70,0.55)'; g.fill();
@@ -2209,9 +2209,9 @@ export function buildItems() {
     bomb: bombSprite(),
     flame: flameSprite(),
     explosion: explosionSprite(),
-    // Phase 21 (D96) projectile sprites — 31.4: `shell` = the Homing Missile projectile
-    // (sprite id kept stable; combat reads items.shell — see the config weapons.cannon mapping)
-    shell: missileSprite(),
+    // Phase 21 (D96) projectile sprites — 31.4: the Homing Missile projectile (31.15:
+    // id `missile`; combat reads items.missile — game.js wires it to combat.missileImg)
+    missile: missileSprite(),
     boulder: boulderSprite(),
     web: webSprite(),
     burn: burnSprite(),

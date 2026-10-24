@@ -8,7 +8,7 @@
 // Node-safe: no canvas at top level.
 import { CFG } from '../config.js';
 import { TAU, approach, clamp, rand } from '../utils/math.js';
-import { tankBlastSprite, reflectFlashSprite, scorchSparkSprite } from '../art/items.js';
+import { missileBlastSprite, reflectFlashSprite, scorchSparkSprite } from '../art/items.js';
 import { buildPackWolves } from '../art/characters.js';
 
 // 29.10: lifetime of the reflect-hit flash (purely cosmetic — the reflect itself is
@@ -18,7 +18,7 @@ const REFLECT_FX = 0.32;
 // 29.9/29.10/29.12 visual art for these hooks, built ONCE per Combat instance on first
 // use (pre-rendered offscreen canvases — draw only ever blits). Kept here because
 // game.js is frozen to Phase-21 wiring; nothing gameplay-relevant depends on it.
-const buildCombatFx = () => ({ tank: tankBlastSprite(), flash: reflectFlashSprite(), wolves: buildPackWolves(), scorch: scorchSparkSprite() });
+const buildCombatFx = () => ({ missile: missileBlastSprite(), flash: reflectFlashSprite(), wolves: buildPackWolves(), scorch: scorchSparkSprite() });
 
 export class Combat {
   constructor() {
@@ -29,11 +29,11 @@ export class Combat {
     this.flames = [];
     this.arrows = [];
     this.snowballs = []; // 12.3: lobbed snowballs (bomb-style flight, burst ON impact)
-    // Phase 21 (D96) / 31.4: Homing Missile projectiles (id `shells` kept — see the
-    // config weapons.cannon key mapping), laser beams, Rolling Boulders, web strands.
+    // Phase 21 (D96) / 31.4: Homing Missile projectiles (`missiles`; 31.15 renamed the
+    // old `shells` id with the weapon), laser beams, Rolling Boulders, web strands.
     // Wolfpack / Mirror Shield state lives ON the owning player (p._wolves + the
     // p._companion leader ref, p._boulder, p._shieldBank) so the snapshot tail + ownership follow the player.
-    this.shells = [];
+    this.missiles = [];
     this.beams = [];
     this.boulders = [];
     this.webs = [];
@@ -54,7 +54,7 @@ export class Combat {
     this.snowballImg = null; // 12.3
     this.frostImg = null;    // 12.3: small frost burst for the snowball impact
     this.sparkImg = null;    // 12.4: lightning spark at a bolt's strike point
-    this.shellImg = null;    // P21/31.4: Homing Missile projectile (key `shell` kept)
+    this.missileImg = null;    // P21/31.4: Homing Missile projectile sprite
     this.boulderImg = null;  // P21: rolling boulder
     this.webImg = null;      // P21: web strand
     this.explosionImg = null;
@@ -87,7 +87,7 @@ export class Combat {
     this.flames.length = 0;
     this.arrows.length = 0;
     this.snowballs.length = 0;
-    this.shells.length = 0;
+    this.missiles.length = 0;
     this.beams.length = 0;
     this.boulders.length = 0;
     this.webs.length = 0;
@@ -217,18 +217,18 @@ export class Combat {
   // ---- Phase 21 weapon primitives (tables in CFG.weapons, mechanics here) ----
 
   // 31.4 Homing Missile (was the P21 Tank Cannon shell): `target` is the foe the
-  // missile locks onto at launch (pick it with shellTarget); the missile homes, and on
-  // reaching it deals direct dmg + an AoE blast (dmg × CFG.combat.shellBlastK in
-  // blastR — same numbers as the old terminal hit). `ignite` (Shells of Perdition row
+  // missile locks onto at launch (pick it with missileTarget); the missile homes, and on
+  // reaching it deals direct dmg + an AoE blast (dmg × CFG.combat.missileBlastK in
+  // blastR — same numbers as the old terminal hit). `ignite` (Napalm Missile row
   // {dps,dur}) makes that blast set every caught foe burning. `tried` accumulates every
   // foe ever locked so a re-lock goes to the NEXT one. Flight time = the hard 10 s
   // CFG.combat.missileFuse — never reset by a re-lock.
-  fireShell(x, y, ang, dmg, blastR, ignite = null, owner = null, target = null) {
+  fireMissile(x, y, ang, dmg, blastR, ignite = null, owner = null, target = null) {
     const C = CFG.combat;
-    this.shells.push({
+    this.missiles.push({
       x, y,
-      vx: Math.cos(ang) * C.shellSpeed,
-      vy: Math.sin(ang) * C.shellSpeed,
+      vx: Math.cos(ang) * C.missileSpeed,
+      vy: Math.sin(ang) * C.missileSpeed,
       rot: ang, dmg, blastR, ignite, owner,
       target, tried: new Set(),
       life: C.missileFuse,
@@ -239,14 +239,14 @@ export class Combat {
   // remaining health" was ambiguous; the user ruled Option A on 2026-10-23 (USER-INPUT-LOG):
   // MOST REMAINING HP wins; exact-HP ties are broken by nearest (nearest-first was explicitly
   // rejected). Distance is measured from (x, y): the player at launch, the missile itself on
-  // every re-lock; candidates must sit within CFG.combat.cannonRange and not be in `exclude`
+  // every re-lock; candidates must sit within CFG.combat.missileRange and not be in `exclude`
   // (the missile's `tried` set, so a re-lock goes to the NEXT-highest-HP foe — the notes'
   // "next nearest enemy with the highest remaining health" read the same way). Consequence
   // the user accepted (Option pile-on, asked before implementing): several missiles converge
   // on the same toughest foe until it dies.
-  shellTarget(x, y, enemies, exclude = null) {
+  missileTarget(x, y, enemies, exclude = null) {
     let best = null, bd = 0;
-    const r2 = CFG.combat.cannonRange * CFG.combat.cannonRange;
+    const r2 = CFG.combat.missileRange * CFG.combat.missileRange;
     for (const e of enemies.list) {
       if (e.dead || (exclude && exclude.has(e))) continue;
       const dx = e.x - x, dy = e.y - y;
@@ -367,7 +367,7 @@ export class Combat {
     this._bombs(dt, enemies);
     this._snowballs(dt, enemies);
     this._flames(dt, enemies);
-    this._shells(dt, enemies);
+    this._missiles(dt, enemies);
     this._beams(dt, enemies);
     this._boulders(dt, enemies);
     this._webs(dt, enemies);
@@ -637,18 +637,18 @@ export class Combat {
   // math, unchanged). A dead lock re-locks to the NEXT nearest (never a foe already
   // tried); with nothing to lock the missile flies straight until the 10 s fuse (or the
   // world edge) detonates it IN PLACE, "as if it had hit an enemy" (notes line 89).
-  _shells(dt, enemies) {
+  _missiles(dt, enemies) {
     const C = CFG.combat;
-    for (let i = this.shells.length - 1; i >= 0; i--) {
-      const b = this.shells[i];
+    for (let i = this.missiles.length - 1; i >= 0; i--) {
+      const b = this.missiles[i];
       b.life -= dt;
       if (b.target && b.target.dead) { b.tried.add(b.target); b.target = null; }
-      if (!b.target) b.target = this.shellTarget(b.x, b.y, enemies, b.tried);
+      if (!b.target) b.target = this.missileTarget(b.x, b.y, enemies, b.tried);
       if (b.target) {
         const dx = b.target.x - b.x, dy = b.target.y - b.y;
         const d = Math.hypot(dx, dy) || 1;
-        b.vx = (dx / d) * C.shellSpeed;
-        b.vy = (dy / d) * C.shellSpeed;
+        b.vx = (dx / d) * C.missileSpeed;
+        b.vy = (dy / d) * C.missileSpeed;
       }
       b.x += b.vx * dt;
       b.y += b.vy * dt;
@@ -656,32 +656,33 @@ export class Combat {
       let gone = b.life <= 0 || b.x < 0 || b.x > CFG.world.w || b.y < 0 || b.y > CFG.world.h;
       let boomed = false;
       if (!gone && b.target) {
-        const e = b.target, rr = e.r + C.shellR;
+        const e = b.target, rr = e.r + C.missileR;
         const dx = e.x - b.x, dy = e.y - b.y;
         if (dx * dx + dy * dy < rr * rr) {
-          this.damageEnemy(e, b.dmg, b.vx / C.shellSpeed, b.vy / C.shellSpeed, 0, b.owner);
-          this._shellBlast(b, enemies); // impact = direct hit + the terminal AoE
+          this.damageEnemy(e, b.dmg, b.vx / C.missileSpeed, b.vy / C.missileSpeed, 0, b.owner);
+          this._missileBlast(b, enemies); // impact = direct hit + the terminal AoE
           gone = true; boomed = true;
         }
       }
-      if (gone && !boomed) this._shellBlast(b, enemies); // fuse/world-edge: detonate in place (no direct hit — there is no foe)
-      if (gone) this.shells.splice(i, 1);
+      if (gone && !boomed) this._missileBlast(b, enemies); // fuse/world-edge: detonate in place (no direct hit — there is no foe)
+      if (gone) this.missiles.splice(i, 1);
     }
   }
 
-  // Blast at a missile's terminal detonation: shellBlastK × direct dmg in blastR, plus
-  // the Shells of Perdition burn when the shooter had it (mechanics unchanged 31.4).
-  _shellBlast(b, enemies) {
+  // Blast at a missile's terminal detonation: missileBlastK × direct dmg in blastR, plus
+  // the Napalm Missile burn when the shooter had it (mechanics unchanged since 31.4).
+  _missileBlast(b, enemies) {
     const C = CFG.combat;
-    // 29.12: `tank` tags this blast for its own sprite + rhythm in draw (visual only;
+    // 29.12 (tag was `tank`, the retired Tank Cannon name; 31.15: `missile`): tags this
+    // blast for its own sprite + rhythm in draw (visual only;
     // the explosions record stays a pure cosmetic entry, math unchanged).
-    this.explosions.push({ x: b.x, y: b.y, t: 0, dur: C.bombFlash, r: b.blastR, tank: true });
+    this.explosions.push({ x: b.x, y: b.y, t: 0, dur: C.bombFlash, r: b.blastR, missile: true });
     for (const e of enemies.grid.range(b.x, b.y, b.blastR + CFG.ai.gridCell)) {
       if (e.dead) continue;
       const dx = e.x - b.x, dy = e.y - b.y;
       const d = Math.hypot(dx, dy) || 1;
       if (d > b.blastR + e.r) continue;
-      this.damageEnemy(e, b.dmg * C.shellBlastK, dx / d, dy / d, C.bombKb, b.owner);
+      this.damageEnemy(e, b.dmg * C.missileBlastK, dx / d, dy / d, C.bombKb, b.owner);
       if (b.ignite) {
         e.burnT = Math.max(e.burnT || 0, b.ignite.dur);
         e.burnDps = Math.max(e.burnDps || 0, b.ignite.dps);
@@ -1178,13 +1179,13 @@ export class Combat {
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
       ctx.restore();
     }
-    // 31.4 Homing Missile sprites (same rotated-sprite pattern as bolts; the `shell`
-    // sprite key and the `tank` blast tag are kept as stable ids — config key mapping).
-    if (this.shellImg) for (const b of this.shells) {
+    // 31.4 Homing Missile sprites (same rotated-sprite pattern as bolts; 31.15: the
+    // `missile` sprite key and blast tag match the card id).
+    if (this.missileImg) for (const b of this.missiles) {
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(b.rot);
-      ctx.drawImage(this.shellImg, -this.shellImg.width / 2, -this.shellImg.height / 2);
+      ctx.drawImage(this.missileImg, -this.missileImg.width / 2, -this.missileImg.height / 2);
       ctx.restore();
     }
     // P21 web strands: light silk thread + knot at the traveling end
@@ -1288,11 +1289,11 @@ export class Combat {
         // 29.12 (tag kept 31.4): the Homing Missile blast is visually DISTINCT from
         // Sunder bombs — hard-edged shock-star sprite (above), snap-out expansion, then
         // a SLAM fade (vs the bomb's slow linear fade). Shape + rhythm differ, not just hue.
-        if (x.tank) {
+        if (x.missile) {
           if (!this._fx) this._fx = buildCombatFx();
           const ts = x.r * 2 * (1 + 0.5 * Math.min(1, k * 2.4)); // snap out, then hold
           ctx.globalAlpha = k < 0.4 ? 1 : 1 - (k - 0.4) / 0.6;   // slam out
-          ctx.drawImage(this._fx.tank, x.x - ts / 2, x.y - ts / 2, ts, ts);
+          ctx.drawImage(this._fx.missile, x.x - ts / 2, x.y - ts / 2, ts, ts);
           continue;
         }
         ctx.globalAlpha = 0.85 * (1 - k);

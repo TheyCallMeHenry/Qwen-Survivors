@@ -113,6 +113,38 @@ export function initScreens(game, { icons }) {
 
   const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
 
+  // a11y C (D102, adopted by the user 2026-10-23): W3C APG radiogroup keyboard contract —
+  // the group is ONE tab stop (renders mark only the checked item tabIndex 0) and arrow keys
+  // move focus + selection inside it. Delegated keydown per container: find the roving item,
+  // step it, focus it, and invoke its own click handler so selection — and the locked-card
+  // deny/shake UX — behave exactly as with pointer input. If the click re-rendered the group
+  // (accepted selection), focus follows to the fresh checked item; if it was denied, focus
+  // stays on the inspected (locked) card.
+  const moveRadio = (container, e) => {
+    const k = e.key;
+    if (k !== 'ArrowRight' && k !== 'ArrowDown' && k !== 'ArrowLeft' && k !== 'ArrowUp' && k !== 'Home' && k !== 'End') return;
+    const items = Array.from(container.children).filter((el) => el.getAttribute && el.getAttribute('role') === 'radio');
+    if (!items.length) return;
+    const focused = typeof document !== 'undefined' ? document.activeElement : null;
+    let from = items.indexOf(focused);
+    if (from < 0) from = Math.max(0, items.findIndex((el) => el.tabIndex === 0));
+    const n = items.length;
+    const to = k === 'Home' ? 0 : k === 'End' ? n - 1
+      : (k === 'ArrowRight' || k === 'ArrowDown') ? (from + 1) % n : (from - 1 + n) % n;
+    e.preventDefault();
+    items[from].tabIndex = -1;
+    items[to].tabIndex = 0;
+    items[to].focus();
+    items[to].click();
+    if (items[to].isConnected === false) { // re-render replaced the nodes — land focus on the new checked item
+      const fresh = items.length && Array.from(container.children).find((el) => el.getAttribute && el.getAttribute('aria-checked') === 'true');
+      if (fresh) fresh.focus();
+    }
+  };
+  levelSelect.addEventListener('keydown', (e) => moveRadio(levelSelect, e));
+  durationSelect.addEventListener('keydown', (e) => moveRadio(durationSelect, e));
+  charList.addEventListener('keydown', (e) => moveRadio(charList, e));
+
   // --- level select (13.7): 3 radio cards; locked visible + denied; selection persists ---
   function renderLevels() {
     levelSelect.innerHTML = '';
@@ -128,8 +160,11 @@ export function initScreens(game, { icons }) {
       if (sel) card.classList.add('sel');
       if (!unlocked) card.classList.add('locked');
       card.setAttribute('role', 'radio');
+      // a11y C research §D (2026-10-23): locked stays focusable — the card is where the
+      // unlock requirement is stated — but announces as unavailable via aria-disabled.
+      card.setAttribute('aria-disabled', unlocked ? 'false' : 'true');
       card.setAttribute('aria-checked', sel ? 'true' : 'false');
-      card.tabIndex = 0;
+      card.tabIndex = sel ? 0 : -1; // a11y C: roving tabindex — only the checked card is a tab stop
       const chip = document.createElement('span');
       chip.className = 'lv-chip';
       chip.style.background = `linear-gradient(180deg, ${lvl.palette.skyTop}, ${lvl.palette.skyHorizon})`;
@@ -190,6 +225,7 @@ export function initScreens(game, { icons }) {
       if (sel) chip.classList.add('sel');
       chip.setAttribute('role', 'radio');
       chip.setAttribute('aria-checked', sel ? 'true' : 'false');
+      chip.tabIndex = sel ? 0 : -1; // a11y C: roving tabindex (native buttons would otherwise all tab-stop)
       chip.textContent = def.label;
       chip.addEventListener('click', () => { game.setDuration(key); renderDurations(); });
       durationSelect.append(chip);
@@ -216,8 +252,10 @@ export function initScreens(game, { icons }) {
       if (!unlocked) card.classList.add('locked');
       if (taken.has(key)) card.classList.add('taken');
       card.setAttribute('role', 'radio');
+      // a11y C research §D: unavailable choices (locked or co-op-taken) announce as such.
+      card.setAttribute('aria-disabled', (!unlocked || taken.has(key)) ? 'true' : 'false');
       card.setAttribute('aria-checked', sel ? 'true' : 'false');
-      card.tabIndex = 0;
+      card.tabIndex = sel ? 0 : -1; // a11y C: roving tabindex — only the checked card is a tab stop
       const sheet = game.roster[key];
       const cv = document.createElement('canvas');
       cv.width = sheet.w * 2; cv.height = sheet.h * 2;

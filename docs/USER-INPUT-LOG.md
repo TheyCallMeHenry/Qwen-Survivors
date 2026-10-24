@@ -13,6 +13,46 @@
 
 ## Entries (newest first)
 
+### 2026-10-23 — a11y implementation must go through the research protocol first
+- **Received:** 2026-10-23 22:44 (user stopped the running test loop to send this)
+- **Classification:** process rule
+- **Context:** applies the standard validate-before-acting protocol specifically to the a11y feature already drafted in the tree.
+- **Verbatim:**
+```
+**REGARDING THE ACCESSIBILITY FEATURE IMPLEMENTATION:**
+Validate your assumptions before acting. In order:
+0. If the topic is underspecified, ask me before searching — do not guess.
+1. First action, as its own separate tool call: run your shell's date command and record it. Never batch this with research; never trust the date already in context.
+2. Research the current state of [TOPIC-AT-HAND]; official docs and primary sources first. Ensure you also adequately perform anti-/counter-research before finalizing claims and recommendations. Anchor queries to the verified date. Prefer measurements, benchmarks, changelogs and issues over vendor marketing; treat vendor copy as a claim to check, not a fact. Always prioritize results/data from within the past 30 days. If insufficient reliable results/data are available then expand your prioritization to within the past 60 days. If there are still insufficient reliable results/data available within 60 days, then expand your prioritization to within the past 90 days. All results/data older than 90 days *MUST* be marked as such and weighted lower than more recently released/updated results/data.
+3. Write findings straight to docs/[topic]-research-[DATE].md before reporting: each claim with title and URL, fact vs inference labelled, and what you could not verify.
+4. Report to me in ≤10 bullet lines: findings first, citations inline, no re-dump of the document. Use lay-person-friendly, technical jargon-free, and ADHD-friendly/-accessible formatting and language. If you must use technical terms/acronyms to maintain accuracy/completeness of the presented information then you must adequately define/explain each term, phrase, or acronym used.
+Complete all of this before any implementation, the only exceptions being project directory setup and the initial plan/docs.
+```
+
+### 2026-10-23 — a11y C adopted · weapon IDs to match names · publish order
+- **Received:** 2026-10-23 (after the a11y C presentation)
+- **Classification:** answer/approval (a11y C) + feature request (identifier consistency) + answer/approval (publish)
+- **Context:** third publish batch after the ruling batch.
+- **Verbatim:**
+```
+1. Adopt the accessibility feature
+2. Ensure all weapon names/IDs in the code match their names to avoid confusion for anyone reading through the codebase.
+3. Commit, push, publish to GH pages.
+```
+
+### 2026-10-23 — Ruling batch: tongue A · cone 60° · blast +10% · synergy → “Napalm Missile” · a11y C summary requested
+- **Received:** 2026-10-23
+- **Classification:** design decisions (4) + feature request (summary)
+- **Context:** answers the five presented pending rulings (post-publish).
+- **Verbatim:**
+```
+1. Option A
+2. 60 degrees
+3. 10% larger instead of 25%
+4. Change to "Napalm Missile"
+5. Present an ADHD-friendly summary of Accessibility Option "C".
+```
+
 ### 2026-10-23 — Balance directives + publish order (boss HP +30%, Gatling bullet dmg −25%)
 - **Received:** 2026-10-23
 - **Classification:** feature request (balance tuning) + answer/approval (publish ask answered)

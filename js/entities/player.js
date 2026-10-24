@@ -37,7 +37,7 @@ export class Player {
     this.animT = 0; this.frameIdx = 0; this.moving = false; this.flip = false;
     this.dead = false;
     this._wandCd = 0; this._axeCd = 0;
-    this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0; this._snowCd = 0;
+    this._fangsCd = 0; this._bombCd = 0; this._bowCd = 0; this._snowCd = 0;
     this._bowCharge = 0; // 23.1: >0 while the string is drawing (charge-up wind-up)
     this._ringCd = 0; this._ringBeams = []; // 12.4: Ring of Chain Lightning tick + live arcs
     // Phase 21 (D96) per-weapon timers/state (never synced — clients never simulate;
@@ -45,7 +45,7 @@ export class Player {
     // 29.7 (D99): _laserAng = the live orbit angle, advanced every tick the weapon
     // is owned (active or not); 29.9: _wolves = the live pack, _companion stays a
     // reference to wolves[0] (the co-op snapshot tail streams that one object).
-    this._cannonCd = 0; this._laserCd = 0; this._laserT = 0; this._laserAng = 0; this._webCd = 0;
+    this._missileCd = 0; this._laserCd = 0; this._laserT = 0; this._laserAng = 0; this._webCd = 0;
     // 29.8: _gatReload is the remaining reload time (monotonic countdown), _gatReloadTotal its
     // value at reload start — together the HUD ring reads a decreasing fraction of time left.
     this._gatCd = 0; this._gatMag = CFG.weapons.gatling.burst; this._gatReload = 0; this._gatReloadTotal = 0;
@@ -91,10 +91,10 @@ export class Player {
     this.animT = 0; this.frameIdx = 0; this.moving = false; this.flip = false;
     this.dead = false;
     this._wandCd = 0; this._axeCd = 0;
-    this._pistolCd = 0; this._bombCd = 0; this._bowCd = 0; this._snowCd = 0;
+    this._fangsCd = 0; this._bombCd = 0; this._bowCd = 0; this._snowCd = 0;
     this._bowCharge = 0;
     this._ringCd = 0; this._ringBeams = [];
-    this._cannonCd = 0; this._laserCd = 0; this._laserT = 0; this._laserAng = 0; this._webCd = 0;
+    this._missileCd = 0; this._laserCd = 0; this._laserT = 0; this._laserAng = 0; this._webCd = 0;
     this._gatCd = 0; this._gatMag = CFG.weapons.gatling.burst; this._gatReload = 0; this._gatReloadTotal = 0; // runs/mid-picks start with a full mag
     this._batCd = 0; this._batSwing = 0; this._boulderCd = 0; this._boulder = null;
     this._tongueCd = 0; this._tongueFx = null; this._ballCd = 0; this._ball = null;
@@ -386,11 +386,11 @@ export class Player {
         this._axeCd = S.cd * this.cdMul;
       }
     }
-    if (this.weapons.pistols) {
-      const S = W.pistols.levels[this.weapons.pistols - 1];
-      this._pistolCd -= dt;
-      if (this._pistolCd <= 0) {
-        const [n1, n2] = this._nearestTwo(enemies, CFG.combat.pistolRange);
+    if (this.weapons.fangs) {
+      const S = W.fangs.levels[this.weapons.fangs - 1];
+      this._fangsCd -= dt;
+      if (this._fangsCd <= 0) {
+        const [n1, n2] = this._nearestTwo(enemies, CFG.combat.fangsRange);
         if (n1) {
           const sy = this._spawnY();
           const a1 = Math.atan2(n1.y - sy, n1.x - this.x);
@@ -410,7 +410,7 @@ export class Player {
           combat.fireBullet(this.x, sy, a1, S.dmg * this.dmgMul, inf, this, storm1);
           combat.fireBullet(this.x, sy, a2, S.dmg * this.dmgMul, inf, this, storm2);
           if (combat.pulse) combat.pulse('pistol');
-          this._pistolCd = S.rate * this.cdMul;
+          this._fangsCd = S.rate * this.cdMul;
         }
       }
     }
@@ -432,8 +432,8 @@ export class Player {
         this._bombCd = S.cd * this.cdMul;
       }
     }
-    if (this.weapons.flame) {
-      const S = W.flame.levels[this.weapons.flame - 1];
+    if (this.weapons.pyre) {
+      const S = W.pyre.levels[this.weapons.pyre - 1];
       const f = this._flame;
       if (f.fuel <= 0 && !f.reloading) f.fuel = S.fuel; // not fired yet — start full
       if (f.fuel > S.fuel) f.fuel = S.fuel;
@@ -512,19 +512,19 @@ export class Player {
       }
     }
     // ---- Phase 21 (D96) fire-sites — tables in CFG.weapons, mechanics in combat ----
-    if (this.weapons.cannon) {
-      const S = W.cannon.levels[this.weapons.cannon - 1];
-      this._cannonCd -= dt;
-      if (this._cannonCd <= 0) {
+    if (this.weapons.missile) {
+      const S = W.missile.levels[this.weapons.missile - 1];
+      this._missileCd -= dt;
+      if (this._missileCd <= 0) {
         // 31.4 Homing Missile: launch lock uses combat's single lock rule (nearest,
-        // ties → most remaining HP, within cannonRange) and is handed to the missile.
+        // ties → most remaining HP, within missileRange) and is handed to the missile.
         const sy = this._spawnY();
-        const tgt = combat.shellTarget(this.x, sy, enemies);
+        const tgt = combat.missileTarget(this.x, sy, enemies);
         if (tgt) {
-          const hs = this.synergies.heShell || 0;
-          combat.fireShell(this.x, sy, Math.atan2(tgt.y - sy, tgt.x - this.x), S.dmg * this.dmgMul, S.blastR,
-            hs > 0 ? CFG.synergies.heShell.levels[hs - 1] : null, this, tgt);
-          this._cannonCd = S.cd * this.cdMul;
+          const hs = this.synergies.napalmMissile || 0;
+          combat.fireMissile(this.x, sy, Math.atan2(tgt.y - sy, tgt.x - this.x), S.dmg * this.dmgMul, S.blastR,
+            hs > 0 ? CFG.synergies.napalmMissile.levels[hs - 1] : null, this, tgt);
+          this._missileCd = S.cd * this.cdMul;
         }
       }
     }
@@ -620,8 +620,8 @@ export class Player {
         }
       }
     }
-    if (this.weapons.ball && !this._ball && this.dashT <= 0) {
-      const S = W.ball.levels[this.weapons.ball - 1];
+    if (this.weapons.cannonball && !this._ball && this.dashT <= 0) {
+      const S = W.cannonball.levels[this.weapons.cannonball - 1];
       this._ballCd -= dt;
       if (this._ballCd <= 0) {
         // 31.2: the opening rocket also skips straight-line-blocked foes (same pin defect,
@@ -632,7 +632,7 @@ export class Player {
           // The ball state propels itself (_ballStep); zero carried movement velocity so the
           // arc can't drift off the impact-point rule (spec: (x,y) ends AT each impact).
           this.vx = 0; this.vy = 0;
-          this._ballCd = W.ball.cd * this.cdMul; // 10 s at every level (spec); Coffee shortens it
+          this._ballCd = W.cannonball.cd * this.cdMul; // 10 s at every level (spec); Coffee shortens it
           if (combat.pulse) combat.pulse('ball');
         }
       }
@@ -704,9 +704,9 @@ export class Player {
     if (this.flip) ctx.scale(-1, 1);
     ctx.drawImage(img, -def.w / 2, -def.h);
     ctx.restore();
-    if (this.weapons.flame) {
+    if (this.weapons.pyre) {
       // 19.2 (D68): fuel bar beneath the player at foot level (red = recharging)
-      const S = CFG.weapons.flame.levels[this.weapons.flame - 1];
+      const S = CFG.weapons.pyre.levels[this.weapons.pyre - 1];
       const w = 26, h = 3;
       const f = Math.max(0, Math.min(1, this._flame.fuel / S.fuel));
       ctx.fillStyle = 'rgba(10,8,14,0.75)';
@@ -819,7 +819,7 @@ const WEAPON_FIELDS = {
     ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
     ['rad', (v) => `radius ${v}`, (a, b) => `radius ${a}→${b}`],
   ],
-  pistols: [
+  fangs: [
     ['rate', (v) => `every ${fmtS(v)} s`, (a, b) => `rate ${fmtS(a)}→${fmtS(b)} s`],
     ['dmg', (v) => `${v} dmg per round`, (a, b) => `dmg ${a}→${b} per round`],
     ['spread', (v) => `spread ${v}`, (a, b) => `spread ${a}→${b}`],
@@ -830,7 +830,7 @@ const WEAPON_FIELDS = {
     ['r', (v) => `radius ${v}`, (a, b) => `radius ${a}→${b}`],
     ['fuse', (v) => `fuse ${fmtS(v)} s`, (a, b) => `fuse ${fmtS(a)}→${fmtS(b)} s`],
   ],
-  flame: [
+  pyre: [
     ['tick', (v) => `${v} dmg tick`, (a, b) => `tick ${a}→${b}`],
     ['dot', (v) => `burn ${v} dmg/s`, (a, b) => `burn ${a}→${b} dmg/s`],
     ['dotDur', (v) => `burn ${fmtS(v)} s`, (a, b) => `burn ${fmtS(a)}→${fmtS(b)} s`],
@@ -855,7 +855,7 @@ const WEAPON_FIELDS = {
     ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
   ],
   // Phase 21 (D96) — nine new weapons
-  cannon: [
+  missile: [
     ['cd', (v) => `every ${fmtS(v)} s`, (a, b) => `every ${fmtS(a)}→${fmtS(b)} s`],
     ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
     ['blastR', (v) => `blast radius ${v}`, (a, b) => `blast radius ${a}→${b}`],
@@ -908,7 +908,7 @@ const WEAPON_FIELDS = {
     ['poison', (v) => `poison ${v} dmg/s`, (a, b) => `poison ${a}→${b} dmg/s`],
     ['poisonDur', (v) => `poison ${fmtS(v)} s`, (a, b) => `poison ${fmtS(a)}→${fmtS(b)} s`],
   ],
-  ball: [
+  cannonball: [
     ['cd', (v) => `every ${fmtS(v)} s`, null],
     ['dmg', (v) => `${v} dmg`, (a, b) => `dmg ${a}→${b}`],
     ['hits', (v) => `${v} bounces`, (a, b) => `bounces ${a}→${b}`],
@@ -921,7 +921,7 @@ const WEAPON_FIELDS = {
 // real behaviour (this is why e.g. ring's card now says CFG.combat.ringCd, which is
 // what the fire site actually uses, not the unused table `cd`). Range is stated in
 // plain px using the weapon's honest reach metric: the config range key where one
-// exists (wand/pistols/cannon/tongue/bat/ball-search/wolf-leash), speed×life where
+// exists (wand/fangs/missile/tongue/bat/ball-search/wolf-leash), speed×life where
 // the projectile itself is the reach (bow arrow, gatling — its bullets ride the
 // shared bullet constants; axe outbound turn-back point), and the radius/length
 // fields for auras, orbits, beams, throws, and blasts. `skip` = WEAPON_FIELDS rows
@@ -952,8 +952,8 @@ const WEAPON_STATS = {
     damage: (d, s) => (s.n > 1 ? `${s.dmg} dmg per hit × ${s.n} blades` : `${s.dmg} dmg per hit`),
     skip: ['n', 'dmg', 'rad'],
   },
-  pistols: {
-    range: () => `range ${CFG.combat.pistolRange} px`,
+  fangs: {
+    range: () => `range ${CFG.combat.fangsRange} px`,
     cadence: (d, s) => `every ${fmtS(s.rate)} s`,
     damage: (d, s) => `${s.dmg} dmg × 2 rounds`,
     skip: ['rate', 'dmg'],
@@ -965,7 +965,7 @@ const WEAPON_STATS = {
     damage: (d, s) => `${s.dmg} dmg per blast`,
     skip: ['cd', 'dmg', 'r', 'fuse'],
   },
-  flame: {
+  pyre: {
     range: (d, s) => `stream reach ${s.range} px`,
     cadence: (d, s) => `fuel ${fmtS(s.fuel)} s, recharge ${fmtS(s.recharge)} s`,
     damage: (d, s) => `${s.tick} dmg per contact, burn ${s.dot} dmg/s for ${fmtS(s.dotDur)} s`,
@@ -990,13 +990,13 @@ const WEAPON_STATS = {
     damage: (d, s) => `${s.dmg} dmg per arrow`,
     skip: ['rate', 'charge', 'dmg'],
   },
-  // 31.4 Homing Missile: the honest reach metric is the LOCK range (cannonRange gates
+  // 31.4 Homing Missile: the honest reach metric is the LOCK range (missileRange gates
   // acquisition and every re-lock; the missile itself is bounded by the 10 s fuse, which
-  // the card states too) + the blast radius. Key `cannon` = this card (config mapping).
-  cannon: {
-    range: (d, s) => `locks onto the nearest, toughest foe within ${CFG.combat.cannonRange} px, blast radius ${s.blastR} px, detonates after ${fmtS(CFG.combat.missileFuse)} s`,
+  // the card states too) + the blast radius. 31.15: key `missile` matches the card.
+  missile: {
+    range: (d, s) => `locks onto the nearest, toughest foe within ${CFG.combat.missileRange} px, blast radius ${s.blastR} px, detonates after ${fmtS(CFG.combat.missileFuse)} s`,
     cadence: (d, s) => `every ${fmtS(s.cd)} s`,
-    damage: (d, s) => `${s.dmg} dmg per missile + ${Math.round(s.dmg * CFG.combat.shellBlastK)} dmg blast`,
+    damage: (d, s) => `${s.dmg} dmg per missile + ${Math.round(s.dmg * CFG.combat.missileBlastK)} dmg blast`,
     skip: ['cd', 'dmg', 'blastR'],
   },
   laser: {
@@ -1043,7 +1043,7 @@ const WEAPON_STATS = {
     damage: (d, s) => `${s.dmg} dmg per bite, poison ${s.poison} dmg/s for ${fmtS(s.poisonDur)} s`,
     skip: ['cd', 'dmg', 'poison', 'poisonDur'],
   },
-  ball: {
+  cannonball: {
     range: () => `dash range ${CFG.combat.ballSearchR} px`,
     cadence: (d) => `every ${fmtS(d.cd)} s`,
     damage: (d, s) => `${s.dmg} dmg first hit × ${s.hits} hits, −${Math.round((1 - CFG.combat.ballDecay) * 100)}% per bounce`,
@@ -1063,7 +1063,7 @@ function _weaponEffect(key, level) {
   const parts = [stats.range(def, cur), stats.cadence(def, cur), stats.damage(def, cur)];
   if (level <= 1) {
     // 23.1: flat-per-weapon scalars (bow `charge`, gatling `burst`/`reload`, bat
-    // `homerun`, ball `cd`) live on the def, not the level row — reached via the
+    // `homerun`, cannonball `cd`) live on the def, not the level row — reached via the
     // `f in cur ? cur[f] : def[f]` lookup below, never as prev→next deltas.
     const extras = fields.filter(([f]) => !stats.skip.includes(f)).map(([f, abs]) => abs(f in cur ? cur[f] : def[f]));
     return parts.concat(extras.filter((s) => s !== null)).join(' · ');
@@ -1119,7 +1119,7 @@ const SYNERGY_EFFECT = {
   stormVolley: (s) => `Every 4th round strikes for ${s.dmg} lightning damage, arcing to ${s.jumps} nearby foe${s.jumps > 1 ? 's' : ''}`,
   heartMagnet: (s) => `Hearts are pulled toward you from ${pct(s.pull)} of your pickup range`,
   // Phase 21 (D96) — five new synergies
-  heShell: (s) => `Homing Missile explosions ignite foes — ${s.dps} dmg/s burn for ${fmtS(s.dur)} s`, // 31.4 copy follows the weapon rename; mechanic untouched
+  napalmMissile: (s) => `Homing Missile explosions ignite foes — ${s.dps} dmg/s burn for ${fmtS(s.dur)} s`, // 31.4 copy follows the weapon rename; mechanic untouched
   staticPelt: (s) => `The pack\u2019s pounces add a shock stack + chain burst to ${s.jumps} foe${s.jumps > 1 ? 's' : ''}`,
   homerKing: (s) => `HOMERUN odds improve to 1-in-${s.odds}`,
   gutFeast: (s) => `Eaten foes restore ×${s.mul} more HP`,

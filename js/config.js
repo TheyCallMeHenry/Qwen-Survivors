@@ -54,7 +54,7 @@ export const CFG = {
     werewolf: { name: 'Werewolf',    weapon: 'wolfpack', cost: 7500, hp: 110, dmg: 1.05, speed: 305, accent: '#c084fc', desc: 'Fast striker with an autonomous pack-hunter. Starts bonded to a Wolfpack.' },
     golem:   { name: 'Stone Golem',  weapon: 'boulder', cost: 10000, hp: 190, dmg: 0.9, speed: 195, accent: '#9aa7b8', desc: 'Slowest juggernaut — crushes small fries outright. Starts with the Rolling Boulder.' },
     toad:    { name: 'Giant Toad',   weapon: 'tongue', cost: 12500, hp: 140, dmg: 0.95, speed: 240, accent: '#7ed957', desc: 'Sustain tank — hauls foes in and eats them to heal. Starts with the Frog Tongue.' },
-    gunslinger: { name: 'Wild West Gunslinger', weapon: 'pistols', cost: 15000, hp: 85, dmg: 1.2, speed: 295, accent: '#d9a066', desc: 'Deadliest duo — high damage, thinnest skin. Starts with the Twin Fangs. (D94.)' },
+    gunslinger: { name: 'Wild West Gunslinger', weapon: 'fangs', cost: 15000, hp: 85, dmg: 1.2, speed: 295, accent: '#d9a066', desc: 'Deadliest duo — high damage, thinnest skin. Starts with the Twin Fangs. (D94.)' },
     ghost:   { name: 'Ghost',        weapon: null,     cost: 0,    hp: 100, dmg: 1.0,  speed: 265, accent: null, desc: 'Faceless fallback — baseline stats, no starting weapon.' },
   },
 
@@ -136,10 +136,10 @@ export const CFG = {
         { n: 3, dmg: 24, rad: 82 }, { n: 4, dmg: 32, rad: 88 },
       ],
     },
-    pistols: {
+    fangs: {
       name: 'Twin Fangs',
       desc: 'Twin pistols — each shot sends two rounds at the nearest foes.',
-      icon: 'pistols',
+      icon: 'fangs',
       levels: [
         { rate: 0.55, dmg: 9, spread: 0.10 },
         { rate: 0.48, dmg: 11, spread: 0.10 },
@@ -161,10 +161,10 @@ export const CFG = {
         { cd: 1.4, dmg: 200, r: 210, fuse: 0.5 },
       ],
     },
-    flame: {
+    pyre: {
       name: 'Pyre Lance',
       desc: 'A streaming geyser of flame that ignites foes. Limited fuel, slow refill.',
-      icon: 'flame',
+      icon: 'pyre',
       // range = aim/acquisition radius. Flat 150 at every level (2026-09-04): the
       // visible stream reaches ~85–200 px (mean ~136 incl. sprite extent), so the old
       // 300–380 ramp damaged enemies in an invisible gap far past the flame's end.
@@ -211,7 +211,7 @@ export const CFG = {
       desc: 'Looses a fast arrow at the nearest foe.',
       icon: 'bow',
       // 23.1 (user): charge = the drawn-string wind-up before the arrow looses (s, flat
-      // at every level). Cadence raised so bow > wand > pistols at EVERY level — the old
+      // at every level). Cadence raised so bow > wand > fangs at EVERY level — the old
       // rate table was numerically identical to Twin Fangs (the "doesn't feel unique" bug).
       charge: 0.25,
       levels: [
@@ -225,27 +225,31 @@ export const CFG = {
     // ---- Phase 21 (D96) — nine new weapons; stat tables verbatim from
     // docs/phase21-resolutions-2026-10-20.md §B (user-approved 2026-10-20) ----
     // 31.4 (user notes 2026-10-26, lines 85-90): the weapon was renamed and reworked
-    // into the "Homing Missile". KEY → DISPLAY: `cannon` = "Homing Missile" — this is
-    // the single mapping; the key itself (and the combat `shell*` knobs, `cannonRange`,
-    // the `cannon` icon key, the `shell` sprite key, fireShell/shells/`heShell`) stay
-    // STABLE: renaming ids would ripple through synergy `requires`, saved runs, and the
-    // WEAPON_FIELDS/WEAPON_STATS/battery tables for zero behavioral clarity.
-    cannon: {
+    // into the "Homing Missile" (key was `cannon` until 31.15). 31.15 (user directive
+    // 2026-10-23, id-consistency audit — docs/USER-INPUT-LOG): ids now MATCH display
+    // names: `cannon`→`missile`, `ball`→`cannonball`, `flame`→`pyre`, `pistols`→
+    // `fangs`, Wolfpack icon key `wolf`→`wolfpack`, synergy `heShell`→`napalmMissile`
+    // (`napalm` is taken by Napalm Detonation), with their `shell*`/`cannonRange`/
+    // `pistolRange` combat knobs and icon/sprite keys. Generic in-fiction words still
+    // present in current card text (flame sprites, ball-state, wolves, bolts/rounds)
+    // were kept. Nothing persisted stores these ids (meta/localStorage: level/duration/
+    // chars/upgrades only); the co-op wire is index-based, so SNAP_V stays 8.
+    missile: {
       name: 'Homing Missile',
       // 31.4: card text states the real behaviour (lock → home → detonate); the honest
       // range/cadence/damage lines are generated from CFG by WEAPON_STATS. Supersedes the
       // 29.12 punch-through wording — the user retired that mechanic.
       desc: 'Fires a slow missile that locks onto the toughest foe in range, homes in, and explodes on contact.',
-      icon: 'cannon',
+      icon: 'missile',
       levels: [
-        // 31.4 (user): blast area +25% → blastR ×1.25 per level (task ruling: multiply
-        // the radius). cd/dmg structure UNCHANGED (Phase 23 law: change only what the
-        // user names). Old rows for the diff: 70/76/82/88/95.
-        { cd: 2.6, dmg: 90, blastR: 87.5 },
-        { cd: 2.4, dmg: 115, blastR: 95 },
-        { cd: 2.2, dmg: 145, blastR: 102.5 },
-        { cd: 2.0, dmg: 180, blastR: 110 },
-        { cd: 1.8, dmg: 225, blastR: 118.75 },
+        // 31.12 (user ruled 2026-10-23): blast radius ×1.10 ("10% larger instead of 25%",
+        // same radius reading as the 31.4 build). cd/dmg structure UNCHANGED (Phase 23 law).
+        // Old rows for the diff: 70/76/82/88/95.
+        { cd: 2.6, dmg: 90, blastR: 77 },
+        { cd: 2.4, dmg: 115, blastR: 83.6 },
+        { cd: 2.2, dmg: 145, blastR: 90.2 },
+        { cd: 2.0, dmg: 180, blastR: 96.8 },
+        { cd: 1.8, dmg: 225, blastR: 104.5 },
       ],
     },
     laser: {
@@ -270,7 +274,7 @@ export const CFG = {
     wolfpack: {
       name: 'Wolfpack',
       desc: 'Wolves bonded to you hound foes near you and bleed them. The pack never dies.',
-      icon: 'wolf', // 29.9 art half shipped: three-pack card icon + per-wolf coats live in js/art (icons.wolf, PACK_PALS)
+      icon: 'wolfpack', // 29.9 art half shipped: three-pack card icon + per-wolf coats live in js/art (icons.wolfpack, PACK_PALS)
       // 29.9 (user law 2026-10-22): level rules alternate stat-up / spawn-only.
       // L2 = stat-up; L3 = spawn a 2nd wolf at the CURRENT stats (rows identical —
       // no stat-up); L4 = stat-up that applies to ALL wolves (the pack reads the
@@ -345,17 +349,20 @@ export const CFG = {
       desc: 'Latches on, drags foes in, and poisons them. Foes killed by the lash are eaten.',
       icon: 'tongue',
       levels: [
-        { cd: 2.2, dmg: 34, poison: 4, poisonDur: 3.0 },
-        { cd: 2.05, dmg: 44, poison: 5, poisonDur: 3.0 },
-        { cd: 1.9, dmg: 56, poison: 6, poisonDur: 3.2 },
-        { cd: 1.75, dmg: 70, poison: 8, poisonDur: 3.4 },
-        { cd: 1.6, dmg: 86, poison: 10, poisonDur: 3.5 },
+        // 31.10 (user adopted T's proposal A, 2026-10-23): cd ladder retuned to peer
+        // cadence (same 5-step shape as the snowball curve) — evidence in
+        // docs/tongue-frequency-probe-2026-10-23.md. dmg/poison structure UNCHANGED.
+        { cd: 1.6, dmg: 34, poison: 4, poisonDur: 3.0 },
+        { cd: 1.45, dmg: 44, poison: 5, poisonDur: 3.0 },
+        { cd: 1.3, dmg: 56, poison: 6, poisonDur: 3.2 },
+        { cd: 1.15, dmg: 70, poison: 8, poisonDur: 3.4 },
+        { cd: 1.0, dmg: 86, poison: 10, poisonDur: 3.5 },
       ],
     },
-    ball: {
+    cannonball: {
       name: 'Cannonball',
       desc: 'Tuck into a ball and rocket into foes — ricochets, invulnerable, 10 s cooldown.',
-      icon: 'ball',
+      icon: 'cannonball',
       cd: 10.0, // spec-fixed at every level; growth = +1 bounce/level (hits 2→6)
       levels: [
         { dmg: 60, hits: 2 },
@@ -386,13 +393,13 @@ export const CFG = {
     inferno: {
       name: 'Inferno Rounds',
       desc: 'Twin rounds now ignite foes, dealing burn damage over time.',
-      icon: 'inferno', requires: ['pistols', 'flame'],
+      icon: 'inferno', requires: ['fangs', 'pyre'],
       levels: [{ dps: 12, dur: 2.5 }],
     },
     napalm: {
       name: 'Napalm Detonation',
       desc: 'Bomb blasts now ignite every foe caught in the radius.',
-      icon: 'napalm', requires: ['bombs', 'flame'],
+      icon: 'napalm', requires: ['bombs', 'pyre'],
       levels: [{ dps: 18, dur: 3.0 }],
     },
     // 23.3 (user DECIDED): the old kill-heal effect is REPLACED in place by over-heal.
@@ -409,7 +416,7 @@ export const CFG = {
     flamingArrows: {
       name: 'Flaming Arrows',
       desc: 'Arrows leave the string alight, burning every foe they strike.',
-      icon: 'flamingArrows', requires: ['bow', 'flame'],
+      icon: 'flamingArrows', requires: ['bow', 'pyre'],
       levels: [
         { dps: 8, dur: 2.0 }, { dps: 11, dur: 2.2 }, { dps: 14, dur: 2.5 },
         { dps: 18, dur: 2.8 }, { dps: 22, dur: 3.0 },
@@ -428,7 +435,7 @@ export const CFG = {
     blueFlame: {
       name: 'Blue Flame',
       desc: 'Snowball bursts flash-freeze foes while blue fire eats at them.',
-      icon: 'blueFlame', requires: ['snowball', 'flame'],
+      icon: 'blueFlame', requires: ['snowball', 'pyre'],
       // freeze = seconds frozen in place; dps/dur = the simultaneous fire DoT (12.5 blue-flame half)
       levels: [
         // L5 freeze matches combat.freezeDur (0.8) — a card promising "freeze in place"
@@ -441,7 +448,7 @@ export const CFG = {
     stormVolley: {
       name: 'Storm Volley',
       desc: 'Every fourth round calls a lightning strike that arcs to nearby foes.',
-      icon: 'stormVolley', requires: ['pistols', 'ringLightning'],
+      icon: 'stormVolley', requires: ['fangs', 'ringLightning'],
       // every = rounds per strike; jumps = chain links (also grants 1 shock stack each)
       levels: [
         { dmg: 45, jumps: 2 }, { dmg: 60, jumps: 3 }, { dmg: 75, jumps: 4 },
@@ -458,14 +465,14 @@ export const CFG = {
       ],
     },
     // ---- Phase 21 (D96) — five new synergies (doc §E, user-approved) ----
-    heShell: {
+    napalmMissile: {
       // 31.4: only the REFERENCED WEAPON NAME in copy is updated ("Tank Cannon" no
       // longer exists); the ignite-on-blast mechanic is untouched (user did not name it).
-      // The synergy's name/key ("Shells of Perdition" / `heShell`) awaits the user's
-      // ruling — flagged 31.4, not decided here.
-      name: 'Shells of Perdition',
+      // 31.13 (user ruled 2026-10-23): renamed "Shells of Perdition" → "Napalm Missile"
+      // (key was `heShell` until the 31.15 id pass — `napalm` was taken by Napalm Detonation).
+      name: 'Napalm Missile',
       desc: 'Homing Missile explosions now set every caught foe alight.',
-      icon: 'heShell', requires: ['cannon', 'flame'],
+      icon: 'napalmMissile', requires: ['missile', 'pyre'],
       levels: [
         { dps: 12, dur: 2.5 }, { dps: 16, dur: 2.75 }, { dps: 20, dur: 3.0 },
         { dps: 25, dur: 3.25 }, { dps: 30, dur: 3.5 },
@@ -605,7 +612,7 @@ export const CFG = {
     orbLife: 4.5, orbR: 7,
     hitStopKill: 0.05, hitStopBoss: 0.18, hitStopHurt: 0.07,
     // Twin Fangs rounds (small, fast, short-lived — distinct from the cyan bolt)
-    bulletSpeed: 720, bulletLife: 0.8, bulletR: 4, bulletKb: 120, pistolRange: 520,
+    bulletSpeed: 720, bulletLife: 0.8, bulletR: 4, bulletKb: 120, fangsRange: 520,
     // Sunder Bombs (lob arc + fuse pause before AOE)
     // bombKb 260→520 (23.2): "very strong push-back" — magnitude only; direction stays
     // radial from the blast centre (_explode dx/d, dy/d — unchanged).
@@ -646,8 +653,8 @@ export const CFG = {
     // 31.4 (user, "~30% slower"): shellSpeed 460 ×0.7 = 322 EXACT (460×0.7, single
     // source). missileFuse = hard 10 s per-missile auto-detonate (notes line 89: an
     // expired fuse detonates in place as if it had hit an enemy; a re-lock NEVER resets
-    // it). Keys `shell*` belong to the Homing Missile (see the weapons.cannon mapping).
-    shellSpeed: 322, shellR: 11, shellBlastK: 0.5, cannonRange: 840, missileFuse: 10,
+    // it). 31.15: these keys are named `missile*`/`missileRange` — matching the card.
+    missileSpeed: 322, missileR: 11, missileBlastK: 0.5, missileRange: 840, missileFuse: 10,
     // 30.2: Continuous Laser contact feedback (scorch sparks). The beam's damage is per-frame
     // dpsTick (D21: deliberately no hit-flash, no knockback), so a sweeping beam reads as
     // "nothing happening" — sparks at the contact point make the sear legible. scorchTick =
@@ -666,7 +673,7 @@ export const CFG = {
     // around the last held movement direction (0 = steering off); ballLosStep = sample spacing
     // of the straight-line reachability test that stops the ball pinning on a collider and
     // "bouncing into nothing" for the rest of its arc (31.2 defect).
-    ballSteerCone: 30, ballLosStep: 40,
+    ballSteerCone: 60, ballLosStep: 40, // 31.11: user widened the steering cone 30 → 60 (2026-10-23 ruling)
     shieldCharges: 3,                                        // Mirror Shield window/r at level lookup
     skateSlideMin: 200, skateSlideLock: 0.5,                 // Ice Skates slide-damage gate
   },

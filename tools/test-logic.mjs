@@ -222,10 +222,10 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(blaOk, 'weapons.blades: n/dmg/rad non-decreasing');
   let pisOk = true;
   for (let i = 1; i < 5; i++) {
-    const a = L('pistols')[i - 1], b = L('pistols')[i];
+    const a = L('fangs')[i - 1], b = L('fangs')[i];
     if (b.dmg < a.dmg || b.rate > a.rate || b.spread > a.spread) pisOk = false;
   }
-  ok(pisOk, 'weapons.pistols: dmg↑ rate↓ spread↓');
+  ok(pisOk, 'weapons.fangs: dmg↑ rate↓ spread↓');
   let bomOk = true;
   for (let i = 1; i < 5; i++) {
     const a = L('bombs')[i - 1], b = L('bombs')[i];
@@ -234,10 +234,10 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(bomOk, 'weapons.bombs: dmg↑ r↑ cd↓ fuse↓');
   let flaOk = true;
   for (let i = 1; i < 5; i++) {
-    const a = L('flame')[i - 1], b = L('flame')[i];
+    const a = L('pyre')[i - 1], b = L('pyre')[i];
     if (b.tick < a.tick || b.dot < a.dot || b.range !== a.range || b.fuel < a.fuel || b.recharge > a.recharge) flaOk = false;
   }
-  ok(flaOk, 'weapons.flame: tick↑ dot↑ range FLAT fuel↑ recharge↓');
+  ok(flaOk, 'weapons.pyre: tick↑ dot↑ range FLAT fuel↑ recharge↓');
   let bowOk = true;
   for (let i = 1; i < 5; i++) {
     const a = L('bow')[i - 1], b = L('bow')[i];
@@ -269,12 +269,12 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     const base = c.kind === 'weapon' ? (c.key === 'wand' ? 1 : 0) : 0;
     return c.level === base + 1;
   }), 'cardOffers: each card is a legal level+1 candidate');
-  const full = cardOffers({ wand: 1, garlic: 1, axe: 1, blades: 1, pistols: 1 }, {}, {}, mulberry32(3));
+  const full = cardOffers({ wand: 1, garlic: 1, axe: 1, blades: 1, fangs: 1 }, {}, {}, mulberry32(3));
   ok(full.length === 3 && full.every((c) => !(c.kind === 'weapon' && c.level === 1)), 'cardOffers: maxWeapons=5 → no new-weapon cards');
   // Phase 9: pool is exactly {hp, dmg, regen, blight, tempest} — 5 maxed weapons + 2 passives max.
   // No weapon cards at all (ownedW=5=cap) yet blight/tempest are offered → synergies do NOT
   // count against maxWeapons.
-  const maxed = cardOffers({ wand: 5, garlic: 5, axe: 5, blades: 5, pistols: 5 }, { speed: 3, magnet: 3 }, {}, mulberry32(2));
+  const maxed = cardOffers({ wand: 5, garlic: 5, axe: 5, blades: 5, fangs: 5 }, { speed: 3, magnet: 3 }, {}, mulberry32(2));
   const legalKeys = new Set(['hp', 'dmg', 'regen', 'shield', 'skates', 'coffee', 'blight', 'tempest']);
   ok(maxed.length === 3 && maxed.every((c) => c.kind === 'passive' || c.kind === 'synergy')
     && maxed.every((c) => legalKeys.has(c.key)), 'cardOffers: exhausted pool → remaining passives + gated synergies only');
@@ -282,7 +282,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   // no garlic (blight stays gated); all passives maxed → the pool is exactly the synergies whose
   // own sources are in hand {inferno, tempest, phoenix, heartMagnet}. cardOffers caps the draw
   // at 3 cards (unchanged), so assert 3 DISTINCT members of that exact set.
-  const trio = cardOffers({ pistols: 5, flame: 5, wand: 5, axe: 5, blades: 5 }, { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3, shield: 5, skates: 5, coffee: 5 }, {}, mulberry32(4));
+  const trio = cardOffers({ fangs: 5, pyre: 5, wand: 5, axe: 5, blades: 5 }, { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3, shield: 5, skates: 5, coffee: 5 }, {}, mulberry32(4));
   const trioSet = new Set(['inferno', 'tempest', 'phoenix', 'heartMagnet']);
   ok(trio.length === 3 && trio.every((c) => c.kind === 'synergy' && trioSet.has(c.key))
     && new Set(trio.map((c) => c.key)).size === 3, 'cardOffers: gated pool {inferno, tempest, phoenix, heartMagnet} → 3 distinct drawn (12.6)');
@@ -300,22 +300,22 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 {
   const allPassMax = {};
   for (const k of Object.keys(CFG.passives)) allPassMax[k] = CFG.passives[k].max;
-  // Deterministic narrow pool: all weapons except bombs/flame owned by ANOTHER player →
-  // pool = {bombs:1, flame:1, phoenix} (passives maxed gate phoenix) — the full 3 are drawn,
+  // Deterministic narrow pool: all weapons except bombs/pyre owned by ANOTHER player →
+  // pool = {bombs:1, pyre:1, phoenix} (passives maxed gate phoenix) — the full 3 are drawn,
   // and no excluded key can appear in any draw.
-  const exSet = new Set(Object.keys(CFG.weapons).filter((k) => k !== 'bombs' && k !== 'flame'));
+  const exSet = new Set(Object.keys(CFG.weapons).filter((k) => k !== 'bombs' && k !== 'pyre'));
   const two = cardOffers({}, allPassMax, {}, mulberry32(3), 5, exSet);
   ok(two.length === 3
     && two.every((c) => !(c.kind === 'weapon' && exSet.has(c.key)))
-    && two.every((c) => c.kind !== 'weapon' || (c.key === 'bombs' || c.key === 'flame'))
+    && two.every((c) => c.kind !== 'weapon' || (c.key === 'bombs' || c.key === 'pyre'))
     && new Set(two.map((c) => c.kind + ':' + c.key)).size === 3,
-    '11.5.2: other-owned weapons never offered (pool = bombs/flame + phoenix only)');
+    '11.5.2: other-owned weapons never offered (pool = bombs/pyre + phoenix only)');
   // Cap drives the new-weapon slots. Owned weapons MAXED (no upgrade cards) with incomplete synergy
-  // pairs; passives maxed. 12.6 rebaseline: w4 = {wand,axe,pistols,bombs} maxed → the hp+magnet
+  // pairs; passives maxed. 12.6 rebaseline: w4 = {wand,axe,fangs,bombs} maxed → the hp+magnet
   // passive pair is complete, so heartMagnet joins phoenix in the gated-synergy pool. Cap 5 pool:
   // {garlic, blades, flame, bow, snowball, ringLightning} new-weapon L1 + {phoenix, heartMagnet}.
   // Cap 4 (2P): new-weapon slots closed → pool = {phoenix, heartMagnet} only.
-  const w4 = { wand: 5, axe: 5, pistols: 5, bombs: 5 };
+  const w4 = { wand: 5, axe: 5, fangs: 5, bombs: 5 };
   const NEW_W = Object.keys(CFG.weapons).filter((k) => !(k in w4)); // P21: every unowned weapon is a legal L1 offer
   const GATED_S = ['phoenix', 'heartMagnet'];
   for (let seed = 1; seed <= 3; seed++) {
@@ -340,7 +340,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   // passive slots; the pool is exactly the gated synergies {blight, tempest, phoenix}
   // (all three drawn). Once ANOTHER player owns blight, it must never be offered.
   const exBlight = new Set(['blight']);
-  const blightMax = { wand: 5, garlic: 5, axe: 5, blades: 5, pistols: 5 };
+  const blightMax = { wand: 5, garlic: 5, axe: 5, blades: 5, fangs: 5 };
   for (let seed = 1; seed <= 3; seed++) {
     const draw = cardOffers(blightMax, allPassMax, {}, mulberry32(seed), 5, exBlight);
     ok(draw.every((c) => !(c.kind === 'synergy' && c.key === 'blight')),
@@ -464,13 +464,13 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     garlic: [(d, s) => `aura radius ${s.r} px`, () => `ticks every ${f2(C.garlicTick)} s`, (d, s) => `${s.dmg} dmg per tick`],
     axe: [() => `boomerang throw ${Math.round(C.axeSpeed * C.axeLife * (1 - C.axeTurnFrac))} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per hit`],
     blades: [(d, s) => `orbit radius ${s.rad} px`, () => `shears every ${f2(C.orbitTick)} s`, (d, s) => `${s.dmg} dmg per hit`],
-    pistols: [() => `range ${C.pistolRange} px`, (d, s) => `every ${f2(s.rate)} s`, (d, s) => `${s.dmg} dmg × 2 rounds`],
+    fangs: [() => `range ${C.fangsRange} px`, (d, s) => `every ${f2(s.rate)} s`, (d, s) => `${s.dmg} dmg × 2 rounds`],
     bombs: [() => `throw ${C.bombDist} px, blast radius `, (d, s) => `blast radius ${s.r} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per blast`],
-    flame: [(d, s) => `stream reach ${s.range} px`, (d, s) => `fuel ${f2(s.fuel)} s, recharge ${f2(s.recharge)} s`, (d, s) => `${s.tick} dmg per contact`],
+    pyre: [(d, s) => `stream reach ${s.range} px`, (d, s) => `fuel ${f2(s.fuel)} s, recharge ${f2(s.recharge)} s`, (d, s) => `${s.tick} dmg per contact`],
     snowball: [(d, s) => `range ${C.wandRange} px, blast radius ${s.r} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per burst`],
     ringLightning: [() => `range ${C.wandRange} px`, () => `every ${C.ringCd} s`, (d, s) => `${s.dmg} dmg per bolt`],
     bow: [() => `arrow range ${Math.round(C.arrowSpeed * C.arrowLife)} px`, (d, s) => `every ${f2(s.rate)} s`, (d, s) => `${s.dmg} dmg per arrow`],
-    cannon: [(d, s) => `locks onto the nearest, toughest foe within ${C.cannonRange} px, blast radius ${s.blastR} px, detonates after ${f2(C.missileFuse)} s`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per missile + ${Math.round(s.dmg * C.shellBlastK)} dmg blast`],
+    missile: [(d, s) => `locks onto the nearest, toughest foe within ${C.missileRange} px, blast radius ${s.blastR} px, detonates after ${f2(C.missileFuse)} s`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per missile + ${Math.round(s.dmg * C.missileBlastK)} dmg blast`],
     laser: [(d, s) => `beam length ${s.len} px`, (d, s) => `sweeps ${f2(s.dur)} s`, (d, s) => `${s.dps} dmg/s`],
     wolfpack: [() => `pounce range ${C.companionLeash} px`, () => `pounces every ${f2(C.companionPounceCd)} s`, (d, s) => `pounce ${s.dmg} dmg`],
     boulder: [() => `range ${C.wandRange} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg first hit`],
@@ -478,7 +478,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     gatling: [() => `bullet range ${Math.round(C.bulletSpeed * C.bulletLife)} px`, (d, s) => `one shot every ${f2(s.cd)} s`, (d) => `mag ${d.burst} → reload ${f2(d.reload)} s`, (d, s) => `${s.dmg} dmg per round`],
     bat: [() => `swing reach ${C.batRange} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per swing`],
     tongue: [() => `tongue reach ${C.tongueRange} px`, (d, s) => `every ${f2(s.cd)} s`, (d, s) => `${s.dmg} dmg per bite`],
-    ball: [() => `dash range ${C.ballSearchR} px`, (d) => `every ${f2(d.cd)} s`, (d, s) => `${s.dmg} dmg first hit`],
+    cannonball: [() => `dash range ${C.ballSearchR} px`, (d) => `every ${f2(d.cd)} s`, (d, s) => `${s.dmg} dmg first hit`],
   };
   for (const key of Object.keys(CFG.weapons)) {
     ok(!!REQ[key], `30.4 battery: ${key} has an expected-stats table`);
@@ -1709,7 +1709,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(pB._spawnY() === 200 - 66 * f && pB._spawnY() < pA._spawnY(), '16.2: taller sprite (warden 66) → higher origin');
 }
 
-// --- 16.3 Pyre Lance flame: +33% stream length, 2x flow/extension, momentum LEAD ---
+// --- 16.3 Pyre Lance pyre: +33% stream length, 2x flow/extension, momentum LEAD ---
 {
   const C = CFG.combat;
   const reach = (v0, k, L) => (v0 / k) * (1 - Math.exp(-k * L)); // drag-only mean reach
@@ -1741,8 +1741,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     };
     const visMax = travel(C.flameSpeed + C.flameSpeedVar, C.flameLife + C.flameLifeVar);
     const dmgMax = (C.flameSpeed + C.flameSpeedVar) / C.flameDrag * (1 - Math.exp(-C.flameDrag * (C.flameLife + C.flameLifeVar))) + C.flameR;
-    const ranges = CFG.weapons.flame.levels.map((s) => s.range);
-    ok(ranges.every((r) => r === 150), 'flame range: flat 150 at all 5 levels (visual alignment, 2026-09-04)');
+    const ranges = CFG.weapons.pyre.levels.map((s) => s.range);
+    ok(ranges.every((r) => r === 150), 'pyre range: flat 150 at all 5 levels (visual alignment, 2026-09-04)');
     ok(Math.max(...ranges) <= visMax, `flame range ≤ max visible sprite reach (${Math.max(...ranges)} ≤ ${visMax.toFixed(1)})`);
     ok(dmgMax <= visMax + 1, `flame particle damage edge ≤ visible edge (${dmgMax.toFixed(1)} ≤ ${visMax.toFixed(1)})`);
     ok(ranges[0] >= travel(C.flameSpeed - C.flameSpeedVar, C.flameLife - C.flameLifeVar), 'flame range ≥ min-case visible reach (no dead zone below the stream start)');
@@ -1848,16 +1848,16 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const L = (k) => CFG.weapons[k].levels;
   ok(typeof CFG.weapons.bow.charge === 'number' && CFG.weapons.bow.charge > 0 && CFG.weapons.bow.charge <= 0.5,
     '23.1: bow charge scalar present + sane (0 < charge ≤ 0.5 s — a "brief" wind-up)');
-  // The reported bug: bow rate was numerically identical to pistols. Ordering invariant:
-  // bow > wand > pistols at EVERY level (strict).
+  // The reported bug: bow rate was numerically identical to fangs. Ordering invariant:
+  // bow > wand > fangs at EVERY level (strict).
   let ordOk = true;
   for (let i = 0; i < 5; i++) {
-    if (!(L('bow')[i].rate > L('wand')[i].rate && L('wand')[i].rate > L('pistols')[i].rate)) ordOk = false;
+    if (!(L('bow')[i].rate > L('wand')[i].rate && L('wand')[i].rate > L('fangs')[i].rate)) ordOk = false;
   }
-  ok(ordOk, '23.1: cadence ordering pistols < wand < bow at every level');
-  // User rule: unnamed weapons leave as-is — pistols/axe/bomb tables are exactly the pre-23 values.
-  ok(JSON.stringify(L('pistols').map((s) => s.rate)) === JSON.stringify([0.55, 0.48, 0.42, 0.36, 0.3]),
-    '23.1: pistols cadence untouched (user: "feels fine")');
+  ok(ordOk, '23.1: cadence ordering fangs < wand < bow at every level');
+  // User rule: unnamed weapons leave as-is — fangs/axe/bomb tables are exactly the pre-23 values.
+  ok(JSON.stringify(L('fangs').map((s) => s.rate)) === JSON.stringify([0.55, 0.48, 0.42, 0.36, 0.3]),
+    '23.1: fangs cadence untouched (user: "feels fine")');
   ok(JSON.stringify(L('axe').map((s) => s.cd)) === JSON.stringify([1.4, 1.25, 1.1, 0.95, 0.8]),
     '23.1: axe cadence untouched');
   ok(JSON.stringify(L('bombs').map((s) => s.cd)) === JSON.stringify([2.2, 2.0, 1.8, 1.6, 1.4]),
@@ -1951,8 +1951,8 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const NEW_S = ['flamingArrows', 'heartPiercer', 'blueFlame', 'stormVolley', 'heartMagnet'];
   for (const k of NEW_S) {
     ok(SY[k] && SY[k].levels.length === 5, `12.6: synergies.${k} is a 5-level card`);
-    const reqOK = { flamingArrows: ['bow', 'flame'], heartPiercer: ['bow', 'hp'], blueFlame: ['snowball', 'flame'],
-      stormVolley: ['pistols', 'ringLightning'], heartMagnet: ['hp', 'magnet'] }[k];
+    const reqOK = { flamingArrows: ['bow', 'pyre'], heartPiercer: ['bow', 'hp'], blueFlame: ['snowball', 'pyre'],
+      stormVolley: ['fangs', 'ringLightning'], heartMagnet: ['hp', 'magnet'] }[k];
     ok(JSON.stringify(SY[k].requires) === JSON.stringify(reqOK), `12.6: ${k} requires ${reqOK.join('+')}`);
   }
   // Monotonic scaling per synergy (the Phase 12 "levels like a standard weapon" contract).
@@ -1975,7 +1975,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(cardEffectText('synergy', 'heartMagnet', 1) === 'Hearts are pulled toward you from 100% of your pickup range' && cardEffectText('synergy', 'heartMagnet', 5) === 'Hearts are pulled toward you from 200% of your pickup range', '12.6: heartMagnet L1/L5 lines');
 
   // Gating: each new synergy is offered the moment its OWN two sources max, and not before.
-  ok(!cardOffers({ bow: 4, flame: 5 }, {}, {}, mulberry32(7)).some((c) => c.key === 'flamingArrows'),
+  ok(!cardOffers({ bow: 4, pyre: 5 }, {}, {}, mulberry32(7)).some((c) => c.key === 'flamingArrows'),
     '12.6 gating: flamingArrows absent below source max (bow 4/5)');
   // Gating = the synergy is offerable once BOTH sources max. Under the uniform draw (D81)
   // a single level-up need not surface every eligible card, so offerability is measured as
@@ -1988,10 +1988,10 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   };
   const W5 = (k) => ({ [k]: 5 });
   const P_MAX = {}; for (const k of Object.keys(CFG.passives)) P_MAX[k] = CFG.passives[k].max;
-  ok(gateDraw({ ...W5('bow'), ...W5('flame') }, {}, 'flamingArrows'), '12.6 gating: flamingArrows surfaces with bow+flame maxed');
+  ok(gateDraw({ ...W5('bow'), ...W5('pyre') }, {}, 'flamingArrows'), '12.6 gating: flamingArrows surfaces with bow+pyre maxed');
   ok(gateDraw({ ...W5('bow') }, { hp: CFG.passives.hp.max }, 'heartPiercer'), '12.6 gating: heartPiercer surfaces with bow + hp passive maxed');
-  ok(gateDraw({ ...W5('snowball'), ...W5('flame') }, {}, 'blueFlame'), '12.6 gating: blueFlame surfaces with snowball+flame maxed');
-  ok(gateDraw({ ...W5('pistols'), ...W5('ringLightning') }, {}, 'stormVolley'), '12.6 gating: stormVolley surfaces with pistols+ring maxed');
+  ok(gateDraw({ ...W5('snowball'), ...W5('pyre') }, {}, 'blueFlame'), '12.6 gating: blueFlame surfaces with snowball+pyre maxed');
+  ok(gateDraw({ ...W5('fangs'), ...W5('ringLightning') }, {}, 'stormVolley'), '12.6 gating: stormVolley surfaces with fangs+ring maxed');
   ok(gateDraw({}, { hp: CFG.passives.hp.max, magnet: CFG.passives.magnet.max }, 'heartMagnet'), '12.6 gating: heartMagnet surfaces with hp+magnet maxed');
 
   // Flaming Arrows pipeline: fireArrow carries the burn row; hit applies burnT/burnDps.
@@ -2048,7 +2048,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
 
   // Storm Volley shot cadence (player fire site): every 4th round carries the row.
   const p = new Player({}); p.reset(0, 0);
-  p.weapons = { pistols: 5 }; p.synergies.stormVolley = 1; // ONLY pistols — a default char
+  p.weapons = { fangs: 5 }; p.synergies.stormVolley = 1; // ONLY fangs — a default char
   // start weapon would fire through the same spy and hit an unstubbed method (session-12 trap)
   const fired = []; const cSpy = { fireBullet: (x, y, a, d, inf, own, storm) => fired.push(!!storm), pulse: null };
   const foe = { x: 60, y: 0, r: 10 };
@@ -2110,7 +2110,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(/const PLATE = \{/.test(src) && /weapon: \{ bgA/.test(src) && /passive: \{ bgA/.test(src) && /synergy: \{ bgA/.test(src),
     '26.1: PLATE category table (weapon/passive/synergy) exists in items.js');
   const kinds = {
-    weapon: ['wand', 'garlic', 'axe', 'blades', 'pistols', 'bombs', 'flame', 'snowball', 'ringLightning', 'bow'],
+    weapon: ['wand', 'garlic', 'axe', 'blades', 'fangs', 'bombs', 'pyre', 'snowball', 'ringLightning', 'bow'],
     passive: ['boots', 'heart', 'sword', 'magnet', 'sigil', 'gem', 'dash'],
     synergy: ['blight', 'tempest', 'inferno', 'napalm', 'phoenix', 'flamingArrows', 'heartPiercer', 'blueFlame', 'stormVolley', 'heartMagnet'],
   };
@@ -2667,20 +2667,20 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const near2 = (a, b, t = 0.6) => Math.abs(a - b) < t;
 
   // 31.4 Homing Missile (was the P21 Tank Cannon): locks the toughest (HP-first, Option A) foe, homes in,
-  // direct hit + terminal blast (shellBlastK) + heShell ignite on that blast. The
+  // direct hit + terminal blast (missileBlastK) + napalmMissile ignite on that blast. The
   // old pierce-one→detonate-on-second behavior is retired (user notes 2026-10-26).
   {
     const c = new Combat();
     const owner = { x: 0, y: 0, dmgMul: 1, dead: false };
     const e1 = mk(100, 100), e2 = mk(120, 100), e3 = mk(300, 100);
-    c.fireShell(0, 100, 0, 100, 70, { dps: 12, dur: 2.5 }, owner);
-    for (let i = 0; i < 120 && c.shells.length; i++) c.update(1 / 60, [], stub([e1, e2, e3]));
-    ok(c.shells.length === 0, 'P31.4 missile: consumed by the impact blast');
+    c.fireMissile(0, 100, 0, 100, 70, { dps: 12, dur: 2.5 }, owner);
+    for (let i = 0; i < 120 && c.missiles.length; i++) c.update(1 / 60, [], stub([e1, e2, e3]));
+    ok(c.missiles.length === 0, 'P31.4 missile: consumed by the impact blast');
     ok(near2(e1.hp, 150, 0.5),
-      `P31.4 missile: locked foe takes direct 100 + blast (×${C.shellBlastK}=50) (${e1.hp})`);
+      `P31.4 missile: locked foe takes direct 100 + blast (×${C.missileBlastK}=50) (${e1.hp})`);
     ok(near2(e2.hp, 250, 0.5), `P31.4 missile: the blast still catches nearby foes (e2 ${e2.hp})`);
     ok(e3.hp === 300, `P31.4 missile: blast radius 70 spares the far foe (${e3.hp})`);
-    ok(e1.burnT > 0 && e1.burnDps === 12, 'P31.4 missile: heShell ignite rides the blast (mechanic unchanged)');
+    ok(e1.burnT > 0 && e1.burnDps === 12, 'P31.4 missile: napalmMissile ignite rides the blast (mechanic unchanged)');
   }
 
   // Continuous Laser: every frame of `dur`, only foes within `w` of the segment.
@@ -2950,21 +2950,21 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   // 29.12 (kept through 31.4): dedicated LOCK range = 1.5× the old shared wandRange
   // (560 → 840), now gating the lock-on search only (the missile's FLIGHT is bound by
   // the 10 s fuse, not range); card text states the real behaviour.
-  ok(C.cannonRange === C.wandRange * 1.5, `29.12 cannon: cannonRange = 1.5× the old range (${C.cannonRange})`);
-  ok(CFG.weapons.cannon.desc === 'Fires a slow missile that locks onto the toughest foe in range, homes in, and explodes on contact.',
-    '31.4 cannon: card description = lock → home → explode (user notes 2026-10-26, supersedes 29.12 wording)');
-  const cA = new Combat(); const plA = mkPl(); plA.weapons.cannon = 1;
+  ok(C.missileRange === C.wandRange * 1.5, `29.12 missile: missileRange = 1.5× the old range (${C.missileRange})`);
+  ok(CFG.weapons.missile.desc === 'Fires a slow missile that locks onto the toughest foe in range, homes in, and explodes on contact.',
+    '31.4 missile: card description = lock → home → explode (user notes 2026-10-26, supersedes 29.12 wording)');
+  const cA = new Combat(); const plA = mkPl(); plA.weapons.missile = 1;
   plA.update(1 / 60, { x: 0, y: 0 }, cA, stub([mk(1100, 400)]), world); // ~700 px away
-  ok(cA.shells.length === 1, '29.12 cannon: a foe ~700 px away (beyond the old 560) is acquired and fired at');
-  const cB = new Combat(); const plB = mkPl(); plB.weapons.cannon = 1;
+  ok(cA.missiles.length === 1, '29.12 missile: a foe ~700 px away (beyond the old 560) is acquired and fired at');
+  const cB = new Combat(); const plB = mkPl(); plB.weapons.missile = 1;
   plB.update(1 / 60, { x: 0, y: 0 }, cB, stub([mk(1300, 400)]), world); // ~900 px away
-  ok(cB.shells.length === 0, '29.12 cannon: a foe ~900 px away (beyond 840) is not fired at');
+  ok(cB.missiles.length === 0, '29.12 missile: a foe ~900 px away (beyond 840) is not fired at');
   const cS = new Combat();
-  cS.fireShell(400, 400, 0, 10, 70);
-  ok(cS.shells[0].life === C.missileFuse && C.missileFuse === 10,
-    `31.4 missile: fuse = the hard 10 s, replacing the 29.12 range/speed life (${cS.shells[0].life}s)`);
+  cS.fireMissile(400, 400, 0, 10, 70);
+  ok(cS.missiles[0].life === C.missileFuse && C.missileFuse === 10,
+    `31.4 missile: fuse = the hard 10 s, replacing the 29.12 range/speed life (${cS.missiles[0].life}s)`);
   let ticks = 0;
-  for (; ticks < 700 && cS.shells.length; ticks++) cS.update(1 / 60, [], stub([]));
+  for (; ticks < 700 && cS.missiles.length; ticks++) cS.update(1 / 60, [], stub([]));
   ok(ticks === 600 || ticks === 601,
     `31.4 missile: an empty field flies straight until the FUSE detonates it (${(ticks / 60).toFixed(3)} s ≈ 10 s, was ~840 px range-bound at 29.12)`);
   ok(cS.explosions.length === 1, '31.4 missile: fuse expiry detonates in place, "as if it had hit an enemy"');
@@ -3181,7 +3181,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   cdProbe('ringLightning', '_ringCd', CFG.combat.ringCd * k);
   cdProbe('gatling', '_gatCd', CFG.weapons.gatling.levels[0].cd * k);
   cdProbe('boulder', '_boulderCd', CFG.weapons.boulder.levels[0].cd * k);
-  cdProbe('ball', '_ballCd', CFG.weapons.ball.cd * k);
+  cdProbe('cannonball', '_ballCd', CFG.weapons.cannonball.cd * k);
 
   // Laser downtime (29.7 interaction): armed when the active window ends, also × cdMul.
   {
@@ -3396,13 +3396,13 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const c2 = new Combat();
   const owner = { x: 0, y: 0, dmgMul: 1, dead: false };
   const e1 = mk(100, 100), e2 = mk(120, 100);
-  c2.fireShell(0, 100, 0, 100, 70, null, owner);
-  for (let i = 0; i < 120 && c2.shells.length; i++) c2.update(1 / 60, [], stub([e1, e2]));
-  ok(c2.explosions.some((x) => x.tank === true), '29.12: the terminal blast stays tagged for its own sprite + rhythm (31.4 keeps the visual)');
+  c2.fireMissile(0, 100, 0, 100, 70, null, owner);
+  for (let i = 0; i < 120 && c2.missiles.length; i++) c2.update(1 / 60, [], stub([e1, e2]));
+  ok(c2.explosions.some((x) => x.missile === true), '29.12: the terminal blast stays tagged for its own sprite + rhythm (31.4 keeps the visual)');
   ok(/const s = x\.r \* 2 \* \(1 \+ 0\.25 \* k\);/.test(csrc),
-    '29.12: the 23.2 base blast-scale line is intact for non-tank explosions');
-  ok(/export function tankBlastSprite\(\)/.test(isrc) && /this\._fx\.tank/.test(csrc),
-    '29.12: hard-edged shock star baked in art + drawn for tank-tagged blasts only');
+    '29.12: the 23.2 base blast-scale line is intact for non-missile explosions');
+  ok(/export function missileBlastSprite\(\)/.test(isrc) && /this\._fx\.missile/.test(csrc),
+    '29.12: hard-edged shock star baked in art + drawn for missile-tagged blasts only');
   ok(/function missileSprite\(\)[\s\S]{0,700}makeCanvas\(36, 14\)/.test(isrc) && /const tr = g\.createLinearGradient\(1, 7, 20, 7\)/.test(isrc),
     '31.4: Homing Missile projectile sprite = the pre-rendered 36×14 pattern, baked tracer tail kept');
 
@@ -3414,7 +3414,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     '29.9: companion draw keyed by wolf index (1st/2nd/3rd colors)');
   ok(!/enemies\.defs\.wolf/.test(csrc),
     '29.9: pack no longer reuses the enemy wolf sheet (host AND client draw the pack art)');
-  ok(/icons\.wolf = make\('weapon'/.test(isrc) && /icons\.axe = make\('weapon'/.test(isrc),
+  ok(/icons\.wolfpack = make\('weapon'/.test(isrc) && /icons\.axe = make\('weapon'/.test(isrc),
     '29.9/29.11: reworked Wolfpack (three-pack) and Spectral Axe card icons registered');
 
   // 29.10: the reflect flash art is pre-rendered — draw only ever blits it.
@@ -3678,7 +3678,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const openWorld = { collidersNear: () => [] };
   const mkPl = () => { const p = new Player({ h: 64, run: [0], idle: [0] }); p.reset(500, 400); return p; };
 
-  ok(C.ballSteerCone === 30 && C.ballLosStep > 0, `31.2: steering/LOS knobs live in config (cone=${C.ballSteerCone}° losStep=${C.ballLosStep}px)`);
+  ok(C.ballSteerCone === 60 && C.ballLosStep > 0, `31.11: cone widened 30 → 60 by user ruling; knobs live in config (cone=${C.ballSteerCone}° losStep=${C.ballLosStep}px)`);
 
   // (1) Regression pin for the user-reported flow: the level-up sequence (pickCard runs
   // applyCard+recomputeStats; the LEVELUP state = no update call at all) must not cost the
@@ -3686,7 +3686,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   {
     const c = new Combat();
     const pl = mkPl();
-    pl.weapons = { ball: 1 }; // 2-hit budget — the low-rank case from the report
+    pl.weapons = { cannonball: 1 }; // 2-hit budget — the low-rank case from the report
     const e1 = mk(620, 400), e2 = mk(780, 400); // e2 outside launch range, inside post-impact range
     let engagedAt = -1, pausedAt = -1;
     for (let i = 0; i < 400; i++) {
@@ -3728,9 +3728,10 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     ok(behind.hp === 100000 - 60 * C.ballDecay, `31.2 control: the same target on a clear line IS hit (${behind.hp})`);
   }
 
-  // (3) Cone steering (user spec option (a), 30° full cone = ±15° about the input
-  // direction): an in-cone foe wins even when a nearer foe sits outside the cone; an empty
-  // cone falls back to plain nearest; no input ever = plain nearest (current behavior).
+  // (3) Cone steering (user spec option (a), widened to 60° full = ±30° about the input
+  // direction by the 31.11 ruling): an in-cone foe wins even when a nearer foe sits outside
+  // the cone; an empty cone falls back to plain nearest; no input ever = plain nearest.
+  // The fixtures sit 0° and ~69° off-axis — both still land on the correct side of ±30°.
   {
     const aIn = mk(700, 400); // bearing 0° from the ball, 200 px — in a +x cone, farther
     const aOut = mk(500 + 100 * Math.cos(1.2), 400 + 100 * Math.sin(1.2)); // ~69° off axis, nearer
@@ -3753,7 +3754,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   {
     const c = new Combat();
     const pl = mkPl();
-    pl.weapons = { ball: 1 };
+    pl.weapons = { cannonball: 1 };
     const wall = { x: 545, y: 400, r: 20 }; // between the player and its nearest foe
     const eB = mk(560, 400), eC = mk(500, 580);
     for (let i = 0; i < 10 && !pl._ball; i++) pl.update(1 / 60, { x: 0, y: 0 }, c, stub([eB, eC]), { collidersNear: () => [wall] });
@@ -3797,26 +3798,26 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const owner = { x: 0, y: 0, dmgMul: 1, dead: false };
 
   // Config spec exactly: ×0.7 speed (460→322), per-level blastR ×1.25, cd/dmg untouched.
-  ok(C.shellSpeed === 322, `31.4: projectile speed = 460 ×0.7 = 322 exactly ("~30% slower", notes line 87)`);
+  ok(C.missileSpeed === 322, `31.4: projectile speed = 460 ×0.7 = 322 exactly ("~30% slower", notes line 87)`);
   const oldRows = [[2.6, 90, 70], [2.4, 115, 76], [2.2, 145, 82], [2.0, 180, 88], [1.8, 225, 95]];
-  ok(CFG.weapons.cannon.levels.every((s, i) => s.cd === oldRows[i][0] && s.dmg === oldRows[i][1] &&
-      Math.abs(s.blastR - oldRows[i][2] * 1.25) < 1e-9),
-    '31.4: level table keeps cd/dmg, blastR ×1.25 (70→87.5 … 95→118.75; notes line 88)');
+  ok(CFG.weapons.missile.levels.every((s, i) => s.cd === oldRows[i][0] && s.dmg === oldRows[i][1] &&
+      Math.abs(s.blastR - oldRows[i][2] * 1.10) < 1e-9),
+    '31.12: level table keeps cd/dmg, blastR ×1.10 (“10% larger instead of 25%” — user ruling 2026-10-23, supersedes the ×1.25 build)');
 
   // (1) Lock rule — Option A pinned where it DIFFERS from nearest-first (user ruling 2026-10-23).
   {
     const c = new Combat();
     const eNear = mk(150, 100, { hp: 40 }), eFar = mk(500, 100, { hp: 100000 });
-    c.fireShell(0, 100, 0, 10, 40, null, owner);
+    c.fireMissile(0, 100, 0, 10, 40, null, owner);
     c.update(1 / 60, [], stub([eNear, eFar]));
-    ok(c.shells[0].target === eFar, '31.4 lock: the far foe with more HP wins over a near weak one (HP-first, Option A; nearest-first was rejected)');
+    ok(c.missiles[0].target === eFar, '31.4 lock: the far foe with more HP wins over a near weak one (HP-first, Option A; nearest-first was rejected)');
     const c2 = new Combat();
     const eNear2 = mk(150, 200, { hp: 50 }), eFar2 = mk(300, 200, { hp: 50 }); // EXACTLY equal HP
-    c2.fireShell(0, 200, 0, 10, 40, null, owner);
+    c2.fireMissile(0, 200, 0, 10, 40, null, owner);
     c2.update(1 / 60, [], stub([eNear2, eFar2]));
-    ok(c2.shells[0].target === eNear2, '31.4 lock: at an exact-HP tie the nearest wins (the rule\u2019s tiebreak)');
-    ok(c2.shellTarget(400, 200, stub([mk(400 + C.cannonRange + 50, 200, { hp: 1 })])) === null,
-      '31.4 lock: a foe beyond cannonRange is never acquired ("in range", notes line 89)');
+    ok(c2.missiles[0].target === eNear2, '31.4 lock: at an exact-HP tie the nearest wins (the rule\u2019s tiebreak)');
+    ok(c2.missileTarget(400, 200, stub([mk(400 + C.missileRange + 50, 200, { hp: 1 })])) === null,
+      '31.4 lock: a foe beyond missileRange is never acquired ("in range", notes line 89)');
   }
 
   // (2) Re-lock chain on target death: next-highest-HP, tried foes forever excluded, and
@@ -3824,17 +3825,17 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   {
     const c = new Combat();
     const e1 = mk(100, 400, { hp: 100000 }), e2 = mk(100, 1200, { hp: 100000 });
-    c.fireShell(400, 400, Math.PI, 10, 40, null, owner, e1);
+    c.fireMissile(400, 400, Math.PI, 10, 40, null, owner, e1);
     for (let i = 0; i < 30; i++) c.update(1 / 60, [], stub([e1, e2]));
-    ok(c.shells[0].target === e1 && Math.abs(c.shells[0].life - 9.5) < 1e-6,
-      `31.4 re-lock: a live lock is held and the fuse ticks continuously (${c.shells[0].life}s left at t=0.5s)`);
+    ok(c.missiles[0].target === e1 && Math.abs(c.missiles[0].life - 9.5) < 1e-6,
+      `31.4 re-lock: a live lock is held and the fuse ticks continuously (${c.missiles[0].life}s left at t=0.5s)`);
     e1.dead = true;
     c.update(1 / 60, [], stub([e1, e2]));
-    ok(c.shells[0].target === e2 && c.shells[0].tried.has(e1),
+    ok(c.missiles[0].target === e2 && c.missiles[0].tried.has(e1),
       '31.4 re-lock: dead target → NEXT highest-HP, every ever-locked foe excluded ("this repeats")');
-    const lifeAfter = c.shells[0].life;
+    const lifeAfter = c.missiles[0].life;
     for (let i = 0; i < 60; i++) c.update(1 / 60, [], stub([e1, e2]));
-    ok(lifeAfter - c.shells[0].life > 0.999 && lifeAfter - c.shells[0].life < 1.001,
+    ok(lifeAfter - c.missiles[0].life > 0.999 && lifeAfter - c.missiles[0].life < 1.001,
       '31.4 re-lock never RESETS the fuse: exactly 1 s of decay across 1 s of re-locked flight');
   }
 
@@ -3844,17 +3845,17 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   // opposite ("as if it had hit an enemy", notes line 89).
   {
     const c = new Combat();
-    c.fireShell(400, 400, 0, 10, 40, null, owner);
+    c.fireMissile(400, 400, 0, 10, 40, null, owner);
     for (let i = 0; i < 594; i++) c.update(1 / 60, [], stub([])); // 9.9 s of straight flight
-    ok(c.shells.length === 1 && c.shells[0].life < 0.101 && c.shells[0].life > 0.099,
-      `31.4 fuse: still alive at t=9.9 s with no lock (${c.shells[0].life.toFixed(3)}s left)`);
-    const late = mk(c.shells[0].x + 300, 400, { hp: 100000 });
+    ok(c.missiles.length === 1 && c.missiles[0].life < 0.101 && c.missiles[0].life > 0.099,
+      `31.4 fuse: still alive at t=9.9 s with no lock (${c.missiles[0].life.toFixed(3)}s left)`);
+    const late = mk(c.missiles[0].x + 300, 400, { hp: 100000 });
     c.update(1 / 60, [], stub([late])); // t≈9.92 s — the late foe IS re-acquired
-    ok(c.shells.length === 1 && c.shells[0].target === late,
+    ok(c.missiles.length === 1 && c.missiles[0].target === late,
       '31.4 fuse: re-lock still works at t≈9.9 s (the pin is the DETONATION that follows, not the lock)');
     let k = 595;
-    for (; k < 610 && c.shells.length; k++) c.update(1 / 60, [], stub([late]));
-    ok(c.shells.length === 0 && c.explosions.length === 1 && k >= 600 && k <= 601,
+    for (; k < 610 && c.missiles.length; k++) c.update(1 / 60, [], stub([late]));
+    ok(c.missiles.length === 0 && c.explosions.length === 1 && k >= 600 && k <= 601,
       `31.4 fuse: re-locked at t=9.9 s, detonates at t=10.0 s (update ${k}, never later) — the timer was NOT reset`);
     ok(late.hp === 100000, '31.4 fuse: it detonated AT ITSELF — the blast never reached the new 300 px-away lock');
   }
@@ -3864,17 +3865,17 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   // flight when the cd arms shot #2 beside it.
   {
     const c = new Combat();
-    const pl = mkPl(); pl.weapons.cannon = 5;
+    const pl = mkPl(); pl.weapons.missile = 5;
     const e1 = mk(600, 400, { hp: 1 }), e2 = mk(1230, 400, { hp: 100000 });
     let two = false;
     for (let i = 0; i < 140 && !two; i++) {
       pl.update(1 / 60, { x: 0, y: 0 }, c, stub([e1, e2]), world);
       c.update(1 / 60, [], stub([e1, e2]));
-      if (c.shells.length >= 2) two = true;
+      if (c.missiles.length >= 2) two = true;
     }
-    ok(two, `31.4: ≥2 missiles co-exist mid-flight (cd ${CFG.weapons.cannon.levels[4].cd} s gates firing only)`);
-    ok(pl._cannonCd > 1.6 && pl._cannonCd <= 1.8 + 1e-9,
-      `31.4: each launch re-arms the level row's cd (${pl._cannonCd.toFixed(2)} s) — no unbounded spam`);
+    ok(two, `31.4: ≥2 missiles co-exist mid-flight (cd ${CFG.weapons.missile.levels[4].cd} s gates firing only)`);
+    ok(pl._missileCd > 1.6 && pl._missileCd <= 1.8 + 1e-9,
+      `31.4: each launch re-arms the level row's cd (${pl._missileCd.toFixed(2)} s) — no unbounded spam`);
   }
 }
 

@@ -91,7 +91,7 @@ export class Game {
     this.combat.flameImg = items.flame;
     this.combat.explosionImg = items.explosion;
     // Phase 21 (D96) projectile sprites
-    this.combat.shellImg = items.shell;
+    this.combat.missileImg = items.missile;
     this.combat.boulderImg = items.boulder;
     this.combat.webImg = items.web;
     // 24.3 synergy variant maps (nil on base path → combat.draw falls back to *Img).

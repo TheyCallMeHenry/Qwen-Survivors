@@ -99,7 +99,10 @@ function makeEl(tag = 'div') {
     addEventListener(type, fn) { el._ls = el._ls || {}; (el._ls[type] = el._ls[type] || []).push(fn); },
     removeEventListener() {},
     click() { for (const fn of (el._ls && el._ls.click) || []) fn(); },
-    setAttribute() {}, getAttribute() { return null; },
+    // a11y C (D102): attributes must round-trip — the roving-tabindex logic reads role/
+    // aria-checked via getAttribute, and a null stub silently blinded those paths.
+    setAttribute(k, v) { (el._attrs = el._attrs || {})[k] = String(v); },
+    getAttribute(k) { return el._attrs && k in el._attrs ? el._attrs[k] : null; },
     append(...cs) { el.children.push(...cs); },
     appendChild(c) { el.children.push(c); return c; },
     remove() {}, focus() {}, blur() {},
@@ -366,7 +369,7 @@ function steer() {
       }
       // No passive in this draw — fall through to the normal picks.
     }
-    const missing = ['axe', 'garlic', 'blades', 'pistols', 'bombs', 'flame', 'bow', 'snowball', 'ringLightning'].filter((k) => !game.player.weapons[k]);
+    const missing = ['axe', 'garlic', 'blades', 'fangs', 'bombs', 'pyre', 'bow', 'snowball', 'ringLightning'].filter((k) => !game.player.weapons[k]);
     if (missing.length) {
       // the starting weapon is wand (mage default) — force the other weapons
       // through the real pickCard/applyCard pipeline (the click still goes through the card DOM).
@@ -1182,7 +1185,7 @@ m03RunDone = true;
   const tick162 = () => g2.combat.update(1 / 60, g2.players, g2.enemies);
   // wand (owned at run start) — the target sits inside every weapon range
   // (flame range is now flat 150 and uses a strict <, so keep it comfortably inside;
-  // still within bombs bombMin/bombDist + pistolRange/wandRange for the others)
+  // still within bombs bombMin/bombDist + fangsRange/wandRange for the others)
   g2.enemies.spawn('rat', p2.x + 120, p2.y);
   fire162();
   assert(g2.combat.bolts.length > 0 && g2.combat.bolts[0].y === sy162 && g2.combat.bolts[0].x === p2.x,
@@ -1195,7 +1198,7 @@ m03RunDone = true;
     '16.2: axe spawned at mid-torso');
   g2.combat.axes.length = 0; tick162();
   // twin pistols (2 rounds, same origin)
-  p2.weapons.pistols = 1; p2._pistolCd = 0;
+  p2.weapons.fangs = 1; p2._fangsCd = 0;
   fire162();
   assert(g2.combat.bullets.length === 2 && g2.combat.bullets.every((b) => b.y === sy162 && b.x === p2.x),
     '16.2: pistol bullets spawned at mid-torso (×2)');
@@ -1207,7 +1210,7 @@ m03RunDone = true;
     '16.2: bomb arc origin at mid-torso');
   g2.combat.bombs.length = 0; tick162();
   // flame (emission origin — 16.3 builds on this)
-  p2.weapons.flame = 1; p2._flame.fuel = CFG.weapons.flame.levels[0].fuel;
+  p2.weapons.pyre = 1; p2._flame.fuel = CFG.weapons.pyre.levels[0].fuel;
   fire162();
   assert(g2.combat.flames.length > 0 && g2.combat.flames.every((fl) => fl.y === sy162 && fl.x === p2.x),
     '16.2: flame emission origin at mid-torso');
@@ -1227,13 +1230,13 @@ m03RunDone = true;
     // shadow() is NOT a rebuild path (its arg is a sprite radius).
     const clearFoes = () => { g2.enemies.list.length = 0; g2.enemies.grid.clear(); };
     const regrid = () => { g2.enemies.grid.clear(); for (const e of g2.enemies.list) if (!e.dead) g2.enemies.grid.add(e.x, e.y, e); };
-    p2.weapons.flame = 5; p2._axeCd = p2._pistolCd = p2._bombCd = p2._bowCd = 999;
+    p2.weapons.pyre = 5; p2._axeCd = p2._fangsCd = p2._bombCd = p2._bowCd = 999;
     const probe = (dx) => {
       clearFoes();
       g2.combat.flames.length = 0; g2.combat._flameCd.clear();
       const e = g2.enemies.spawn('rat', p2.x + dx, p2.y);
       e.hp = 1e6; e.vx = e.vy = 0; e.state = 'idle';
-      p2._flame.fuel = CFG.weapons.flame.levels[4].fuel; p2._flame.reloading = false;
+      p2._flame.fuel = CFG.weapons.pyre.levels[4].fuel; p2._flame.reloading = false;
       // rand(a,b) = a + Math.random()*(b-a), so 0.5 pins each spread to its CENTRE
       // (speed 520 / life 0.33 → reach ~124 px); 0 would give the minimum of every
       // spread and silently shrink the stream instead.
@@ -1254,14 +1257,14 @@ m03RunDone = true;
     const out = probe(400); // inside the OLD 300–380 ramp, outside the visible stream
     assert(!out.acquired && !out.dmg && !out.burn,
       `flame: foe at 400 px is NOT acquired/damaged (range aligned to visuals) (acquired=${out.acquired} dmg=${out.dmg} burn=${out.burn})`);
-    assert(CFG.weapons.flame.levels.every((s) => s.range === 150), 'flame: acquisition range flat 150 at every level');
+    assert(CFG.weapons.pyre.levels.every((s) => s.range === 150), 'flame: acquisition range flat 150 at every level');
     clearFoes();
     g2.combat.flames.length = 0;
-    // restore a target for the remaining 16.2 origin checks (wand/axe/pistols/bombs/bow
+    // restore a target for the remaining 16.2 origin checks (wand/axe/fangs/bombs/bow
     // all aim via _nearest) and put the cooldowns back so they fire again.
     g2.enemies.spawn('rat', p2.x + 120, p2.y);
-    p2._axeCd = p2._pistolCd = p2._bombCd = 0;
-    p2.weapons.flame = 0;
+    p2._axeCd = p2._fangsCd = p2._bombCd = 0;
+    p2.weapons.pyre = 0;
   }
 
   // bow (23.1 charge-up): one fire pass enters the wind-up (no arrow yet), the arrow
@@ -1323,7 +1326,7 @@ m03RunDone = true;
 // chain burst to a nearby foe (+1 shock stack, no re-proc), drawable arc on the owner.
 {
   // Silence every weapon NOT under test. Ownership persists across the whole 16.x
-  // probe (wand/axe/pistols/bombs/flame/bow/snowball all still owned), so a live cd
+  // probe (wand/axe/fangs/bombs/pyre/bow/snowball all still owned), so a live cd
   // means stray projectiles fly during fire162/tick162 — an in-flight Sunder Bomb
   // exploding on T2 was exactly this probe's failure (hp −87.6, want 42).
   p2._snowCd = 999; p2._bombCd = 999;
@@ -1332,7 +1335,7 @@ m03RunDone = true;
   // the ring — `if (this.weapons.x)` gates each fire site, so cd values are inert.
   for (const arr of [g2.combat.bolts, g2.combat.axes, g2.combat.bullets, g2.combat.bombs,
     g2.combat.flames, g2.combat.arrows, g2.combat.snowballs]) arr.length = 0;
-  for (const k of ['wand', 'axe', 'pistols', 'bombs', 'flame', 'bow', 'snowball']) p2.weapons[k] = 0;
+  for (const k of ['wand', 'axe', 'fangs', 'bombs', 'pyre', 'bow', 'snowball']) p2.weapons[k] = 0;
   p2.weapons.ringLightning = 1; p2._ringCd = 0; p2._ringBeams.length = 0;
     // Freeze every other pipeline for this probe: the spawn waves (g2 never pumps
     // game.update, but fire162/tick162 must stay noise-free), contact damage, and DoT.
@@ -1514,7 +1517,7 @@ m03RunDone = true;
   {
     const BS = CFG.weapons.bombs.levels[0];
     p2.weapons.garlic = 0; p2.weapons.blades = 0;
-    for (const k of ['wand', 'axe', 'pistols', 'flame', 'bow']) p2.weapons[k] = 0;
+    for (const k of ['wand', 'axe', 'fangs', 'pyre', 'bow']) p2.weapons[k] = 0;
     g2.combat.bolts.length = 0; g2.combat.bullets.length = 0;
     g2.combat.arrows.length = 0; g2.combat.axes.length = 0;
     g2.combat.bombs.length = 0; g2.combat.flames.length = 0; g2.combat.explosions.length = 0;
@@ -1726,18 +1729,18 @@ m03RunDone = true;
   // (D68 revises D24): every fillRect y in Player.draw must be ≥ the player's feet (y),
   // never above the head as it was pre-19.2.
   {
-    const bak = { flame: p2.weapons.flame, lv: p2._flame.fuel, reloading: p2._flame.reloading };
+    const bak = { pyre: p2.weapons.pyre, lv: p2._flame.fuel, reloading: p2._flame.reloading };
     const ys = [];
     const fctx = new Proxy({}, { get(_, prop) {
       if (prop === 'fillRect') return (_x, y) => ys.push(y);
       return () => {};
     }});
-    p2.weapons.flame = 1; p2._flame.reloading = false;
-    p2._flame.fuel = CFG.weapons.flame.levels[0].fuel * 0.5;
+    p2.weapons.pyre = 1; p2._flame.reloading = false;
+    p2._flame.fuel = CFG.weapons.pyre.levels[0].fuel * 0.5;
     p2.draw(fctx);
     assert(ys.length >= 2, `19.2: fuel bar drawn (fillRects=${ys.length})`);
     assert(ys.every((y) => y >= p2.y), '19.2: every fuel-bar rect draws beneath the player (D68)');
-    p2.weapons.flame = bak.flame; p2._flame.fuel = bak.lv; p2._flame.reloading = bak.reloading;
+    p2.weapons.pyre = bak.pyre; p2._flame.fuel = bak.lv; p2._flame.reloading = bak.reloading;
   }
 
   // 12.8 — per-synergy combat E2Es (flamingArrows · heartPiercer · blueFlame · stormVolley).
@@ -1747,7 +1750,7 @@ m03RunDone = true;
   // the drives below. Each synergy is compared against a no-synergy control on identical geometry.
   {
     p2.weapons.bombs = 0;
-    for (const k of ['wand', 'garlic', 'axe', 'blades', 'pistols', 'bombs', 'flame', 'snowball', 'ringLightning', 'bow']) p2.weapons[k] = 0;
+    for (const k of ['wand', 'garlic', 'axe', 'blades', 'fangs', 'bombs', 'pyre', 'snowball', 'ringLightning', 'bow']) p2.weapons[k] = 0;
     for (const arr of [g2.combat.bolts, g2.combat.axes, g2.combat.bullets, g2.combat.bombs,
       g2.combat.flames, g2.combat.arrows, g2.combat.snowballs, g2.combat.explosions]) arr.length = 0;
     p2.synergies = {};
@@ -1866,7 +1869,7 @@ m03RunDone = true;
     let volley = 0, loneStrike = -1, both4 = false;
     const pistolProbe = (oneFoe) => {
       clearFoes128(); g2.combat.bullets.length = 0;
-      p2.x = 500; p2.y = 600; p2._pistolCd = 0;
+      p2.x = 500; p2.y = 600; p2._fangsCd = 0;
       const e1 = g2.enemies.spawn('rat', p2.x + 140, p2.y);
       if (!oneFoe) g2.enemies.spawn('rat', p2.x - 140, p2.y);
       regrid128();
@@ -1876,7 +1879,7 @@ m03RunDone = true;
       g2.combat.bullets.length = 0;
       return bs;
     };
-    p2.weapons.pistols = 1; p2._bulletShots = 0;
+    p2.weapons.fangs = 1; p2._bulletShots = 0;
     let probeGuard = 0;
     while (volley < 8 && probeGuard++ < 400) {
       volley++;
@@ -1912,7 +1915,7 @@ m03RunDone = true;
     assert(Math.abs((1e6 - svT1.hp) - (SV.dmg + 1)) < 1e-6, `12.8 stormVolley: struck foe takes bullet dmg + S.dmg (${SV.dmg} + 1)`);
     assert(svT2.shockStacks.length === 1 && svT2.stunT === 0,
       '12.8 stormVolley: chained foe gains 1 shock stack, never re-procs');
-    p2.weapons.pistols = 0; p2.synergies = {}; p2._bulletShots = 0;
+    p2.weapons.fangs = 0; p2.synergies = {}; p2._bulletShots = 0;
     clearFoes128();
     for (const arr of [g2.combat.bullets, g2.combat.bolts, g2.combat.axes, g2.combat.bombs,
       g2.combat.flames, g2.combat.arrows, g2.combat.snowballs, g2.combat.explosions]) arr.length = 0;
@@ -2009,13 +2012,13 @@ m03RunDone = true;
   const torsoP = () => pP.y - pP.def.h * Cp.spawnOriginFrac; // mid-torso projectile line (16.2)
   const resetP21 = () => {
     pP.weapons = {}; pP.synergies = {}; pP.passives = {};
-    // Every P21 cooldown must reset too — a prior probe's shot cd (cannon 2.6 s,
+    // Every P21 cooldown must reset too — a prior probe's shot cd (missile 2.6 s,
     // boulder 7 s, tongue 2.2 s…) would otherwise gate the next probe's fire pass.
-    pP._cannonCd = 0; pP._laserCd = 0; pP._laserT = 0; pP._laserAng = 0; pP._webCd = 0; pP._gatCd = 0;
+    pP._missileCd = 0; pP._laserCd = 0; pP._laserT = 0; pP._laserAng = 0; pP._webCd = 0; pP._gatCd = 0;
     pP._gatMag = Wp.gatling.burst; pP._gatReload = 0; pP._batCd = 0; pP._boulderCd = 0;
     pP._tongueCd = 0; pP._ballCd = 0;
     pP._companion = null; pP._wolves = null; pP._boulder = null; pP._ball = null; pP._shieldBank = null; pP._tongueFx = null;
-    for (const arr of [gP.combat.shells, gP.combat.beams, gP.combat.boulders, gP.combat.webs,
+    for (const arr of [gP.combat.missiles, gP.combat.beams, gP.combat.boulders, gP.combat.webs,
       gP.combat.bullets, gP.combat.bolts, gP.combat.explosions]) arr.length = 0;
     clearFoesP();
   };
@@ -2029,32 +2032,32 @@ m03RunDone = true;
     const ty = torsoP();
     const c1 = mkFoeP('goblin', pP.x + 140, ty);
     const c2 = mkFoeP('goblin', pP.x + 180, ty);
-    pP.weapons.cannon = 1;
+    pP.weapons.missile = 1;
     let t = 0;
-    while (!gP.combat.shells.length && t < 60) { regridP(); fireP(); t++; }
-    assert(gP.combat.shells.length === 1 && gP.combat.shells[0].target === c1,
+    while (!gP.combat.missiles.length && t < 60) { regridP(); fireP(); t++; }
+    assert(gP.combat.missiles.length === 1 && gP.combat.missiles[0].target === c1,
       'P31.4 missile: spawns and locks onto the nearest foe');
     t = 0;
-    while (gP.combat.shells.length && t < 120) { regridP(); gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
-    assert(gP.combat.shells.length === 0 && 1e6 - c1.hp > 0 && 1e6 - c2.hp > 0,
+    while (gP.combat.missiles.length && t < 120) { regridP(); gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
+    assert(gP.combat.missiles.length === 0 && 1e6 - c1.hp > 0 && 1e6 - c2.hp > 0,
       `P31.4 missile: consumed by the impact blast; direct hit + blast both bite (c1=${(1e6 - c1.hp).toFixed(0)} c2=${(1e6 - c2.hp).toFixed(0)})`);
   }
-  // --- Shells of Perdition: the missile's impact blast STILL ignites every caught foe
+  // --- Napalm Missile (was Shells of Perdition): the impact blast STILL ignites every caught foe
   // with the row's burn (31.4 kept the synergy mechanic untouched; only the weapon moved) ---
   resetP21();
   pP.x = 400; pP.y = 600;
   {
     const ty = torsoP();
-    const HS = CFG.synergies.heShell.levels[0];
+    const HS = CFG.synergies.napalmMissile.levels[0];
     const c1 = mkFoeP('goblin', pP.x + 140, ty);
     const c2 = mkFoeP('goblin', pP.x + 180, ty);
-    pP.weapons.cannon = 1; pP.synergies.heShell = 1;
+    pP.weapons.missile = 1; pP.synergies.napalmMissile = 1;
     let t = 0;
-    while (!gP.combat.shells.length && t < 60) { regridP(); fireP(); t++; }
+    while (!gP.combat.missiles.length && t < 60) { regridP(); fireP(); t++; }
     t = 0;
-    while (gP.combat.shells.length && t < 120) { regridP(); gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
+    while (gP.combat.missiles.length && t < 120) { regridP(); gP.combat.update(1 / 60, gP.players, gP.enemies); t++; }
     assert((c1.burnT || 0) > 0 && (c1.burnDps || 0) >= HS.dps && (c2.burnT || 0) > 0,
-      `P21 heShell: blast ignites both caught foes (c1 burnT=${c1.burnT} dps=${c1.burnDps})`);
+      `P21 napalmMissile: blast ignites both caught foes (c1 burnT=${c1.burnT} dps=${c1.burnDps})`);
   }
   // --- Continuous Laser: beam lives for dur, sears via dpsTick, NO knockback ---
   resetP21();
@@ -2292,7 +2295,7 @@ m03RunDone = true;
     }
     assert(ePos, 'P21 cannonball: an LOS-clear goblin placement exists near the player (harness precondition)');
     const e = mkFoeP('goblin', ePos[0], ePos[1]);
-    pP.weapons.ball = 5;
+    pP.weapons.cannonball = 5;
     let t = 0;
     while (!pP._ball && t < 30) { regridP(); fireP(); t++; }
     assert(pP._ball, 'P21 cannonball: ball-state engages');
@@ -2301,11 +2304,12 @@ m03RunDone = true;
     const hpA = pP.hp;
     assert(gP.combat.damagePlayer(pP, 999, pP.x, pP.y) === false && pP.hp === hpA,
       'P21 cannonball: damagePlayer blocked mid-roll');
-    const x0 = pP.x;
+    const x0 = pP.x, y0 = pP.y; // displacement is checked in any direction — the fixture may place the foe on +y/−x (LOS-dependent)
     t = 0;
     while (pP._ball && t < 300) { regridP(); fireP(); t++; }
-    assert(Math.abs(pP.x - x0) > 50 && 1e6 - e.hp > 0 && !pP._ball,
-      `P21 cannonball: player rockets into the foe (Δx=${(pP.x - x0).toFixed(0)} dealt=${(1e6 - e.hp).toFixed(0)})`);
+    const moved = Math.hypot(pP.x - x0, pP.y - y0);
+    assert(moved > 50 && 1e6 - e.hp > 0 && !pP._ball,
+      `P21 cannonball: player rockets into the foe (moved=${moved.toFixed(0)} dealt=${(1e6 - e.hp).toFixed(0)})`);
     pP.iframes = 0;
     const hpB = pP.hp;
     assert(gP.combat.damagePlayer(pP, 40, pP.x, pP.y) === true && pP.hp === hpB - 40,
@@ -2373,17 +2377,17 @@ m03RunDone = true;
   }
   // --- The 5 fused synergies reach the offer pool when their pair is owned at max (reqAtMax) ---
   {
-    const w9 = { cannon: 5, flame: 5, wolfpack: 5, ringLightning: 5, bat: 5, bow: 5, tongue: 5, boulder: 5, snowball: 5 };
+    const w9 = { missile: 5, pyre: 5, wolfpack: 5, ringLightning: 5, bat: 5, bow: 5, tongue: 5, boulder: 5, snowball: 5 };
     const seen = new Set();
     for (let s = 1; s <= 60; s++) for (const c of cardOffers(w9, { hp: 3 }, {}, mulberry32(s), 5, null, null, null)) seen.add(c.key);
-    for (const k of ['heShell', 'staticPelt', 'homerKing', 'gutFeast', 'avalanche'])
+    for (const k of ['napalmMissile', 'staticPelt', 'homerKing', 'gutFeast', 'avalanche'])
       assert(seen.has(k), `P21 offers: ${k} never surfaced across 60 seeds`);
   }
-  // --- P21 draw pass: shell/boulder/web sprites + orbit beams + PACK wolves emit real draw ops ---
+  // --- P21 draw pass: missile/boulder/web sprites + orbit beams + PACK wolves emit real draw ops ---
   {
     resetP21();
     pP.x = 400; pP.y = 600; pP.aimAng = 0;
-    gP.combat.fireShell(pP.x, torsoP(), 0, 50, 70, null, pP);
+    gP.combat.fireMissile(pP.x, torsoP(), 0, 50, 70, null, pP);
     gP.combat.fireBoulder(pP, pP.x + Cp.boulderR, pP.y, 1, 0, 50, null);
     gP.combat.fireWeb(pP.x, torsoP(), pP.x + 120, pP.y, 10, 90, 0.7, pP);
     gP.combat.fireBeam(pP, { dur: 1.0, dps: 10, len: Cp.wandRange, w: 12 });
@@ -3167,6 +3171,36 @@ m03RunDone = true;
   assert(byId['duration-select'].children[2].classList.contains('sel'), '17.2: re-render marks the new chip selected');
   game.setDuration('d5'); // restore the default before the run machinery below
 
+  // a11y C (D102, adopted 2026-10-23): radiogroup keyboard contract — roving tabindex + arrows.
+  // Driven through the real containers' keydown handlers (the same code the browser fires).
+  {
+    const dc = byId['duration-select'];
+    const radios = (c) => c.children.filter((el) => el.getAttribute && el.getAttribute('role') === 'radio');
+    // the menu only renders on state CHANGE, and the DOM still shows d15 (setDuration('d5')
+    // above was programmatic) — drive d5 through the UI so state and DOM agree before probing
+    radios(dc)[0].click();
+    assert(radios(dc).length === 5, 'a11y C: duration radios visible (scope proof for the pins below)');
+    assert(game.selectedDurationKey === 'd5', 'a11y C: setup — d5 selected via its own click path');
+    assert(radios(dc).filter((el) => el.tabIndex === 0).length === 1 && radios(dc)[0].tabIndex === 0,
+      'a11y C: only the checked duration chip is a tab stop (roving tabindex)');
+    const key = (c, k) => { for (const fn of ((c._ls && c._ls.keydown) || [])) fn({ key: k, preventDefault() {} }); };
+    key(dc, 'ArrowRight');
+    assert(game.selectedDurationKey === 'd10', 'a11y C: ArrowRight selects the next chip (APG radio contract)');
+    assert(radios(dc).filter((el) => el.tabIndex === 0).length === 1 && radios(dc)[1].tabIndex === 0,
+      'a11y C: the roving tab stop follows the new selection after re-render');
+    key(dc, 'ArrowLeft');
+    assert(game.selectedDurationKey === 'd5', 'a11y C: ArrowLeft selects the previous chip');
+    key(dc, 'End');
+    assert(game.selectedDurationKey === CFG.run.durations.order[CFG.run.durations.order.length - 1], 'a11y C: End selects the last chip');
+    key(dc, 'Home');
+    assert(game.selectedDurationKey === 'd5', 'a11y C: Home selects the first chip');
+    const ls = byId['level-select'];
+    assert(radios(ls).every((el, i) => el.tabIndex === (i === 0 ? 0 : -1)), 'a11y C: level cards are roving too (only checked = tab stop)');
+    key(ls, 'ArrowRight'); // m02 is locked at 0 wins
+    assert(game.selectedLevelKey === 'm01', 'a11y C: arrow onto a locked level fires its deny path, selection unchanged');
+    game.setDuration('d5'); // ensure the default stands for the run machinery below
+  }
+
   const DT17 = 1 / 60;
   const mkDurGame = () => {
     const g = new Game({
@@ -3415,5 +3449,5 @@ console.log(
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 8 weapons (wand-off kill window) · ` +
   `all 8 weapons observed live (bolts/axes/blades/garlic/bullets/bombs/flames/arrows) · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 12.8 per-synergy E2Es (flamingArrows burn-on-hit · heartPiercer bonus+pierce exactly 1 extra · blueFlame freeze+burn on burst · stormVolley 4th-volley both-rounds strike + chain shock) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · 14 in-run Soulshards counter (live floor(score/400) projection, change-detected) + 14.2 unified co-op earnings (run-level total rides the room close, client accrues in full, meta player-specific)P21 boot battery (9 new weapons + 2 item-passives live: cannon lock→home→detonate + heShell ignite · laser orbit sear no-kb (continuous rotation while idle, 180°/120° multi-beam) · wolfpack pounce/bleed/leash/staticPelt shock + pack growth 1/1/2/2/3 · Coffee cdMul on boulder+laser cds · boulder squish/decay/one-at-a-time/avalanche stacks · web burst hold · gatling mag→reload→full-mag refill · bat knockback + HOMERUN KO branch (rand-pinned) · tongue poison/drag/eat-heal with gutFeast ×mul · cannonball roll self-propelled + i-frame gate open/close; Mirror Shield reflect+bank+spend; Ice Skates glide drift + slide-hits-both with re-hit lock; 5 new chars selectable: pre-owned starter, zero passives, per-char hp/dmg; 5 fused synergies offered across 60 seeds; P21 sprite draw pass) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · 14 in-run Soulshards counter (live floor(score/400) projection, change-detected) + 14.2 unified co-op earnings (run-level total rides the room close, client accrues in full, meta player-specific)P21 boot battery (9 new weapons + 2 item-passives live: missile lock→home→detonate + napalmMissile ignite · laser orbit sear no-kb (continuous rotation while idle, 180°/120° multi-beam) · wolfpack pounce/bleed/leash/staticPelt shock + pack growth 1/1/2/2/3 · Coffee cdMul on boulder+laser cds · boulder squish/decay/one-at-a-time/avalanche stacks · web burst hold · gatling mag→reload→full-mag refill · bat knockback + HOMERUN KO branch (rand-pinned) · tongue poison/drag/eat-heal with gutFeast ×mul · cannonball roll self-propelled + i-frame gate open/close; Mirror Shield reflect+bank+spend; Ice Skates glide drift + slide-hits-both with re-hit lock; 5 new chars selectable: pre-owned starter, zero passives, per-char hp/dmg; 5 fused synergies offered across 60 seeds; P21 sprite draw pass) · loop alive throughout`,
 );
