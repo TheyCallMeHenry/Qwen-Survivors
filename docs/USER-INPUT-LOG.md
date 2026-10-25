@@ -13,6 +13,35 @@
 
 ## Entries (newest first)
 
+### 2026-10-24 — Record-sync directive (cold-resume ready, lean, then commit docs)
+- **Received:** 2026-10-24 (after the two-agent glitch/publish round)
+- **Classification:** process rule
+- **Context:** final record hygiene for session 43; explicit commit authorization for docs.
+- **Verbatim:**
+```
+Sync the record so a cold session could resume without asking me anything: decisions, findings, research, tests run and their real results, troubleshooting attempts and resolutions, and the exact next step. Keep it lean — no transcripts and no line references; the code is the implementation record. Commit the updated docs after the doc sync has completed.
+```
+
+### 2026-10-24 — Second FPS-test recording delivered; review via sub-agent
+- **Received:** 2026-10-24 07:14
+- **Classification:** feedback (new evidence) + process rule (use a sub-agent)
+- **Context:** user recorded gameplay with the new ?fps=1 v2 link; video-2 review became the basis for the hit-stop ruling.
+- **Verbatim:**
+```
+I have made a new screen recording of gameplay using the new fps test link; it's saved alongside the original screen recording video. Spawn a new sub-agent to review the footage.
+```
+
+### 2026-10-24 — Spawn-sub-agents order: fix all glitches, then commit/push/republish
+- **Received:** 2026-10-24 (after the hit-stop removal report)
+- **Classification:** feature request + answer/approval (publish)
+- **Context:** glitch sweep (→ 31.18 fixed) and publish round 4 (`f735565`).
+- **Verbatim:**
+```
+Spawn sub-agents to handle each individual task separately. Spawn only 1 at a time.
+ 1. Fix any and all glitches you discovered. 
+ 2. Commit, push, republish to GH pages
+```
+
 ### 2026-10-24 — Hit-stop removal order (conditional on video-2 evidence — condition met)
 - **Received:** 2026-10-24 (after the video-2 verdict report)
 - **Classification:** design decision (mechanic removal)
