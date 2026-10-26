@@ -7,7 +7,7 @@ import { HashGrid } from '../utils/grid.js';
 import { TAU, approach, clamp, rand } from '../utils/math.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
 
-// 32.3 (user approved 2026-10-25): decide whether a spawn becomes elite. Pure + rng-injectable
+// 32.3 (user approved 2026-10-26): decide whether a spawn becomes elite. Pure + rng-injectable
 // for tests; the production caller is spawn(), whose own path draws from the global Math.random
 // (same source as rand() for speed/animT and the heart drop in game._onKill — game.rng stays
 // untouched, so type-pick/spawn-point determinism is unchanged). Below the gate no rng is

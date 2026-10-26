@@ -1168,7 +1168,7 @@ export function recomputeStats(p) {
 
 // Up to 3 distinct upgrade candidates: weapon upgrades, new weapons (≤ cap),
 // passives, and synergy cards (only once both synergizing weapons are max level).
-// Item cap (user directive 2026-10-25): NEW passive/item keys are gated exactly like new
+// Item cap (user directive 2026-10-26): NEW passive/item keys are gated exactly like new
 // weapons — only while the count of DISTINCT passive keys at level > 0 is below
 // CFG.run.maxItems (read from CFG inside the body, not a param: flat 5 for every co-op
 // seat, deliberately NOT scaled with player count). Upgrades of owned keys stay offered

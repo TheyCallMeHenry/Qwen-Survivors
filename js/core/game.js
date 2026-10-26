@@ -649,7 +649,7 @@ export class Game {
     const gp = escapeFromSpots(e.x, e.y, this._pickupSpots, CFG.gems.escapePad);
     this.pickups.gem(gp.x, gp.y, e.xp);
     const lowHp = p.hp / p.maxHp < CFG.gems.lowHpFrac;
-    // 32.3 (user approved 2026-10-25): the normal heart roll halves after heartDecayAfter s;
+    // 32.3 (user approved 2026-10-26): the normal heart roll halves after heartDecayAfter s;
     // the low-HP panic valve is never decayed. Co-op is host-authoritative (11.2) — kills only
     // simulate host-side (_onKill is the sole roll site), so every seat sees identical drops.
     let chance = CFG.gems.heartChance;

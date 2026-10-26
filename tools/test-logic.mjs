@@ -289,7 +289,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     && new Set(trio.map((c) => c.key)).size === 3, 'cardOffers: gated pool {inferno, tempest, phoenix, heartMagnet} → 3 distinct drawn (12.6)');
 }
 
-// --- Item cap: CFG.run.maxItems gates NEW passive keys, upgrades exempt (user directive 2026-10-25) ---
+// --- Item cap: CFG.run.maxItems gates NEW passive keys, upgrades exempt (user directive 2026-10-26) ---
 {
   ok(CFG.run.maxItems === 5, 'item cap: CFG.run.maxItems = 5');
   const fiveOwned = { speed: 1, hp: 1, dmg: 1, magnet: 1, regen: 1 }; // 5 distinct keys at level > 0, all BELOW max → upgrades legal, new keys gated
@@ -1492,7 +1492,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     '11.3: boss HP/dmg same ramp (Q7)');
 }
 
-// --- 32.3 elite modifier (user approved 2026-10-25): frac ramp, config pins, spawn-path
+// --- 32.3 elite modifier (user approved 2026-10-26): frac ramp, config pins, spawn-path
 // multipliers + boss exclusion, and the snapshot flag round-trip (elite tell reaches clients) ---
 {
   const EL = CFG.enemies.elite;
