@@ -6,7 +6,7 @@ import { generateWorld } from '../js/world/generate.js';
 import { LEVELS, LEVEL_ORDER, getLevel } from '../js/world/levels.js';
 import { HashGrid } from '../js/utils/grid.js';
 import { aliveCap, spawnInterval, batchSize, pickType, spawnPoint, bossTimes } from '../js/entities/spawner.js';
-import { Enemies } from '../js/entities/enemies.js';
+import { Enemies, isElite } from '../js/entities/enemies.js';
 import { Player, cardOffers, applyCard, recomputeStats, cardEffectText, charDef, skipXp } from '../js/entities/player.js';
 import { Combat } from '../js/entities/combat.js';
 import { Pickups, escapeFromSpots } from '../js/entities/pickups.js';
@@ -15,7 +15,7 @@ import { GEM_PAL, HEART_PAL } from '../js/art/items.js';
 import { Lighting } from '../js/systems/lighting.js';
 import { Camera } from '../js/systems/camera.js';
 import { shadowSprite } from '../js/art/base.js';
-import { SNAP_V, SNAP_PLEN, WEAPON_KEYS, PASSIVE_KEYS, SYNERGY_KEYS, ENEMY_KEYS, E_FLAG_FLASH, E_FLAG_BURN, E_FLAG_BLIGHT, E_FLAG_BOSS, E_FLAG_FLIP, playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState } from '../js/net/sync.js';
+import { SNAP_V, SNAP_PLEN, WEAPON_KEYS, PASSIVE_KEYS, SYNERGY_KEYS, ENEMY_KEYS, E_FLAG_FLASH, E_FLAG_BURN, E_FLAG_BLIGHT, E_FLAG_BOSS, E_FLAG_FLIP, E_FLAG_ELITE, playerSnap, applyPlayerSnap, enemySnap, applyEnemySnap, pickupSnaps, applyPickupSnaps, stateMsg, unpackState } from '../js/net/sync.js';
 import { loadMeta, shardsFor, upgradeCost, applyMeta, loadWins, saveWins, recordWin, isUnlocked, defaultWins, loadSelectedLevel, saveSelectedLevel, defaultZoom, loadZoom, saveZoom, defaultVolumes, loadVolumes, saveVolumes, defaultChars, loadChars, saveChars, isCharUnlocked, buyChar, loadSelectedChar, saveSelectedChar, loadDurations, durationFor, saveDurations, actionCost, buyAction } from '../js/core/meta.js';
 import { rankScore, loadScores, saveScores, scoreKeyFor, isNewOffer, cardTitleFor } from '../js/ui/screens.js';
 import { loadoutRows } from '../js/ui/hud.js';
@@ -66,16 +66,16 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
 // --- Spawner curves (must match CFG.spawner) ---
 {
   ok(aliveCap(0) === 60, 'aliveCap(0) = 60');
-  ok(aliveCap(120) === 70, 'aliveCap(120) = 70');
-  ok(aliveCap(300) === 85, 'aliveCap(300) = 85 (min with 200)');
+  ok(aliveCap(120) === 73, '32.3 rebaseline (ramp /9): aliveCap(120) = 73');
+  ok(aliveCap(300) === 93, '32.3 rebaseline: aliveCap(300) = 93 (below 280 cap)');
   let capInc = true, intDec = true, batchInc = true;
   for (let t = 0; t <= 300; t += 5) {
     if (aliveCap(t) < aliveCap(t - 5)) capInc = false;
     if (spawnInterval(t) > spawnInterval(t - 5)) intDec = false;
     if (batchSize(t) < batchSize(t - 5)) batchInc = false;
-    if (aliveCap(t) > 200 || spawnInterval(t) < 0.35 || batchSize(t) > 6) { capInc = false; intDec = false; batchInc = false; }
+    if (aliveCap(t) > 280 || spawnInterval(t) < 0.35 || batchSize(t) > 6) { capInc = false; intDec = false; batchInc = false; }
   }
-  ok(capInc, 'aliveCap: non-decreasing, ≤200');
+  ok(capInc, 'aliveCap: non-decreasing, ≤280 (32.3 cap)');
   ok(intDec, 'interval: non-increasing, ≥0.35');
   ok(batchInc, 'batch: non-decreasing, ≤6');
   ok(near(spawnInterval(0), 1.7) && near(spawnInterval(300), 0.35), 'interval: 1.7 → 0.35 over run');
@@ -167,6 +167,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     ok(wpn.levels.length === 5, `weapons.${k}: 5 levels`);
   }
   for (const [k, e] of Object.entries(CFG.enemies)) {
+    if (k === 'elite') continue; // 32.3: modifier block (multipliers), not a type with stats
     ok(e.hp > 0 && e.r > 0 && e.xp > 0 && e.dmg > 0 && e.speed[0] > 0, `enemies.${k}: positive stats`);
   }
   ok(CFG.run.bossAt < CFG.run.time, 'run: boss spawns before end');
@@ -257,7 +258,7 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   ok(bosses.length === 3 && bosses[0] === 'wraith' && bosses[1] === 'ryu' && bosses[2] === 'shark', 'enemies: bosses wraith (m01) + ryu (m02) + shark (m03)');
   const wk = Object.keys(getLevel('m01').weights(300));
   ok(wk.length > 0 && wk.every((k) => CFG.enemies[k]), 'm01 weights keys ⊆ enemies');
-  ok(Object.values(CFG.enemies).every((e) => Number.isInteger(e.xp) && e.xp > 0), 'enemies.xp: positive integers');
+  ok(ENEMY_KEYS.map((k) => CFG.enemies[k]).every((e) => Number.isInteger(e.xp) && e.xp > 0), 'enemies.xp: positive integers (types only — 32.3 elite.xp is a ×-multiplier, not XP)');
 }
 
 // --- Level-up card logic (pure) ---
@@ -286,6 +287,30 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
   const trioSet = new Set(['inferno', 'tempest', 'phoenix', 'heartMagnet']);
   ok(trio.length === 3 && trio.every((c) => c.kind === 'synergy' && trioSet.has(c.key))
     && new Set(trio.map((c) => c.key)).size === 3, 'cardOffers: gated pool {inferno, tempest, phoenix, heartMagnet} → 3 distinct drawn (12.6)');
+}
+
+// --- Item cap: CFG.run.maxItems gates NEW passive keys, upgrades exempt (user directive 2026-10-25) ---
+{
+  ok(CFG.run.maxItems === 5, 'item cap: CFG.run.maxItems = 5');
+  const fiveOwned = { speed: 1, hp: 1, dmg: 1, magnet: 1, regen: 1 }; // 5 distinct keys at level > 0, all BELOW max → upgrades legal, new keys gated
+  let newPassives = 0;
+  const upgrades = new Set();
+  for (let s = 1; s <= 60; s++) {
+    for (const c of cardOffers({ wand: 1 }, fiveOwned, {}, mulberry32(s))) {
+      if (c.kind === 'passive') { if (c.level === 1) newPassives++; else upgrades.add(c.key); }
+    }
+  }
+  ok(newPassives === 0, 'item cap: 5 keys owned → no new-passive (level 1) card across 60 seeds');
+  ok(upgrades.size === 5, 'item cap: upgrades of all 5 owned keys still offered at the cap');
+  // At the cap with every owned key maxed → the draw is pure synergies (exempt, like maxWeapons).
+  const atCap = cardOffers({ wand: 5, garlic: 5, axe: 5, blades: 5, fangs: 5 }, { speed: 3, hp: 3, dmg: 5, magnet: 3, regen: 3 }, {}, mulberry32(2));
+  ok(atCap.length === 3 && atCap.every((c) => c.kind === 'synergy'),
+    'item cap: cap reached + all keys maxed → draw is pure (exempt) synergies');
+  // One slot open → new passive keys are offered again.
+  let sawNew = false;
+  for (let s = 1; s <= 20 && !sawNew; s++)
+    if (cardOffers({ wand: 1 }, { speed: 1, hp: 1, dmg: 1, magnet: 1 }, {}, mulberry32(s)).some((c) => c.kind === 'passive' && c.level === 1)) sawNew = true;
+  ok(sawNew, 'item cap: 4 keys owned → new-passive offers still appear');
 }
 
 // --- 11.5.1: base maxWeapons 4→5 + per-player co-op equip cap (pure) ---
@@ -433,8 +458,8 @@ const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
     '23.3: phoenix card text = over-heal effect');
   ok(cardEffectText('meta', 'maxHp', 1) === '+20 max HP → total +20 max HP',
     'cardEffectText: maxHp meta L1');
-  ok(cardEffectText('meta', 'dash', 1) === '−8% dash cooldown → total −8%',
-    'cardEffectText: dash meta uses U+2212 minus');
+  ok(cardEffectText('meta', 'dash', 1) === '−6% dash cooldown → total −6%',
+    '32.3 rebaseline (val −0.06): cardEffectText dash meta uses U+2212 minus');
   ok(cardEffectText('nope', 'x', 1) === '', 'cardEffectText: unknown kind → empty');
   // Coverage: every (kind, key, level) a pick/buy can grant must produce non-empty text
   // (crash classes = missing key/template). `level` = the level the pick/buy grants.
@@ -993,7 +1018,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(g.colliders.some((c) => c.landmark), 'm02: landmark colliders retained (D92)');
   ok(g.well && g.ringShrine && inb(g.well) && inb(g.ringShrine), 'm02: well + ringShrine in bounds');
   ok(g.trees.length === 274 && g.decor.length === 324 && g.colliders.length === 332, 'm02 layout: golden counts (seed 20260822) — +1 collider = well landmark retained (D92)');
-  ok(aliveCap(120, m1) === 70 && aliveCap(120, m2) === 87.5 && batchSize(300, m2) === 8 && near(spawnInterval(100, m2), spawnInterval(100) / 1.25), 'spawner: per-level diff scales cap/batch/interval');
+  ok(aliveCap(120, m1) === 73 && aliveCap(120, m2) === 91.25 && batchSize(300, m2) === 8 && near(spawnInterval(100, m2), spawnInterval(100) / 1.25), 'spawner: per-level diff scales cap/batch/interval (32.3: /9 ramp)');
 }
 
 // 13.3 — m02 roster: per-level stat tables (A4) + m02 weights (slot re-skins, A1)
@@ -1003,13 +1028,13 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const rat0 = e1.spawn('rat', 0, 0);
   e2.diff = 1.25;
   const rat2b = e2.spawn('rat', 0, 0);
-  ok(rat0.hp === 20 && rat0.dmg === 8, 'diff 1.0: stats unchanged (rat 20/8)');
-  ok(rat2b.hp === 25 && rat2b.dmg === 10, 'diff 1.25: rat hp/dmg ×1.25 (25/10)');
+  ok(rat0.hp === 24 && rat0.dmg === 8, 'diff 1.0: stats unchanged (rat 24/8)');
+  ok(rat2b.hp === 30 && rat2b.dmg === 10, 'diff 1.25: rat hp/dmg ×1.25 (30/10)');
   const brt2 = e2.spawn('brute', 0, 0);
-  ok(brt2.hp === 350 && brt2.dmg === 31.25, 'diff 1.25: brute slot (oni) 280→350 hp, 25→31.25 dmg');
+  ok(brt2.hp === 420 && brt2.dmg === 31.25, 'diff 1.25: brute slot (oni) 336→420 hp, 25→31.25 dmg');
   const ryu = e2.spawn('ryu', 0, 0);
-  ok(ryu.boss && ryu.hp === 3900 && ryu.dmg === 35, 'Ryū boss ×1.25 (3900 hp / 35 dmg — 31.7 base 3120)');
-  ok(e1.spawn('ryu', 0, 0).hp === 3120, 'Ryū base stats = Wraith base (pre-diff; 31.7 +30% boss HP)');
+  ok(ryu.boss && ryu.hp === 4680 && ryu.dmg === 35, 'Ryū boss ×1.25 (4680 hp / 35 dmg — 31.19 base 3744)');
+  ok(e1.spawn('ryu', 0, 0).hp === 3744, 'Ryū base stats = Wraith base (pre-diff; 31.19 ×1.2 boss HP)');
   const m1 = getLevel('m01'), m2 = getLevel('m02');
   ok(m1.boss.name === 'THE WRAITH' && m2.boss.name === 'RYŪ', 'boss banner names per level');
   const w2 = Object.keys(m2.weights(300));
@@ -1087,15 +1112,15 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
 {
   const lm1 = getLevel('m01'), lm3 = getLevel('m03');
   const eb = new Enemies();
-  ok(eb.spawn('shark', 0, 0).hp === 3120, 'Great White base stats = Wraith base (pre-diff; 31.7 +30% boss HP)');
+  ok(eb.spawn('shark', 0, 0).hp === 3744, 'Great White base stats = Wraith base (pre-diff; 31.19 ×1.2 boss HP)');
   const e3 = new Enemies();
   e3.diff = 1.56;
   const rat3 = e3.spawn('rat', 0, 0);
-  ok(near(rat3.hp, 31.2) && rat3.dmg === 12.48, 'diff 1.56: crab slot 20→31.2 hp, 8→12.48 dmg');
+  ok(near(rat3.hp, 37.44) && rat3.dmg === 12.48, 'diff 1.56: crab slot 24→37.44 hp, 8→12.48 dmg');
   const brt3 = e3.spawn('brute', 0, 0);
-  ok(brt3.hp === 436.8 && brt3.dmg === 39, 'diff 1.56: orca slot 280→436.8 hp, 25→39 dmg');
+  ok(brt3.hp === 524.16 && brt3.dmg === 39, 'diff 1.56: orca slot 336→524.16 hp, 25→39 dmg');
   const shark = e3.spawn('shark', 0, 0);
-  ok(shark.boss && shark.hp === 4867.2 && shark.dmg === 43.68, 'Great White boss ×1.56 (4867.2 hp / 43.68 dmg — 31.7 base 3120)');
+  ok(shark.boss && shark.hp === 5840.64 && shark.dmg === 43.68, 'Great White boss ×1.56 (5840.64 hp / 43.68 dmg — 31.19 base 3744)');
   ok(lm3.boss.name === 'THE GREAT WHITE', 'm03 boss banner name');
   const w3 = Object.keys(lm3.weights(300));
   ok(w3.length === 6 && w3.every((k) => CFG.enemies[k]), 'm03 weights: 6 slot keys ⊆ enemies');
@@ -1289,7 +1314,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   ok(room2.status === 'closed' && room2.reason === 'run-end', '11.1: explicit close (run end)');
 
   const prof = profileFromMeta({ shards: 999, upgrades: { maxHp: 2, dmg: 1, speed: 3, xp: 0, dash: 5 } });
-  ok(prof.maxHpBonus === 40 && near(prof.dmgMult, 1.08) && near(prof.speedMult, 1.18) && near(prof.dashCdMult, 0.6) && prof.xpMult === 1, '11.1/D53: profile derived from meta upgrades only');
+  ok(prof.maxHpBonus === 40 && near(prof.dmgMult, 1.08) && near(prof.speedMult, 1.18) && near(prof.dashCdMult, 0.7) && prof.xpMult === 1, '11.1/D53: profile derived from meta upgrades only (32.3 rebaseline: dash 5×−0.06 → 0.7)');
   const round = unpack(pack({ t: 'x', v: 1 }));
   ok(round && round.t === 'x' && round.v === 1, '11.1: pack/unpack round-trip');
   ok(unpack('nope') === null && unpack('[1]') === null && unpack('null') === null, '11.1: unpack rejects non-objects');
@@ -1452,7 +1477,7 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
     && batchSize(300, m01, 1.33) === Math.round(batchSize(300, m01) * 1.33)
     && near(spawnInterval(100, m01, 1.33), spawnInterval(100, m01) / 1.33),
     '11.3: aliveCap ×s, batch ×s (rounded), interval ÷s');
-  ok(aliveCap(120, m01) === 70 && batchSize(300, m01) === 6 && near(spawnInterval(100, m01), 1.23),
+  ok(aliveCap(120, m01) === 73 && batchSize(300, m01) === 6 && near(spawnInterval(100, m01), 1.23),
     '11.3: s default 1 = solo invariance (m01 curves)');
   const en = new Enemies();
   en.diff = 1; en.coopS = 1;
@@ -1465,6 +1490,65 @@ const slots0 = (row) => row.filter((f) => f !== null).length;
   const boss = en.spawn('wraith', 0, 0);
   ok(boss.boss && near(boss.maxHp, CFG.enemies.wraith.hp * 1.66) && near(boss.dmg, CFG.enemies.wraith.dmg * 1.66),
     '11.3: boss HP/dmg same ramp (Q7)');
+}
+
+// --- 32.3 elite modifier (user approved 2026-10-25): frac ramp, config pins, spawn-path
+// multipliers + boss exclusion, and the snapshot flag round-trip (elite tell reaches clients) ---
+{
+  const EL = CFG.enemies.elite;
+  ok(EL.after === 180 && EL.hp === 1.5 && EL.dmg === 1.3 && EL.speed === 1.25 && EL.xp === 3 && EL.score === 3,
+    '32.3: elite block pinned (after=180 s; hp×1.5 dmg×1.3 speed×1.25 xp×3 score×3)');
+  ok(EL.frac(0) === 0 && EL.frac(179.999) === 0, '32.3: frac 0 before the 180 s gate');
+  ok(near(EL.frac(180), 0.05) && near(EL.frac(540), 0.1) && near(EL.frac(900), 0.15) && near(EL.frac(1200), 0.15),
+    '32.3: frac ramps 0.05@180 → linear 0.10@540 → 0.15@900, then holds');
+  ok(isElite(0, () => 0) === false && isElite(179.9, () => 0) === false,
+    '32.3: isElite never true before the gate (rng untouched there)');
+  ok(isElite(180, () => 0.049) === true && isElite(180, () => 0.05) === false,
+    '32.3: isElite at 180 s = exact rng < 0.05');
+  ok(isElite(900, () => 0.149) === true && isElite(900, () => 0.15) === false && isElite(1200, () => 0.149) === true,
+    '32.3: isElite at/after 900 s = exact rng < 0.15');
+  // Spawn path with Math.random pinned (precedent: 16.3 A/B pair). () => 0 makes every
+  // eligible roll win and every rand() draw its lower bound; () => 0.999 loses all rolls.
+  const mSave = Math.random;
+  try {
+    const en = new Enemies();
+    en.diff = 1; en.coopS = 1;
+    const noT = en.spawn('rat', 0, 0); // every old call site (no t) behaves exactly as before
+    ok(!noT.elite && noT.maxHp === CFG.enemies.rat.hp && noT.dmg === CFG.enemies.rat.dmg &&
+      noT.xp === CFG.enemies.rat.xp && noT.score === CFG.enemies.rat.score,
+      '32.3: spawn without t never rolls elite');
+    Math.random = () => 0.999;
+    const plain = en.spawn('rat', 0, 0, 300);
+    ok(!plain.elite && plain.maxHp === CFG.enemies.rat.hp && plain.dmg === CFG.enemies.rat.dmg &&
+      plain.xp === CFG.enemies.rat.xp && plain.score === CFG.enemies.rat.score,
+      '32.3: losing roll → unbuffed stats');
+    Math.random = () => 0;
+    const el = en.spawn('rat', 0, 0, 180);
+    ok(el.elite && near(el.maxHp, CFG.enemies.rat.hp * 1.5) && near(el.dmg, CFG.enemies.rat.dmg * 1.3) &&
+      near(el.speed, CFG.enemies.rat.speed[0] * 1.25) && el.xp === CFG.enemies.rat.xp * 3 && el.score === CFG.enemies.rat.score * 3,
+      '32.3: winning roll → hp×1.5 dmg×1.3 speed×1.25 xp×3 score×3 baked at spawn');
+    const boss = en.spawn('wraith', 0, 0, 900);
+    ok(!boss.elite && boss.boss && near(boss.maxHp, CFG.enemies.wraith.hp) && boss.xp === CFG.enemies.wraith.xp,
+      '32.3: bosses excluded from the elite roll');
+    en.coopS = 1.33;
+    const el2 = en.spawn('rat', 0, 0, 900);
+    ok(el2.elite && near(el2.maxHp, CFG.enemies.rat.hp * 1.33 * 1.5) && near(el2.dmg, CFG.enemies.rat.dmg * 1.33 * 1.3),
+      '32.3: elite multipliers compose with the co-op ramp');
+    // Wire: elite flag rides the existing flags slot (length unchanged, no SNAP_V bump); the
+    // client record (spawned without t, so locally unrolled) gets e.elite from applyEnemySnap.
+    const en3 = new Enemies();
+    const eHost = en3.spawn('rat', 10, 20, 900); // rng still () => 0 → host-side elite
+    const wire = enemySnap(eHost);
+    ok(wire.length === 8 && (wire[7] & E_FLAG_ELITE) !== 0, '32.3: enemySnap carries E_FLAG_ELITE in the existing 8-slot layout');
+    const eClient = en3.spawn('rat', 0, 0);
+    ok(eClient.elite === false, '32.3: client-side spawn (no t) starts unrolled');
+    applyEnemySnap(eClient, wire);
+    ok(eClient.elite === true, '32.3: applyEnemySnap restores e.elite for the client tell');
+    ok(unpackState(stateMsg(1, 1, 0, 0, [], [wire], [])) !== null, '32.3: elite-flagged snapshot passes unpackState');
+    ok(ENEMY_KEYS.length === 9 && !ENEMY_KEYS.includes('elite'), '32.3: ENEMY_KEYS stays types-only (elite block filtered)');
+  } finally {
+    Math.random = mSave;
+  }
 }
 
 // --- 11.4 player leash: pairwise vision radius (A2) — pure projection helper ---

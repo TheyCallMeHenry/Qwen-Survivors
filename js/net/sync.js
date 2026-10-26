@@ -9,9 +9,11 @@ export const SNAP_V = 8; // v8 (29.14): Coffee passive joins the pool → passiv
 export const WEAPON_KEYS = Object.keys(CFG.weapons);    // 19
 export const PASSIVE_KEYS = Object.keys(CFG.passives);  // 8
 export const SYNERGY_KEYS = Object.keys(CFG.synergies); // 15
-export const ENEMY_KEYS = Object.keys(CFG.enemies);     // 9
+export const ENEMY_KEYS = Object.keys(CFG.enemies).filter((k) => k !== 'elite'); // 9 — 'elite' (32.3) is the modifier block inside CFG.enemies, not a type
 
-export const E_FLAG_FLASH = 1, E_FLAG_BURN = 2, E_FLAG_BLIGHT = 4, E_FLAG_BOSS = 8, E_FLAG_FLIP = 16;
+// 32.3: E_FLAG_ELITE rides the existing flags slot — array length and key counts are
+// unchanged, so no SNAP_V bump (precedent: only slot/key-count changes re-vint, see v7/v8 notes).
+export const E_FLAG_FLASH = 1, E_FLAG_BURN = 2, E_FLAG_BLIGHT = 4, E_FLAG_BOSS = 8, E_FLAG_FLIP = 16, E_FLAG_ELITE = 32;
 
 const r1 = (n) => Math.round(n * 10) / 10;
 
@@ -75,6 +77,7 @@ export function enemySnap(e) {
   if (e.blightT > 0) f |= E_FLAG_BLIGHT;
   if (e.boss) f |= E_FLAG_BOSS;
   if (e.flip) f |= E_FLAG_FLIP;
+  if (e.elite) f |= E_FLAG_ELITE;
   return [e.sid, ENEMY_KEYS.indexOf(e.type), r1(e.x), r1(e.y), Math.round(e.hp), Math.round(e.maxHp), e.frame | 0, f];
 }
 
@@ -84,6 +87,7 @@ export function applyEnemySnap(e, s) {
   e.burnT = (s[7] & E_FLAG_BURN) ? 1 : 0;
   e.blightT = (s[7] & E_FLAG_BLIGHT) ? 1 : 0;
   e.flip = (s[7] & E_FLAG_FLIP) !== 0;
+  e.elite = (s[7] & E_FLAG_ELITE) !== 0; // 32.3: elites are host-rolled; clients render the tell
 }
 
 // Pickup snapshot: [kind (0 gem / 1 heart), pool slot, x, y] — pool slots are

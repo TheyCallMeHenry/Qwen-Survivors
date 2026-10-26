@@ -554,7 +554,7 @@ export class Game {
         const n2 = batchSize(this.t, L, S);
         for (let i = 0; i < n2; i++) {
           const pt = this._spawnPt();
-          this.enemies.spawn(type, pt.x, pt.y);
+          this.enemies.spawn(type, pt.x, pt.y, this.t); // 32.3: run clock feeds the host-only elite roll
         }
       }
       n++;
@@ -649,7 +649,12 @@ export class Game {
     const gp = escapeFromSpots(e.x, e.y, this._pickupSpots, CFG.gems.escapePad);
     this.pickups.gem(gp.x, gp.y, e.xp);
     const lowHp = p.hp / p.maxHp < CFG.gems.lowHpFrac;
-    if (Math.random() < (lowHp ? CFG.gems.heartChanceLowHp : CFG.gems.heartChance)) this.pickups.heart(e.x, e.y);
+    // 32.3 (user approved 2026-10-25): the normal heart roll halves after heartDecayAfter s;
+    // the low-HP panic valve is never decayed. Co-op is host-authoritative (11.2) — kills only
+    // simulate host-side (_onKill is the sole roll site), so every seat sees identical drops.
+    let chance = CFG.gems.heartChance;
+    if (this.t >= CFG.gems.heartDecayAfter) chance *= CFG.gems.heartDecayMul;
+    if (Math.random() < (lowHp ? CFG.gems.heartChanceLowHp : chance)) this.pickups.heart(e.x, e.y);
     this.particles.soul(e.x, e.y, e.boss ? 14 : 5);
     // D104 (2026-10-24): the per-kill hit-stop was removed by user order — measurements
     // showed it was the only in-play freeze source on the target device.

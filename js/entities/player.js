@@ -1168,6 +1168,11 @@ export function recomputeStats(p) {
 
 // Up to 3 distinct upgrade candidates: weapon upgrades, new weapons (≤ cap),
 // passives, and synergy cards (only once both synergizing weapons are max level).
+// Item cap (user directive 2026-10-25): NEW passive/item keys are gated exactly like new
+// weapons — only while the count of DISTINCT passive keys at level > 0 is below
+// CFG.run.maxItems (read from CFG inside the body, not a param: flat 5 for every co-op
+// seat, deliberately NOT scaled with player count). Upgrades of owned keys stay offered
+// at any count; synergies stay exempt (same as maxWeapons).
 // 11.5 co-op: `cap` = this player's standard-weapon slots (base maxWeapons − (N−1));
 // `exclude` = Set of weapon, synergy AND passive keys owned by ANOTHER player (first
 // picker owns the item + its upgrades for the run — never offered here, new or
@@ -1189,6 +1194,7 @@ export function cardOffers(weapons, passives, synergies, rng, cap = CFG.run.maxW
   }
   const pool = [];
   const ownedW = Object.keys(weapons).length;
+  const ownedP = Object.values(passives).filter((v) => (v || 0) > 0).length; // distinct item keys at level > 0 (maxItems gate)
   const locked = exclude instanceof Set ? exclude : null;
   const ban = banished instanceof Set ? banished : null;
   for (const k of Object.keys(CFG.weapons)) {
@@ -1203,7 +1209,9 @@ export function cardOffers(weapons, passives, synergies, rng, cap = CFG.run.maxW
     if (locked && locked.has(k)) continue; // D91: another player owns this passive — zero duplicates
     if (ban && ban.has(k)) continue;
     const lvl = passives[k] || 0;
-    if (lvl < CFG.passives[k].max) pool.push({ kind: 'passive', key: k, level: lvl + 1 });
+    // maxItems gate mirrors the weapon cap above: upgrades always offered; a NEW key only while below CFG.run.maxItems.
+    if (lvl > 0 && lvl < CFG.passives[k].max) pool.push({ kind: 'passive', key: k, level: lvl + 1 });
+    else if (lvl === 0 && ownedP < CFG.run.maxItems) pool.push({ kind: 'passive', key: k, level: 1 });
   }
   for (const k of Object.keys(CFG.synergies)) {
     if (locked && locked.has(k)) continue; // 11.6b: other-owned synergy (first-pick-wins)

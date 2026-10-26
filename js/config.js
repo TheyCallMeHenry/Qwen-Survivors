@@ -10,6 +10,7 @@ export const CFG = {
     victoryBonus: 10000,
     timeScorePerSec: 15,
     maxWeapons: 5,      // base standard-weapon slots per player (co-op cap = base − (N−1), 11.5)
+    maxItems: 5,        // distinct passive-pool ("item") keys per player — gates NEW keys in cardOffers only, upgrades of owned keys always offered; flat 5 every seat (NOT co-op-scaled), synergies exempt, mirrors maxWeapons (user directive 2026-10-25)
     // Selectable run durations (Phase 17, PLAN §3.10). time null = ENDLESS (death-only end).
     durations: {
       order: ['d5', 'd10', 'd15', 'd20', 'endless'],
@@ -29,7 +30,7 @@ export const CFG = {
     accel: 14,           // exponential convergence lambda (high = snappy)
     dashTime: 0.18,
     dashSpeed: 690,
-    dashCd: 1.75,
+    dashCd: 2.2,           // 32.3 (user approved 2026-10-25): 1.75→2.2 — dash as a finite escape
     dashIframeExtra: 0.06,
     hurtIframes: 0.7,
     knockback: 76,
@@ -568,22 +569,34 @@ export const CFG = {
     slots: 3,
   },
 
-  gems: { magnetBase: 70, collectR: 16, maxAlive: 320, heartPool: 32, heartChance: 0.045, heartChanceLowHp: 0.08, heartHeal: 20, lowHpFrac: 0.3, escapePad: 6 }, // escapePad (22.2): px beyond a spot's edge
+  gems: { magnetBase: 70, collectR: 16, maxAlive: 320, heartPool: 32, heartChance: 0.03, heartChanceLowHp: 0.08, heartHeal: 15, heartDecayAfter: 600, heartDecayMul: 0.5, lowHpFrac: 0.3, escapePad: 6 }, // escapePad (22.2): px beyond a spot's edge — 32.3 (user approved 2026-10-25): heartChance 0.045→0.03, heartHeal 20→15, normal roll ×heartDecayMul after heartDecayAfter s (panic valve exempt)
 
   // XP needed to go from level L to L+1
   xpNeed: (L) => 4 + (L - 1) * 3,
 
+  // 31.19 (user directive 2026-10-25): all enemies' base max HP ×1.2.
   enemies: {
-    rat:     { hp: 20,   speed: [110, 150], dmg: 8,  xp: 1,  r: 11, score: 10, fps: 4 },
-    bat:     { hp: 14,   speed: [150, 185], dmg: 6,  xp: 1,  r: 11, score: 10, fly: true, weave: true, fps: 8 },
-    goblin:  { hp: 42,   speed: [85, 105],  dmg: 12, xp: 2,  r: 13, score: 20, fps: 6 },
-    wolf:    { hp: 65,   speed: [175, 205], dmg: 15, xp: 3,  r: 14, score: 30, fps: 8 },
-    brute:   { hp: 280,  speed: [62, 78],   dmg: 25, xp: 5,  r: 22, score: 60, fps: 3 },
-    cultist: { hp: 55,   speed: [75, 95],   dmg: 10, xp: 3,  r: 13, score: 30, ranged: true, fps: 4 },
+    rat:     { hp: 24,   speed: [110, 150], dmg: 8,  xp: 1,  r: 11, score: 10, fps: 4 },
+    bat:     { hp: 17,   speed: [150, 185], dmg: 6,  xp: 1,  r: 11, score: 10, fly: true, weave: true, fps: 8 },
+    goblin:  { hp: 50,   speed: [85, 105],  dmg: 12, xp: 2,  r: 13, score: 20, fps: 6 },
+    wolf:    { hp: 78,   speed: [175, 205], dmg: 15, xp: 3,  r: 14, score: 30, fps: 8 },
+    brute:   { hp: 336,  speed: [62, 78],   dmg: 25, xp: 5,  r: 22, score: 60, fps: 3 },
+    cultist: { hp: 66,   speed: [75, 95],   dmg: 10, xp: 3,  r: 13, score: 30, ranged: true, fps: 4 },
     // 31.7 (user directive 2026-10-23): all stage bosses' base max HP +30% (2400 → 3120).
-    wraith:  { hp: 3120, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
-    ryu:     { hp: 3120, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
-    shark:   { hp: 3120, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
+    wraith:  { hp: 3744, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
+    ryu:     { hp: 3744, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
+    shark:   { hp: 3744, speed: [55, 65],   dmg: 28, xp: 50, r: 30, score: 5000, boss: true, fps: 4 },
+    // 32.3 (user approved 2026-10-25): elite modifier — opt-in pressure only, never a type key
+    // (ENEMY_KEYS + art/stat loops filter it). Non-boss spawns roll at frac(t): linear ramp
+    // 5% at t=180 s → 15% at t=900 s, then hold. Elites: hp ×1.5, contact dmg ×1.3,
+    // speed ×1.25 (same +25% rule as base — accepted design: slow characters already can't
+    // outrun wolves; no new speed cap), reward xp/score ×3. Always beatable, never instakill.
+    // Roll site + visual tell: js/entities/enemies.js; the flag reaches clients via E_FLAG_ELITE.
+    elite: {
+      after: 180,
+      frac: (t) => t < 180 ? 0 : Math.min(0.15, 0.05 + (t - 180) * (0.10 / (900 - 180))),
+      hp: 1.5, dmg: 1.3, speed: 1.25, xp: 3, score: 3,
+    },
   },
 
   ai: {
@@ -684,8 +697,9 @@ export const CFG = {
     // spawn placement: band just outside the view edge (px) + fallback offset when the band is out of world (px)
     spawnPad: 15,
     spawnFallback: 30,
-    // alive enemy cap over time
-    aliveCap: (t) => Math.min(200, 60 + Math.floor(t / 12)),
+    // alive enemy cap over time — 32.3 (user approved 2026-10-25): de-flatten late game:
+    // cap 200→280 (reached ≈ t=1980 s ≈ 33 min), ramp /12→/9 (mid-run density rises)
+    aliveCap: (t) => Math.min(280, 60 + Math.floor(t / 9)),
     // seconds between spawn events
     interval: (t) => Math.max(0.35, 1.7 - t * 0.0047),
     // enemies per spawn event (batch 2 at t0 — a camped player must meet the swarm early)
@@ -744,7 +758,7 @@ export const CFG = {
       dmg:   { name: 'Ferocity',        desc: '+8% weapon damage',    icon: 'sword', max: 5, val: 0.08,  cost: [50, 100, 200, 400, 1000] },
       speed: { name: 'Swiftness',       desc: '+6% movement speed',   icon: 'boots', max: 5, val: 0.06,  cost: [50, 100, 200, 400, 1000] },
       xp:    { name: 'Soul Attunement', desc: '+12% XP gain',         icon: 'gem',   max: 5, val: 0.12,  cost: [50, 100, 200, 400, 1000] },
-      dash:  { name: 'Phantom Step',    desc: '−8% dash cooldown',    icon: 'dash',  max: 5, val: -0.08, cost: [50, 100, 200, 400, 1000] },
+      dash:  { name: 'Phantom Step',    desc: '−6% dash cooldown',    icon: 'dash',  max: 5, val: -0.06, cost: [50, 100, 200, 400, 1000] }, // 32.3 (user approved 2026-10-25): −0.08→−0.06 (pairs with dashCd 1.75→2.2)
     },
     // Level-up screen actions (Phase 18, PLAN §3.11, D84). Meta shop: locked at 0;
     // level 1 = unlock = 1 use/run, each further level +1 → max 10 uses/run each.

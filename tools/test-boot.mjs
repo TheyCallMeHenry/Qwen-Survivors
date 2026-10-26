@@ -192,8 +192,10 @@ const items = buildItems();
 const icons = buildIcons();
 
 // sprite-shape sanity (the key-mismatch class of bug that kills a live frame)
-for (const k of Object.keys(CFG.enemies))
+for (const k of Object.keys(CFG.enemies)) {
+  if (k === 'elite') continue; // 32.3: modifier block in CFG.enemies, not a type needing art
   assert(characters[k] && characters[k].frames.length > 0, `characters missing enemy "${k}"`);
+}
 assert(!characters.player, '27.1: playable sheets retired from buildCharacters (heroes.js only)');
 // 11.6.1 roster art (D28/D62): 5 sheets × idle[2]/run[4]; warden sheet strictly
 // LARGER than the original player sprite but < brute (area, D62); ghost tint rebuild.
@@ -273,6 +275,7 @@ let dbgHits = 0;
 let dbgState = '';
 let maxEnemies = 0;
 let levelUps = 0;
+let eliteSeen = false, eliteHpOk = false; // 32.3: live-run elite capture (real _spawns roll at t>180)
 let cardCursor = 0;
 let paused = false;
 let muted = false;
@@ -319,6 +322,14 @@ function probeSnow(what) {
 function steer() {
   const st = game.state;
   maxEnemies = Math.max(maxEnemies, game.enemies.list.length);
+  // 32.3 E2E: an elite must actually appear in the live runs (which pass 180 s), and its
+  // record must carry the ×1.5 HP on top of the per-map diff — first sighting pins it.
+  if (!eliteSeen) for (const e of game.enemies.list) {
+    if (!e.elite) continue;
+    eliteSeen = true;
+    eliteHpOk = Math.abs(e.maxHp - CFG.enemies[e.type].hp * game.enemies.diff * game.enemies.coopS * CFG.enemies.elite.hp) < 1e-6;
+    break;
+  }
   if (st === 'LEVELUP') {
     const cards = byId['cards'].children;
     assert(cards.length > 0, 'LEVELUP but no card elements built');
@@ -1102,14 +1113,14 @@ for (const k of ['rat', 'bat', 'goblin', 'wolf', 'brute', 'cultist', 'ryu'])
 {
   const sp = game.world.playerStart;
   const sample = game.enemies.spawn('rat', sp.x, sp.y + 400);
-  assert(sample.hp === 25 && sample.dmg === 10, 'm02 run: spawned stats not ×1.25 (25/10 expected)');
+  assert(sample.hp === 30 && sample.dmg === 10, 'm02 run: spawned stats not ×1.25 (30/10 expected)');
   sample.dead = true; // compacted on the next update; not a kill
 }
 assert(pumpUntil(() => game.bossSpawned, 20 * 60 * 60), `m02 run: Ryū never spawned (state=${game.state} t=${game.t.toFixed(1)}s)`);
 const ryuBosses = game.enemies.list.filter((e) => e.boss);
 const ryuBoss = ryuBosses[0];
 assert(ryuBosses.length === 1 && ryuBoss && ryuBoss.type === 'ryu', 'm02 boss is not the Ryū (solo = exactly 1, 11.10)');
-assert(ryuBoss.hp === 3900 && ryuBoss.dmg === 35, 'Ryū stats not ×1.25 (3900/35 expected — 31.7 base 3120)');
+assert(ryuBoss.hp === 4680 && ryuBoss.dmg === 35, 'Ryū stats not ×1.25 (4680/35 expected — 31.19 base 3744)');
 assert(m02Banners.includes('RYŪ AWAKENS'), 'm02 boss banner did not name Ryū');
 assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
   `m02 run: expected victory, got state=${game.state} t=${game.t.toFixed(1)}s`);
@@ -1139,14 +1150,14 @@ for (const k of ['rat', 'bat', 'goblin', 'wolf', 'brute', 'cultist', 'shark'])
 {
   const sp = game.world.playerStart;
   const sample = game.enemies.spawn('rat', sp.x, sp.y + 400);
-  assert(Math.abs(sample.hp - 31.2) < 1e-9 && sample.dmg === 12.48, 'm03 run: spawned stats not ×1.56 (31.2/12.48 expected)');
+  assert(Math.abs(sample.hp - 37.44) < 1e-9 && sample.dmg === 12.48, 'm03 run: spawned stats not ×1.56 (37.44/12.48 expected)');
   sample.dead = true; // compacted on the next update; not a kill
 }
 assert(pumpUntil(() => game.bossSpawned, 20 * 60 * 60), `m03 run: Great White never spawned (state=${game.state} t=${game.t.toFixed(1)}s)`);
 const sharkBosses = game.enemies.list.filter((e) => e.boss);
 const sharkBoss = sharkBosses[0];
 assert(sharkBosses.length === 1 && sharkBoss && sharkBoss.type === 'shark', 'm03 boss is not the Great White (solo = exactly 1, 11.10)');
-assert(sharkBoss.hp === 4867.2 && sharkBoss.dmg === 43.68, 'Great White stats not ×1.56 (4867.2/43.68 expected — 31.7 base 3120)');
+assert(sharkBoss.hp === 5840.64 && sharkBoss.dmg === 43.68, 'Great White stats not ×1.56 (5840.64/43.68 expected — 31.19 base 3744)');
 assert(m03Banners.includes('THE GREAT WHITE AWAKENS'), 'm03 boss banner did not name the Great White');
 assert(pumpUntil(() => game.state === 'GAMEOVER' && game.victory, 20 * 60 * 60),
   `m03 run: expected victory, got state=${game.state} t=${game.t.toFixed(1)}s`);
@@ -2570,9 +2581,13 @@ m03RunDone = true;
   const stWatch = (m) => { if (m.t === 'state') { lastSt = m; enemySeen = Math.max(enemySeen, m.enemies.length); } };
   rawB.w.addEventListener('message', (ev) => stWatch(JSON.parse(String(ev.data))));
   // 11.3 density keeps the idle seats alive (and the host off the LEVELUP screen)
-  // so the E2E exercises sync, not death/cards.
+  // so the E2E exercises sync, not death/cards. 32.3 follow-up: refill on ANY damage,
+  // not just ≤50% max — post-180 s elite contact (dmg ×1.3 in a denser tankier pool) can
+  // take a seat from above the old threshold to dead inside one step, before the next
+  // pre-step check runs (damagePlayer caps the pool to one hit per step, so a full seat
+  // is never one-shot and this keeps the fixture deterministic).
   const keepAlive = () => {
-    for (const p of hostG.players) if (p.dead || p.hp < p.maxHp * 0.5) { p.dead = false; p.hp = p.maxHp; p.iframes = 5; }
+    for (const p of hostG.players) if (p.dead || p.hp < p.maxHp) { p.dead = false; p.hp = p.maxHp; p.iframes = 5; }
     if (hostG.state === 'LEVELUP') hostG.pickCard(0);
   };
   for (let i = 0; i < 1500; i++) {
@@ -2744,8 +2759,10 @@ m03RunDone = true;
   };
   const DT = 1 / 60;
   const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+  // 32.3 follow-up: refill on ANY damage (see the 11.2-block note above) — these idle
+  // NPC seats face post-180 s elite pressure in the long boss/victory pumps here.
   const keepAlive = (g) => {
-    for (const p of g.players) if (p.dead || p.hp < p.maxHp * 0.5) { p.dead = false; p.hp = p.maxHp; p.iframes = 5; }
+    for (const p of g.players) if (p.dead || p.hp < p.maxHp) { p.dead = false; p.hp = p.maxHp; p.iframes = 5; }
   };
 
   // --- (a) all-starter lobby → ghost run ---
@@ -2915,8 +2932,10 @@ m03RunDone = true;
   };
   const DT = 1 / 60;
   const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+  // 32.3 follow-up: refill on ANY damage (see the 11.2-block note above) — the 11.10
+  // fast-forward puts this run past t=180 s, where the elite roll is live.
   const keepAlive = (g) => {
-    for (const p of g.players) if (p.dead || p.hp < p.maxHp * 0.5) { p.dead = false; p.hp = p.maxHp; p.iframes = 5; }
+    for (const p of g.players) if (p.dead || p.hp < p.maxHp) { p.dead = false; p.hp = p.maxHp; p.iframes = 5; }
   };
 
   // Per-seat selections (simulated LS state): distinct chars on three seats.
@@ -3491,10 +3510,13 @@ assert(m03RunDone, 'm03 real run (13.5) never completed');
 assert(JSON.parse(localStorage.getItem(CFG.scores.storageKey) || '[]').length === 0,
   '13.9: m01 score list mutated by m02/m03 runs (cleared earlier; no cross-level leakage)');
 
+// 32.3: the live runs (which reach t=300) must have produced an elite through the real
+// _spawns path — the roll is host sim, the tell renders via the same drawOne every frame.
+assert(eliteSeen && eliteHpOk, '32.3: live runs past t=180 s produced no elite, or its HP was not ×1.5-buffed');
 console.log(
   `PASS boot-sim — runs=4 (death + victory + m02 + m03) · level-ups=${levelUps} · max enemies alive=${maxEnemies} · ` +
   `meta: gameover shards saved → Upgrades buy → maxHp 80 at run start (mage 60+20) · ` +
   `boss spawned · pause/resume + mute · card pick via click + key 1 · all 8 weapons (wand-off kill window) · ` +
   `all 8 weapons observed live (bolts/axes/blades/garlic/bullets/bombs/flames/arrows) · burn DoT kill · dash i-frame E2E · synergy E2E (blight) · 12.8 per-synergy E2Es (flamingArrows burn-on-hit · heartPiercer bonus+pierce exactly 1 extra · blueFlame freeze+burn on burst · stormVolley 4th-volley both-rounds strike + chain shock) · 10.7 empty-pool guard (entry + mid-queue) · heart heal · gem pickup SFX (10.8) · ` +
-  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · 14 in-run Soulshards counter (live floor(score/400) projection, change-detected) + 14.2 unified co-op earnings (run-level total rides the room close, client accrues in full, meta player-specific)P21 boot battery (9 new weapons + 2 item-passives live: missile lock→home→detonate + napalmMissile ignite · laser orbit sear no-kb (continuous rotation while idle, 180°/120° multi-beam) · wolfpack pounce/bleed/leash/staticPelt shock + pack growth 1/1/2/2/3 · Coffee cdMul on boulder+laser cds · boulder squish/decay/one-at-a-time/avalanche stacks · web burst hold · gatling mag→reload→full-mag refill · bat knockback + HOMERUN KO branch (rand-pinned) · tongue poison/drag/eat-heal with gutFeast ×mul · cannonball roll self-propelled + i-frame gate open/close; Mirror Shield reflect+bank+spend; Ice Skates glide drift + slide-hits-both with re-hit lock; 5 new chars selectable: pre-owned starter, zero passives, per-char hp/dmg; 5 fused synergies offered across 60 seeds; P21 sprite draw pass) · loop alive throughout`,
+  `touch stick + dash button · HUD dash --cd driven (10.1) · level select (13.7: 3 cards, locked denied blip + shake, select → backdrop preview + persist) · zoom + Settings (13.8: 0.80↔1.0 persist, Settings mute) · per-level flavor (13.10: NEW MAP UNLOCKED once-at-threshold + unlock-progress line + pickup reskin m02/m03) · scores save/render/clear + per-level lists (13.9: m02/m03 victory → own key, m01 untouched) · quit flow · M02 backdrop (13.2) + m02 real run: Higan skins, ×1.25 stats, Ryū boss (13.3) · M03 backdrop (13.4: sun glow + godrays + fish schools + bubbles) + m03 real run: drowned skins, ×1.56 stats, Great White boss (13.5) · 17 durations E2E (menu chips + per-level persist, d10 two-boss 4:00+9:00, victory gate per-duration, ENDLESS no-victory + 9:00 cadence) · 11.1 co-op transport E2E (real serve.mjs WS room on ephemeral port: host join / seats / full / leave+roster / host-leave close / room re-open) · 11.2/11.3 sync E2E (host+2 clients: shared seed, client tracking, input drive, leave→roster reconcile, ×1.66 spawn) + 11.4 leash (1.5R teleport → pairwise ≤ leashR) + 11.5 exclusivity (first-pick ownership, remote exclusion, per-picker picks, 3P cap) + 11.10 boss count (3P: Wraith ×3 via the real _spawns wave at B.at — each maxHp = base × diff × coopS, ×N banner, all three on the client wire; solo m02/m03 exactly 1 boss) + 11.11 solo invariance (net-free solo: no roster/seat/remotes, coopS 1, cap = base 5, exactly 1 Wraith, per-entry local ownership + empty exclusion) + 11.12 final co-op gate (pause-on-blur = host-only: host blur-pauses, client pause() no-op, host resume + 3P run pumped to VICTORY at t=300) · 18 level-up actions E2E (locked toolbar hidden + zero uses solo-invariant, shop Unlock 300 → +1 600 persisted, run-seed from shop levels, SKIP = exact 66% XP + step consumed, RE-ROLL disjoint redraw, BANISH arm/click run-long + slot refill without consuming the pick, per-run reseed, per-picker isolation) · 14 in-run Soulshards counter (live floor(score/400) projection, change-detected) + 14.2 unified co-op earnings (run-level total rides the room close, client accrues in full, meta player-specific)P21 boot battery (9 new weapons + 2 item-passives live: missile lock→home→detonate + napalmMissile ignite · laser orbit sear no-kb (continuous rotation while idle, 180°/120° multi-beam) · wolfpack pounce/bleed/leash/staticPelt shock + pack growth 1/1/2/2/3 · Coffee cdMul on boulder+laser cds · boulder squish/decay/one-at-a-time/avalanche stacks · web burst hold · gatling mag→reload→full-mag refill · bat knockback + HOMERUN KO branch (rand-pinned) · tongue poison/drag/eat-heal with gutFeast ×mul · cannonball roll self-propelled + i-frame gate open/close; Mirror Shield reflect+bank+spend; Ice Skates glide drift + slide-hits-both with re-hit lock; 5 new chars selectable: pre-owned starter, zero passives, per-char hp/dmg; 5 fused synergies offered across 60 seeds; P21 sprite draw pass) · 32.3 live-run elite observed (×1.5 HP through the real _spawns path, gold-diamond tell drawn) · loop alive throughout`,
 );

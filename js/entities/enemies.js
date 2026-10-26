@@ -7,6 +7,18 @@ import { HashGrid } from '../utils/grid.js';
 import { TAU, approach, clamp, rand } from '../utils/math.js';
 import { flashCopy, shadowSprite } from '../art/base.js';
 
+// 32.3 (user approved 2026-10-25): decide whether a spawn becomes elite. Pure + rng-injectable
+// for tests; the production caller is spawn(), whose own path draws from the global Math.random
+// (same source as rand() for speed/animT and the heart drop in game._onKill — game.rng stays
+// untouched, so type-pick/spawn-point determinism is unchanged). Below the gate no rng is
+// consumed at all: pre-180 s random streams stay bit-identical.
+export const isElite = (t, rng = Math.random) => {
+  const E = CFG.enemies.elite;
+  if (t < E.after) return false;
+  const p = E.frac(t);
+  return p > 0 && rng() < p;
+};
+
 export class Enemies {
   constructor() {
     this.list = [];
@@ -38,16 +50,23 @@ export class Enemies {
     this.seq = 0;
   }
 
-  spawn(type, x, y) {
+  // Build one enemy record. `t` = run clock (host sim only): non-boss spawns past
+  // CFG.enemies.elite.after can roll elite (32.3); the multipliers are baked into the record
+  // ONCE here — no per-frame elite checks. xp/score scale on the record, so _onKill's grants
+  // ride automatically. Client call sites omit t (never roll; e.elite arrives via the
+  // snapshot flag instead), so the default 0 keeps every existing caller's behavior.
+  spawn(type, x, y, t = 0) {
     const s = CFG.enemies[type];
     const d = this.diff * this.coopS;
-    const hp = s.hp * d, dmg = s.dmg * d;
+    const elite = !s.boss && isElite(t);
+    const m = elite ? CFG.enemies.elite : null;
+    const hp = s.hp * d * (m ? m.hp : 1), dmg = s.dmg * d * (m ? m.dmg : 1);
     const e = {
       type, x, y, vx: 0, vy: 0, sid: ++this.seq,
       hp, maxHp: hp, r: s.r,
-      speed: rand(s.speed[0], s.speed[1]),
-      dmg, xp: s.xp, score: s.score,
-      boss: !!s.boss, fly: !!s.fly, weave: !!s.weave, ranged: !!s.ranged,
+      speed: rand(s.speed[0], s.speed[1]) * (m ? m.speed : 1),
+      dmg, xp: s.xp * (m ? m.xp : 1), score: s.score * (m ? m.score : 1),
+      boss: !!s.boss, fly: !!s.fly, weave: !!s.weave, ranged: !!s.ranged, elite,
       flash: 0, animT: rand(0, 3), phase: rand(0, TAU),
       state: 'chase', stateT: 0, cd: rand(1, 2.5),
       flip: false, frame: 0, dead: false,
@@ -317,6 +336,22 @@ export class Enemies {
         ctx.arc(e.x + 4 + i * 8, e.y - def.h - 16, 2.4, 0, TAU);
         ctx.fill();
       }
+      ctx.restore();
+    }
+    // 32.3 elite tell (same pip row, left of frost): one solid gold diamond — reserved for
+    // elites, permanent (spawn-time property, unlike transient status pips). Never recolors
+    // the sprite; one path fill, no per-frame art.
+    if (e.elite) {
+      ctx.save();
+      ctx.fillStyle = '#ffd75e';
+      const q = 4.5, ex = e.x - 16, ey = e.y - def.h - 16;
+      ctx.beginPath();
+      ctx.moveTo(ex, ey - q);
+      ctx.lineTo(ex + q, ey);
+      ctx.lineTo(ex, ey + q);
+      ctx.lineTo(ex - q, ey);
+      ctx.closePath();
+      ctx.fill();
       ctx.restore();
     }
     if (e.stunT > 0) {

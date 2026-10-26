@@ -17,13 +17,13 @@ export const LEVELS = {
     audio: 'wood',
     unlock: { level: null, wins: 0 },
     palette: { skyTop: '#0b1026', skyHorizon: '#3a2c4e', ground: '#131c17', mm: '#0b111e', light: '8,10,24' },
-    weights: (t) => ({
+    weights: (t) => ({   // 32.3 (user approved 2026-10-25): front-load mobile/ranged — wolf gate 120→80, cultist 90→60 (brute gate unchanged)
       rat: 5,
       bat: t > 30 ? 3 : 0.5,
       goblin: t > 60 ? 4 : 0,
-      wolf: t > 120 ? 3 : 0,
+      wolf: t > 80 ? 3 : 0,
       brute: t > 150 ? 2 : 0,
-      cultist: t > 90 ? 2.5 : 0,
+      cultist: t > 60 ? 2.5 : 0,
     }),
     boss: { key: 'wraith', at: 240, name: 'THE WRAITH' },
     layout: layoutM01,
@@ -38,13 +38,13 @@ export const LEVELS = {
     audio: 'higan',
     unlock: { level: 'm01', wins: 3 },
     palette: { skyTop: '#241226', skyHorizon: '#e8909c', ground: '#1e2a19', mm: '#191016', light: '24,10,16' }, // dusk pink + full moon (A5)
-    weights: (t) => ({   // same role curve as m01 (slot re-skins, A1) — difficulty via diff (A4)
+    weights: (t) => ({   // same role curve as m01 (slot re-skins, A1) — difficulty via diff (A4); 32.3 (user approved 2026-10-25): wolf 120→80, cultist 90→60
       rat: 5,
       bat: t > 30 ? 3 : 0.5,
       goblin: t > 60 ? 4 : 0,
-      wolf: t > 120 ? 3 : 0,
+      wolf: t > 80 ? 3 : 0,
       brute: t > 150 ? 2 : 0,
-      cultist: t > 90 ? 2.5 : 0,
+      cultist: t > 60 ? 2.5 : 0,
     }),
     boss: { key: 'ryu', at: 240, name: 'RYŪ' },
     layout: layoutM02,
@@ -59,13 +59,13 @@ export const LEVELS = {
     audio: 'drowned',
     unlock: { level: 'm02', wins: 3 },
     palette: { skyTop: '#04283e', skyHorizon: '#0a4a66', ground: '#05141e', mm: '#04121e', light: '4,10,22' }, // deep-water gradient: light enters at the surface (A5)
-    weights: (t) => ({   // same role curve as m01 (slot re-skins) — difficulty via diff (A4)
+    weights: (t) => ({   // same role curve as m01 (slot re-skins) — difficulty via diff (A4); 32.3 (user approved 2026-10-25): wolf 120→80, cultist 90→60
       rat: 5,
       bat: t > 30 ? 3 : 0.5,
       goblin: t > 60 ? 4 : 0,
-      wolf: t > 120 ? 3 : 0,
+      wolf: t > 80 ? 3 : 0,
       brute: t > 150 ? 2 : 0,
-      cultist: t > 90 ? 2.5 : 0,
+      cultist: t > 60 ? 2.5 : 0,
     }),
     boss: { key: 'shark', at: 240, name: 'THE GREAT WHITE' },
     layout: layoutM03,
