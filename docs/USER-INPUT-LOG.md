@@ -13,6 +13,47 @@
 
 ## Entries (newest first)
 
+### 2026-10-26 — Record-sync directive (cold-resume ready; decisions/findings/research/tests/troubleshooting/next step, lean, then commit)
+- **Received:** 2026-10-26 (after the Phase-32 publish)
+- **Classification:** process rule
+- **Context:** follows the published difficulty pass; the record must stand alone without further user input
+- **Verbatim input:**
+```
+Sync the record so a cold session could resume without asking me anything: decisions, findings, research, tests run and their real results, troubleshooting attempts and resolutions, and the exact next step. Keep it lean — no transcripts and no line references; the code is the implementation record. Commit the updated docs after the doc sync has completed.
+```
+
+### 2026-10-26 — Publish Phase 32 to GitHub Pages
+- **Received:** 2026-10-26
+- **Classification:** answer/approval (explicit publish order — rule 7 satisfied)
+- **Context:** all five Phase-32 changes were on `dev` unpushed
+- **Verbatim input:**
+```
+Go ahead and publish to GH Pages for testing.
+```
+
+### 2026-10-26 — Approval of 5 of the 8 audited difficulty levers
+- **Received:** 2026-10-26 (answering the agent's pending "which levers?" question)
+- **Classification:** answer/approval
+- **Context:** numbering = the table in the agent's difficulty-audit report
+- **Verbatim input:**
+```
+I approve the following for immediate implementation: 
+1, 3, 5, 7, 8
+```
+
+### 2026-10-26 — Difficulty pass requested (enemy HP ×1.2, 5-item equip cap, plus suggestions, via serial sub-agents)
+- **Received:** 2026-10-26 (session 44 opener)
+- **Classification:** feature request + design decision
+- **Context:** user's playtest verdict that the current balance is too soft
+- **Verbatim input:**
+```
+The game seems too easy. Let's implement a few changes:
+1. Increase the max HP of all enemies by 1.2x their current maximum HP.
+2. Limit the amount of items the player can equip per round to 5 (same as the per-run equipable weapon limit).
+3. Present any other suggestions you might have for increasing difficulty without baking the game too difficult or unfun.
+4. Spawn sub-agents (1 active at a time) for each individual task.
+```
+
 ### 2026-10-24 — Record-sync directive (cold-resume ready, lean, then commit docs)
 - **Received:** 2026-10-24 (after the two-agent glitch/publish round)
 - **Classification:** process rule
