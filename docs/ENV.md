@@ -24,6 +24,12 @@ Owned here; never re-narrated in PROGRESS.md.
 - Dev serve: `node tools/serve.mjs` → port **47893** only (AGENTS rule 4). Server state at last check (2026-09-05): DOWN.
 - Co-op hosting (11.13, pending NAS-side impl): Tailscale on the user's DS124 NAS running unmodified `serve.mjs` (D64).
 
+## Workspace registration (DSH)
+
+- **Register at `D:\Apps\Qwen-Survivors`.** In the WebGUI picker, the path editor (pencil in the crumb bar) accepts any absolute path — type the D: path, Enter, then Open (the "This PC" crumb at the crumb bar's far left also reaches D:, but the bar auto-scrolls to its tail, so it is often off-screen). The C: junction `C:\Users\ajbro\DeepSeekHarness-STUFF\LINKED-Qwen-Survivors` → `D:\Apps\Qwen-Survivors` is an equivalent entry: the registry canonicalizes via `fs.realpath`, so both spellings resolve to the same single D: workspace.
+- **Stale registration (AGENTS.md session-start dead-state check fired):** the workspace was adopted through a phantom nested directory tree that no longer exists. The user, in the WebGUI: delete that workspace registration (sessions and logs are kept), re-register at `D:\Apps\Qwen-Survivors`, and start a fresh session.
+- **Junction repair (no admin needed):** if missing/broken — remove any placeholder at the C: path, then `New-Item -ItemType Junction -Path 'C:\Users\ajbro\DeepSeekHarness-STUFF\LINKED-Qwen-Survivors' -Target 'D:\Apps\Qwen-Survivors'`. Never `mklink` without `/J` (symlinks need elevation). Deleting the junction removes only the link, never the D: files.
+
 ## Workspace artifacts
 
 - Gitignored scratch: `unsloth-tmp/` (disposable sims — latest perf capture `probe-mobile-session27.txt` — `pool-sim.mjs` 12.7 Monte-Carlo, `syn-seed-scan.mjs` boot-flake seed scan live here; re-create as needed), `NOTES.md`, `STATUS.md`, `server.log`/`server-err.log`, `isolate-*-v8.log`, `prof-out.txt`.
